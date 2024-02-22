@@ -1,0 +1,23 @@
+{
+	"name": "schematic-renderer",
+	"module": "src/index.ts",
+	"type": "module",
+	"scripts": {
+		"start": "bun run --watch index.ts"
+	},
+	"devDependencies": {
+		"@enginehub/schematicjs": "^0.9.1",
+		"@types/bun": "latest",
+		"@types/gzip-js": "^0.3.5",
+		"@types/three": "^0.161.2",
+		"deepmerge": "^4.3.1",
+		"gzip-js": "^0.3.2",
+		"jszip": "^3.10.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0.0"
+	},
+	"dependencies": {
+		"three": "^0.161.0"
+	}
+}
