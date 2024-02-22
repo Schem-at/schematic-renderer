@@ -1,15 +1,14 @@
 // Renderer.ts
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import Stats from "stats.js";
-
+// import Stats from "stats.js";
 export class Renderer {
 	canvas: HTMLCanvasElement;
 	renderer: THREE.WebGLRenderer;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	controls: OrbitControls;
-	stats: Stats;
+	// stats: Stats;
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;
@@ -22,8 +21,8 @@ export class Renderer {
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
 		this.controls = new OrbitControls(this.camera, this.canvas);
-		this.stats = new Stats();
-		document.body.appendChild(this.stats.dom);
+		// this.stats = new Stats();
+		// document.body.appendChild(this.stats.dom);
 
 		this.setupScene(options);
 	}
@@ -93,10 +92,10 @@ export class Renderer {
 	}
 
 	animate() {
-		this.stats.begin();
+		// this.stats.begin();
 		requestAnimationFrame(() => this.animate());
 		this.controls.update();
 		this.render();
-		this.stats.end();
+		// this.stats.end();
 	}
 }

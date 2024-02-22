@@ -3,16 +3,24 @@
 	"module": "src/index.ts",
 	"type": "module",
 	"scripts": {
-		"start": "bun run --watch index.ts"
+		"start": "bun run --watch index.ts",
+		"build": "webpack",
+		"dev": "webpack --watch"
 	},
 	"devDependencies": {
 		"@enginehub/schematicjs": "^0.9.1",
 		"@types/bun": "latest",
 		"@types/gzip-js": "^0.3.5",
+		"@types/pako": "^2.0.3",
 		"@types/three": "^0.161.2",
 		"deepmerge": "^4.3.1",
 		"gzip-js": "^0.3.2",
-		"jszip": "^3.10.1"
+		"jszip": "^3.10.1",
+		"pako": "^2.1.0",
+		"stats-js": "^1.0.1",
+		"ts-loader": "^9.5.1",
+		"webpack": "^5.90.3",
+		"webpack-cli": "^5.1.4"
 	},
 	"peerDependencies": {
 		"typescript": "^5.0.0"
