@@ -1,7 +1,16 @@
 import path from 'path';
+import webpack from 'webpack';
+
+/** @typedef {import('webpack').Configuration} WebpackConfig **/
 
 export default {
     entry: './src/index.ts',
+    mode: 'development',
+    plugins: [
+        new webpack.ProvidePlugin({
+            Buffer: ['buffer', 'Buffer'], // for nbt-ts
+        }),
+    ],
     module: {
         rules: [
             {
@@ -20,12 +29,13 @@ export default {
             "buffer": import.meta.resolve("buffer/"),
         }
     },
-    devtool: 'inline-source-map',
+    devtool: 'nosources-source-map',
     output: {
         filename: 'bundle.js',
         library: 'SchematicRenderer',
         path: path.resolve(process.cwd(), 'dist'),
         libraryTarget: 'umd',
+        devtoolModuleFilenameTemplate: '../[resource-path]'
     },
 
 };

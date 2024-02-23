@@ -613,7 +613,7 @@ export class RessourceLoader {
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			console.log("position", pos, " block", block);
+			//console.log("position", pos, " block", block);
 
 			const blockComponents = await this.getBlockMeshFromCache(block);
 			const rotatedBlockComponents = this.rotateBlockComponents(

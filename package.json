@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"start": "bun run --watch index.ts",
-		"build": "webpack",
+		"build": "webpack --mode=development --config webpack.config.js",
 		"dev": "webpack --watch"
 	},
 	"devDependencies": {

@@ -56,7 +56,14 @@ export const NON_OCCLUDING_BLOCKS = new Set([
 //}
 
 export function parseNbt(nbt: Buffer): TagMap {
-	const deflated = Buffer.from(unzip(nbt));
+	let uncompressed;
+	try {
+		uncompressed = unzip(nbt);
+	} catch (e) {
+		uncompressed = nbt;
+	}
+	const deflated = Buffer.from(uncompressed as Buffer);
+
 	const data = decode(<import("buffer").Buffer>(<unknown>deflated), {
 		unnamed: false,
 		useMaps: true,
