@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Minecraft Schematic Renderer Test</title>
+	</head>
+	<body>
+		<h1>Minecraft Schematic Renderer Test</h1>
+		<div id="schematic-renderer-container"></div>
+		<canvas id="schematic-renderer-canvas" width="800" height="600"></canvas>
+		<script src="./dist/bundle.js" type="text/javascript"></script>
+		<script>
+			function base64ToUint8Array(base64) {
+				const binaryString = atob(base64);
+				const len = binaryString.length;
+				const bytes = new Uint8Array(len);
+				for (let i = 0; i < len; i++) {
+					bytes[i] = binaryString.charCodeAt(i);
+				}
+				return bytes;
+			}
+			const schematicBase64String =
+				"H4sICBChWmUC/3Rlc3Quc2NoZW0AXZDPTsMwDMZdKtha2IkXCFy4IB4AictggsMmJk3a+COE3NZtLdIUJWajb79kgzGR0/f97HyJnUIyy2tqUDiPoTcn67g1AHAQw/EdCu7IyVkK/QkJFp7GkCxGj2XpSJ58M+z553/+JfgUTie3u4d+U/qQ3JMhi0IFLHdSrVhqpdslqS/HplIz3XKD3YVTeyFq2kndGjXmzKLtLhWLI12qgj7JFGhE+eIcNRlho4ZkNZP1ESYTzZnS22tXflI4eiCuaoHIyzGZSuogDxdcBBVDOvUxIjTB77CZFHo/IIZBw4Zyi6VcI9vt6Od/rLLo3Hum2/zj1Zl21d2UqB29+b4IepAMQyWsOYAogcEGjPyXhcnB5qwBBWwIj6MBAAA=";
+			const container = document.getElementById("schematic-renderer-container");
+			const canvas = document.getElementById("schematic-renderer-canvas");
+			async function getCachedMinecraftJarUrl() {
+				const jarURL = "/jars/client.jar";
+				const jarUrlHash = "c0898ec7c6a5a2eaa317770203a1554260699994";
+				const db = await openDatabase();
+				const transaction = db.transaction(["jars"], "readonly");
+				const objectStore = transaction.objectStore("jars");
+				const request = objectStore.get(jarUrlHash);
+				return new Promise(async (resolve, reject) => {
+					request.onsuccess = function (event) {
+						if (request.result) {
+							console.log("Jar found in IndexedDB.");
+							resolve(URL.createObjectURL(request.result));
+						} else {
+							console.log(
+								"Jar not found in IndexedDB, fetching from Mojang..."
+							);
+							fetch(jarURL)
+								.then((response) => {
+									if (!response.ok) {
+										throw new Error("HTTP error " + response.status);
+									}
+									console.log("Jar fetched from Mojang, unzipping...");
+									const blob = response.blob();
+									console.log(blob);
+									return blob;
+								})
+								.then((blob) => {
+									console.log(
+										"Jar fetched from Mojang, storing in IndexedDB..."
+									);
+									return blob;
+								})
+								.then((blob) => {
+									const addRequest = db
+										.transaction(["jars"], "readwrite")
+										.objectStore("jars")
+										.add(blob, jarUrlHash);
+
+									addRequest.onsuccess = function (event) {
+										resolve(URL.createObjectURL(blob));
+									};
+									addRequest.onerror = function (event) {
+										reject("Error storing jar in IndexedDB.");
+									};
+								})
+								.catch((error) => {
+									reject("Error fetching jar from Mojang.");
+								});
+						}
+					};
+					request.onerror = function (event) {
+						reject("Error fetching jar from IndexedDB.");
+					};
+				});
+			}
+
+			const options = {
+				getClientJarUrl: async (props) => {
+					return await getCachedMinecraftJarUrl();
+				},
+			};
+			const schematic = base64ToUint8Array(schematicBase64String);
+			const renderer = new SchematicRenderer.SchematicRenderer(
+				canvas,
+				schematicBase64String,
+				options
+			);
+		</script>
+	</body>
+</html>

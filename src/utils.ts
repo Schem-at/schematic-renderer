@@ -4,7 +4,7 @@ import { decode } from "nbt-ts";
 import type { Faces, Vector } from "./types";
 import NonOccludingBlocks from "./nonOccluding.json";
 import TransparentBlocks from "./transparent.json";
-import { inflate } from "pako";
+import { Buffer } from "buffer/";
 
 export function faceToFacingVector(face: Faces): Vector {
 	switch (face) {
@@ -55,29 +55,16 @@ export const NON_OCCLUDING_BLOCKS = new Set([
 //	return data.value as TagMap;
 //}
 
-function createBufferLikeObject(array: Uint8Array): Buffer {
-	return new Uint8Array(array) as unknown as Buffer;
-}
-
-export function parseNbt(nbt: string): TagMap {
-	// Decode base64
-	const decodedData = atob(nbt);
-
-	// Convert decoded string to Uint8Array
-	const charData = decodedData.split("").map((c) => c.charCodeAt(0));
-	const binData = new Uint8Array(charData);
-
-	// Inflate (unzip) data
-	const deflated = inflate(binData);
-
-	// Convert Uint8Array to Buffer-like object
-	const bufferLikeObject = createBufferLikeObject(deflated);
-
-	// Decode NBT data
-	const data = decode(bufferLikeObject, {
+export function parseNbt(nbt: Buffer): TagMap {
+	const deflated = Buffer.from(unzip(nbt));
+	const data = decode(<import("buffer").Buffer>(<unknown>deflated), {
 		unnamed: false,
 		useMaps: true,
 	});
-
 	return data.value as TagMap;
+}
+
+export function parseNbtFromBase64(nbt: string): TagMap {
+	const buff = Buffer.from(nbt, "base64");
+	return parseNbt(buff);
 }

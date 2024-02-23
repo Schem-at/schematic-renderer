@@ -2,13 +2,8 @@ import * as THREE from "three";
 import { loadSchematic } from "@enginehub/schematicjs";
 import { Renderer } from "./renderer";
 import { RessourceLoader } from "./ressource_loader";
-import {
-	faceToFacingVector,
-	INVISIBLE_BLOCKS,
-	NON_OCCLUDING_BLOCKS,
-	TRANSPARENT_BLOCKS,
-	parseNbt,
-} from "./utils";
+import { parseNbtFromBase64 } from "./utils";
+import type { TagMap } from "nbt-ts";
 
 import { World } from "./world_mesh_builder";
 export class SchematicRenderer {
@@ -19,13 +14,13 @@ export class SchematicRenderer {
 	canvas: HTMLCanvasElement;
 	options: any;
 	renderer: Renderer;
-	schematicData: any;
+	schematicData: string;
 	loadedSchematic: any;
 	ressourceLoader: any;
 	jarUrl: string | string[] | undefined;
 	schematicMeshes: THREE.Mesh[] | undefined;
 
-	constructor(canvas: HTMLCanvasElement, schematicData: any, options: any) {
+	constructor(canvas: HTMLCanvasElement, schematicData: string, options: any) {
 		this.canvas = canvas;
 		this.schematicData = schematicData;
 		this.options = options;
@@ -34,7 +29,10 @@ export class SchematicRenderer {
 	}
 
 	async initialize() {
-		this.loadedSchematic = loadSchematic(parseNbt(this.schematicData));
+		let parsedNbt: TagMap;
+		parsedNbt = parseNbtFromBase64(this.schematicData);
+
+		this.loadedSchematic = loadSchematic(parsedNbt);
 		this.jarUrl = [
 			await this.options.getClientJarUrl({
 				dataVersion: this.loadedSchematic.dataVersion,
@@ -89,8 +87,9 @@ export class SchematicRenderer {
 		console.log("updateSchematic");
 		this.schematicData = schematicData;
 		this.clearSchematic();
-
-		const newSchemMesh = loadSchematic(parseNbt(this.schematicData));
+		let parsedSchematic: TagMap;
+		parsedSchematic = parseNbtFromBase64(this.schematicData);
+		const newSchemMesh = loadSchematic(parsedSchematic);
 		this.loadedSchematic = newSchemMesh;
 		await this.render();
 	}

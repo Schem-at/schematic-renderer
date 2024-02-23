@@ -7,7 +7,6 @@ import {
 	INVISIBLE_BLOCKS,
 	NON_OCCLUDING_BLOCKS,
 	TRANSPARENT_BLOCKS,
-	parseNbt,
 } from "./utils";
 import JSZip from "jszip";
 import type {
