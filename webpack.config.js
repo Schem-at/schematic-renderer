@@ -1,5 +1,6 @@
 import path from 'path';
 import webpack from 'webpack';
+import { Buffer } from 'buffer';
 
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
 
@@ -26,9 +27,7 @@ export default {
     },
     resolve: {
         extensions: ['.tsx', '.ts', '.js'],
-        fallback: {
-            "buffer": import.meta.resolve("buffer/"),
-        }
+
     },
     devtool: 'nosources-source-map',
     output: {
@@ -39,9 +38,12 @@ export default {
         devtoolModuleFilenameTemplate: '../[resource-path]'
     },
     devServer: {
-        contentBase: path.join(__dirname, 'dist'),
+        static: {
+            directory: path.join(process.cwd(), 'dist'),
+        },
         hot: true,
         port: 3000,
+        // ... other devServer options ...
     },
 
 

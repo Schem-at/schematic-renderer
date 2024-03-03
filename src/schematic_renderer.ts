@@ -61,6 +61,28 @@ export class SchematicRenderer {
 	}
 
 	async render() {
+		//set the camera to the correct position
+		//this.renderer.camera.position.set(
+		//	this.loadedSchematic.width * 2,
+		//	this.loadedSchematic.height * 2,
+		//	this.loadedSchematic.length * 2
+		//);
+		const cameraDistance = Math.max(
+			this.loadedSchematic.width,
+			this.loadedSchematic.height,
+			this.loadedSchematic.length
+		);
+		this.renderer.camera.position.set(
+			cameraDistance * 1.1,
+			cameraDistance * 1.1,
+			cameraDistance * 1.1
+		);
+		const center = new THREE.Vector3(
+			this.loadedSchematic.width / 2,
+			this.loadedSchematic.height / 2,
+			this.loadedSchematic.length / 2
+		);
+		this.renderer.camera.lookAt(center);
 		console.log("render");
 		this.ressourceLoader.setSchematic(this.loadedSchematic);
 		console.log("setSchematic");
@@ -93,5 +115,10 @@ export class SchematicRenderer {
 		const newSchemMesh = loadSchematic(parsedSchematic);
 		this.loadedSchematic = newSchemMesh;
 		await this.render();
+	}
+
+	async takeScreenshot(resolutionX: number, resolutionY: number) {
+		const screenshot = this.renderer.takeScreenshot(resolutionX, resolutionY);
+		return screenshot;
 	}
 }

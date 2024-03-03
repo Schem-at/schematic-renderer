@@ -28,7 +28,7 @@ export class Renderer {
 	}
 
 	getPerspectiveCamera() {
-		const d = 5;
+		const d = 20;
 		const fov = 75;
 		const aspect = this.canvas.clientWidth / this.canvas.clientHeight; // dynamic based on the canvas size
 		const near = 0.1;
@@ -63,20 +63,20 @@ export class Renderer {
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 		const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-		ambientLight.intensity = 1.5;
+		ambientLight.intensity = 0.9;
 		this.scene.add(ambientLight);
 
 		const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
 		directionalLight.position.set(20, 20, -20);
-		directionalLight.intensity = 3;
+		directionalLight.intensity = 1;
 		directionalLight.castShadow = true;
 		directionalLight.shadow.bias = -0.01;
 		this.scene.add(directionalLight);
 
-		const directionalLightHelper = new THREE.DirectionalLightHelper(
-			directionalLight
-		);
-		this.scene.add(directionalLightHelper);
+		// const directionalLightHelper = new THREE.DirectionalLightHelper(
+		// 	directionalLight
+		// );
+		// this.scene.add(directionalLightHelper);
 	}
 
 	createLights() {
@@ -97,5 +97,19 @@ export class Renderer {
 		this.controls.update();
 		this.render();
 		// this.stats.end();
+	}
+
+	takeScreenshot(resolutionX: number, resolutionY: number) {
+		const oldCanvasWidth = this.canvas.clientWidth;
+		const oldCanvasHeight = this.canvas.clientHeight;
+		const tempCamera = this.camera.clone();
+		tempCamera.aspect = resolutionX / resolutionY;
+		tempCamera.updateProjectionMatrix();
+		this.renderer.setSize(resolutionX, resolutionY);
+		this.renderer.render(this.scene, tempCamera);
+		const screenshot = this.renderer.domElement.toDataURL();
+		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
+		this.renderer.render(this.scene, this.camera);
+		return screenshot;
 	}
 }
