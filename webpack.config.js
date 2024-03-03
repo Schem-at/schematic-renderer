@@ -10,6 +10,7 @@ export default {
         new webpack.ProvidePlugin({
             Buffer: ['buffer', 'Buffer'], // for nbt-ts
         }),
+        new webpack.HotModuleReplacementPlugin(),
     ],
     module: {
         rules: [
@@ -37,5 +38,11 @@ export default {
         libraryTarget: 'umd',
         devtoolModuleFilenameTemplate: '../[resource-path]'
     },
+    devServer: {
+        contentBase: path.join(__dirname, 'dist'),
+        hot: true,
+        port: 3000,
+    },
+
 
 };

@@ -5,7 +5,7 @@
 	"scripts": {
 		"start": "bun run --watch index.ts",
 		"build": "webpack --mode=development --config webpack.config.js",
-		"dev": "webpack --watch"
+		"dev": "webpack serve --config webpack.config.js"
 	},
 	"devDependencies": {
 		"@enginehub/schematicjs": "^0.9.1",

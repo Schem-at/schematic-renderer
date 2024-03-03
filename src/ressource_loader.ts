@@ -575,7 +575,6 @@ export class RessourceLoader {
 		dimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
 	) {
 		const chunks: any[] = [];
-		// each chunk is a list of positions
 		const { chunkWidth, chunkHeight, chunkLength } = dimensions;
 		const { width, height, length } = this.schematic;
 		const chunkCountX = Math.ceil(width / chunkWidth);
@@ -602,7 +601,7 @@ export class RessourceLoader {
 		chunkDimensions: any,
 		offset: { x: number; y: number; z: number }
 	) {
-		const maxBlocksAllowed = 100000;
+		const maxBlocksAllowed = 1000000;
 		let count = 0;
 		for (const pos of chunk) {
 			if (count > maxBlocksAllowed) {
