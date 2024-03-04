@@ -26,6 +26,7 @@
 	"dependencies": {
 		"buffer": "^6.0.3",
 		"gif.js.optimized": "^1.0.1",
-		"three": "^0.161.0"
+		"three": "^0.161.0",
+		"webm-writer": "^1.0.0"
 	}
 }

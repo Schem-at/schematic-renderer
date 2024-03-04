@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import GIF from "gif.js.optimized";
+import WebMWriter from "webm-writer";
 // import Stats from "stats.js";
 export class Renderer {
 	canvas: HTMLCanvasElement;
@@ -119,6 +120,7 @@ export class Renderer {
 		resolutionY: number,
 		centerPosition: THREE.Vector3,
 		distance: number,
+		elevation: number,
 		frameRate: number,
 		duration: number,
 		angle: number = 360
@@ -131,7 +133,7 @@ export class Renderer {
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
 		const gif = new GIF({
-			workers: 2,
+			workers: 4,
 			quality: 10,
 			width: resolutionX,
 			height: resolutionY,
@@ -139,11 +141,13 @@ export class Renderer {
 		});
 		const frames = Math.floor(frameRate * duration);
 		const step = angleRad / frames;
+		console.log("Rendering gif");
 		for (let i = 0; i < frames; i++) {
+			console.log((i / frames) * 100 + "%");
 			const currentAngle = step * i;
 			tempCamera.position.set(
 				centerPosition.x + distance * Math.cos(currentAngle),
-				centerPosition.y + distance,
+				centerPosition.y + distance * Math.sin(elevation),
 				centerPosition.z + distance * Math.sin(currentAngle)
 			);
 			tempCamera.lookAt(centerPosition);
@@ -155,7 +159,7 @@ export class Renderer {
 		}
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
 		this.renderer.render(this.scene, this.camera);
-
+		console.log("Rendering gif done");
 		return new Promise((resolve, reject) => {
 			gif.on("finished", function (blob: any) {
 				const reader = new FileReader();
@@ -165,6 +169,60 @@ export class Renderer {
 				reader.readAsDataURL(blob);
 			});
 			gif.render();
+		});
+	}
+
+	takeRotationWebM(
+		resolutionX: number,
+		resolutionY: number,
+		centerPosition: THREE.Vector3,
+		distance: number,
+		elevation: number,
+		frameRate: number,
+		duration: number,
+		angle: number = 360
+	) {
+		const angleRad = (angle * Math.PI) / 180;
+		const oldCanvasWidth = this.canvas.clientWidth;
+		const oldCanvasHeight = this.canvas.clientHeight;
+		const tempCamera = this.camera.clone();
+		tempCamera.aspect = resolutionX / resolutionY;
+		tempCamera.updateProjectionMatrix();
+		this.renderer.setSize(resolutionX, resolutionY);
+		const frames = Math.floor(frameRate * duration);
+		const step = angleRad / frames;
+		// let framesArray: string[] = [];
+		const videoWriter = new WebMWriter({
+			frameRate: frameRate,
+			quality: 1,
+			transparent: true,
+		});
+		const tempCanvas = document.createElement("canvas");
+		tempCanvas.width = resolutionX;
+		tempCanvas.height = resolutionY;
+		for (let i = 0; i < frames; i++) {
+			console.log((i / frames) * 100 + "%");
+			const currentAngle = step * i;
+			tempCamera.position.set(
+				centerPosition.x + distance * Math.cos(currentAngle),
+				centerPosition.y + distance * Math.sin(elevation),
+				centerPosition.z + distance * Math.sin(currentAngle)
+			);
+			tempCamera.lookAt(centerPosition);
+			this.renderer.render(this.scene, tempCamera);
+			const tempContext = tempCanvas.getContext("2d");
+			tempContext?.clearRect(0, 0, resolutionX, resolutionY);
+			tempContext?.drawImage(this.renderer.domElement, 0, 0);
+			videoWriter.addFrame(tempCanvas);
+		}
+		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
+		this.renderer.render(this.scene, this.camera);
+		return new Promise((resolve, reject) => {
+			videoWriter.complete().then((blob: any) => {
+				const b64 = URL.createObjectURL(blob);
+				console.log(b64);
+				resolve(b64);
+			});
 		});
 	}
 }

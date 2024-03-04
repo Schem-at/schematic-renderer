@@ -146,21 +146,49 @@ export class SchematicRenderer {
 			this.loadedSchematic.height / 2,
 			this.loadedSchematic.length / 2
 		);
-		const distance = Math.max(
-			this.loadedSchematic.width,
-			this.loadedSchematic.height,
-			this.loadedSchematic.length
+		const distance = this.renderer.camera.position.distanceTo(centerPosition);
+		const elevation = Math.asin(
+			(this.renderer.camera.position.y - centerPosition.y) / distance
 		);
-
 		const gif = this.renderer.takeRotationGif(
 			resolutionX,
 			resolutionY,
 			centerPosition,
 			distance,
+			elevation,
 			frameRate,
 			duration,
 			angle
 		);
 		return gif;
+	}
+
+	async takeRotationWebM(
+		resolutionX: number,
+		resolutionY: number,
+		frameRate: number,
+		duration: number,
+		angle: number = 360
+	) {
+		const centerPosition = new THREE.Vector3(
+			this.loadedSchematic.width / 2,
+			this.loadedSchematic.height / 2,
+			this.loadedSchematic.length / 2
+		);
+		const distance = this.renderer.camera.position.distanceTo(centerPosition);
+		const elevation = Math.asin(
+			(this.renderer.camera.position.y - centerPosition.y) / distance
+		);
+		const webm = this.renderer.takeRotationWebM(
+			resolutionX,
+			resolutionY,
+			centerPosition,
+			distance,
+			elevation,
+			frameRate,
+			duration,
+			angle
+		);
+		return webm;
 	}
 }
