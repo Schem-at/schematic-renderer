@@ -180,8 +180,12 @@ export class Renderer {
 		elevation: number,
 		frameRate: number,
 		duration: number,
-		angle: number = 360
+		angle: number = 360,
+		progressController: any
 	) {
+		progressController.setProgress(0);
+		progressController.setProgressMessage("Rendering webm");
+		progressController.showProgress();
 		const angleRad = (angle * Math.PI) / 180;
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
@@ -191,7 +195,6 @@ export class Renderer {
 		this.renderer.setSize(resolutionX, resolutionY);
 		const frames = Math.floor(frameRate * duration);
 		const step = angleRad / frames;
-		// let framesArray: string[] = [];
 		const videoWriter = new WebMWriter({
 			frameRate: frameRate,
 			quality: 1,
@@ -200,29 +203,44 @@ export class Renderer {
 		const tempCanvas = document.createElement("canvas");
 		tempCanvas.width = resolutionX;
 		tempCanvas.height = resolutionY;
-		for (let i = 0; i < frames; i++) {
-			console.log((i / frames) * 100 + "%");
-			const currentAngle = step * i;
-			tempCamera.position.set(
-				centerPosition.x + distance * Math.cos(currentAngle),
-				centerPosition.y + distance * Math.sin(elevation),
-				centerPosition.z + distance * Math.sin(currentAngle)
-			);
-			tempCamera.lookAt(centerPosition);
-			this.renderer.render(this.scene, tempCamera);
-			const tempContext = tempCanvas.getContext("2d");
-			tempContext?.clearRect(0, 0, resolutionX, resolutionY);
-			tempContext?.drawImage(this.renderer.domElement, 0, 0);
-			videoWriter.addFrame(tempCanvas);
-		}
-		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.renderer.render(this.scene, this.camera);
+		console.log(distance, elevation);
 		return new Promise((resolve, reject) => {
-			videoWriter.complete().then((blob: any) => {
-				const b64 = URL.createObjectURL(blob);
-				console.log(b64);
-				resolve(b64);
-			});
+			const renderStep = (i: number) => {
+				requestAnimationFrame(() => {
+					console.log(distance, elevation);
+					progressController.setProgress((i / frames) * 100);
+					progressController.setProgressMessage(
+						`Rendering webm: ${Math.round((i / frames) * 100)}%`
+					);
+					const currentAngle = step * i;
+					tempCamera.position.set(
+						centerPosition.x + distance * Math.cos(currentAngle),
+						centerPosition.y + distance * Math.sin(elevation),
+						centerPosition.z + distance * Math.sin(currentAngle)
+					);
+					tempCamera.lookAt(centerPosition);
+					this.renderer.render(this.scene, tempCamera);
+					const tempContext = tempCanvas.getContext("2d");
+					tempContext?.clearRect(0, 0, resolutionX, resolutionY);
+					tempContext?.drawImage(this.renderer.domElement, 0, 0);
+					videoWriter.addFrame(tempCanvas);
+					if (i < frames) {
+						renderStep(i + 1);
+					} else {
+						this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
+						this.renderer.render(this.scene, this.camera);
+						videoWriter.complete().then((blob: any) => {
+							const b64 = URL.createObjectURL(blob);
+							progressController.hideProgress();
+							progressController.setProgress(0);
+							progressController.setProgressMessage("");
+							return resolve(b64);
+						});
+					}
+				});
+			};
+
+			renderStep(0);
 		});
 	}
 }

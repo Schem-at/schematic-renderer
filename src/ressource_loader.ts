@@ -31,6 +31,7 @@ export class RessourceLoader {
 	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
 	jarUrl: string | string[];
+	progressController: any;
 	zip: any;
 	textureLoader = new THREE.TextureLoader();
 
@@ -63,7 +64,7 @@ export class RessourceLoader {
 	DEG2RAD = Math.PI / 180;
 
 	DEBUG = false;
-	constructor(jarUrl: string | string[]) {
+	constructor(jarUrl: string | string[], progressController?: any) {
 		this.textureCache = new Map();
 		this.blobCache = new Map();
 		this.stringCache = new Map();
@@ -75,6 +76,7 @@ export class RessourceLoader {
 		this.materialMap = new Map();
 		this.base64MaterialMap = new Map();
 		this.jarUrl = jarUrl;
+		this.progressController = progressController;
 		this.textureLoader = new THREE.TextureLoader();
 		this.schematic = undefined;
 	}
@@ -732,7 +734,11 @@ export class RessourceLoader {
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
 		for (const chunk of chunks) {
-			console.log(`Processing chunk ${currentChunk} of ${totalChunks}`);
+			//console.log(`Processing chunk ${currentChunk} of ${totalChunks}`);
+			this.progressController?.setProgress((currentChunk / totalChunks) * 100);
+			this.progressController?.setProgressMessage(
+				`Processing chunk ${currentChunk} of ${totalChunks}`
+			);
 			currentChunk++;
 			const materialGroups = {};
 			await this.processChunkBlocks(

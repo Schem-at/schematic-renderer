@@ -25,6 +25,7 @@ export class SchematicRenderer {
 		this.canvas = canvas;
 		this.schematicData = schematicData;
 		this.options = options;
+		console.log("options", options);
 		this.renderer = new Renderer(canvas, options);
 		this.initialize();
 	}
@@ -40,7 +41,10 @@ export class SchematicRenderer {
 				corsBypassUrl: "",
 			}),
 		];
-		this.ressourceLoader = new RessourceLoader(this.jarUrl);
+		this.ressourceLoader = new RessourceLoader(
+			this.jarUrl,
+			this.options?.progressController
+		);
 		await this.ressourceLoader.initialize();
 		await this.render();
 	}
@@ -67,6 +71,9 @@ export class SchematicRenderer {
 		//	this.loadedSchematic.height * 2,
 		//	this.loadedSchematic.length * 2
 		//);
+		this.options.progressController?.showProgress();
+		this.options.progressController?.setProgressMessage("Loading Schematic");
+
 		const cameraDistance = Math.max(
 			this.loadedSchematic.width,
 			this.loadedSchematic.height,
@@ -88,7 +95,7 @@ export class SchematicRenderer {
 		console.log("setSchematic");
 
 		this.schematicMeshes = await this.ressourceLoader.getSchematicMeshes();
-		console.log("getSchematicMeshes");
+		this.options.progressController?.setProgressMessage("Rendering Schematic");
 		if (this.schematicMeshes && this.schematicMeshes.length > 0) {
 			console.log("rendering");
 			this.renderer.scene.add(...this.schematicMeshes);
@@ -98,6 +105,7 @@ export class SchematicRenderer {
 		} else {
 			console.log("no schematic meshes");
 		}
+		this.options.progressController?.hideProgress();
 	}
 
 	public clearSchematic() {
@@ -107,7 +115,6 @@ export class SchematicRenderer {
 	}
 
 	async updateSchematic(schematicData: string) {
-		console.log("updateSchematic");
 		this.schematicData = schematicData;
 		this.clearSchematic();
 		let parsedSchematic: TagMap;
@@ -179,6 +186,8 @@ export class SchematicRenderer {
 		const elevation = Math.asin(
 			(this.renderer.camera.position.y - centerPosition.y) / distance
 		);
+		console.log(distance, elevation);
+		this.options.progressController?.showProgress();
 		const webm = this.renderer.takeRotationWebM(
 			resolutionX,
 			resolutionY,
@@ -187,7 +196,8 @@ export class SchematicRenderer {
 			elevation,
 			frameRate,
 			duration,
-			angle
+			angle,
+			this.options?.progressController
 		);
 		return webm;
 	}
