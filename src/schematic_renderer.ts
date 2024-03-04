@@ -121,4 +121,46 @@ export class SchematicRenderer {
 		const screenshot = this.renderer.takeScreenshot(resolutionX, resolutionY);
 		return screenshot;
 	}
+
+	async setCameraPosition(x: number, y: number, z: number) {
+		this.renderer.camera.position.set(x, y, z);
+	}
+
+	async setCameraRotation(x: number, y: number, z: number) {
+		this.renderer.camera.rotation.set(x, y, z);
+	}
+
+	async setCameraLookAt(x: number, y: number, z: number) {
+		this.renderer.camera.lookAt(new THREE.Vector3(x, y, z));
+	}
+
+	async takeRotationGif(
+		resolutionX: number,
+		resolutionY: number,
+		frameRate: number,
+		duration: number,
+		angle: number = 360
+	) {
+		const centerPosition = new THREE.Vector3(
+			this.loadedSchematic.width / 2,
+			this.loadedSchematic.height / 2,
+			this.loadedSchematic.length / 2
+		);
+		const distance = Math.max(
+			this.loadedSchematic.width,
+			this.loadedSchematic.height,
+			this.loadedSchematic.length
+		);
+
+		const gif = this.renderer.takeRotationGif(
+			resolutionX,
+			resolutionY,
+			centerPosition,
+			distance,
+			frameRate,
+			duration,
+			angle
+		);
+		return gif;
+	}
 }

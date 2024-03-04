@@ -1,6 +1,7 @@
 // Renderer.ts
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import GIF from "gif.js.optimized";
 // import Stats from "stats.js";
 export class Renderer {
 	canvas: HTMLCanvasElement;
@@ -111,5 +112,59 @@ export class Renderer {
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
 		this.renderer.render(this.scene, this.camera);
 		return screenshot;
+	}
+
+	takeRotationGif(
+		resolutionX: number,
+		resolutionY: number,
+		centerPosition: THREE.Vector3,
+		distance: number,
+		frameRate: number,
+		duration: number,
+		angle: number = 360
+	) {
+		const angleRad = (angle * Math.PI) / 180;
+		const oldCanvasWidth = this.canvas.clientWidth;
+		const oldCanvasHeight = this.canvas.clientHeight;
+		const tempCamera = this.camera.clone();
+		tempCamera.aspect = resolutionX / resolutionY;
+		tempCamera.updateProjectionMatrix();
+		this.renderer.setSize(resolutionX, resolutionY);
+		const gif = new GIF({
+			workers: 2,
+			quality: 10,
+			width: resolutionX,
+			height: resolutionY,
+			transparent: 0x000000,
+		});
+		const frames = Math.floor(frameRate * duration);
+		const step = angleRad / frames;
+		for (let i = 0; i < frames; i++) {
+			const currentAngle = step * i;
+			tempCamera.position.set(
+				centerPosition.x + distance * Math.cos(currentAngle),
+				centerPosition.y + distance,
+				centerPosition.z + distance * Math.sin(currentAngle)
+			);
+			tempCamera.lookAt(centerPosition);
+			this.renderer.render(this.scene, tempCamera);
+			gif.addFrame(this.renderer.domElement, {
+				copy: true,
+				delay: 1000 / frameRate,
+			});
+		}
+		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
+		this.renderer.render(this.scene, this.camera);
+
+		return new Promise((resolve, reject) => {
+			gif.on("finished", function (blob: any) {
+				const reader = new FileReader();
+				reader.onload = function () {
+					resolve(reader.result);
+				};
+				reader.readAsDataURL(blob);
+			});
+			gif.render();
+		});
 	}
 }
