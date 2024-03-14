@@ -92,7 +92,7 @@ export class SchematicRenderer {
 		this.renderer.camera.lookAt(center);
 		console.log("render");
 		this.ressourceLoader.setSchematic(this.loadedSchematic);
-		console.log("setSchematic");
+		console.log("setSchematicasdasd");
 
 		this.schematicMeshes = await this.ressourceLoader.getSchematicMeshes();
 		this.options.progressController?.setProgressMessage("Rendering Schematic");
@@ -105,6 +105,39 @@ export class SchematicRenderer {
 		} else {
 			console.log("no schematic meshes");
 		}
+
+		// add a usdz download button
+		//const usdzButton = document.createElement("button");
+		//usdzButton.innerText = "Download USDZ";
+		//usdzButton.onclick = async () => {
+		//	const usdz = await this.exportUsdz();
+		//	const link = document.createElement("a");
+		//	//link.href = usdz; Type 'Uint8Array' is not assignable to type 'string'
+		//	link.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
+		//	link.download = "schematic.usdz";
+		//	link.click();
+		//};
+		//document.body.appendChild(usdzButton);
+
+		// add a ar view button
+		//<div>
+		//	<a rel="ar" href="/assets/models/my-model.usdz">
+		//		<img src="/assets/models/my-model-thumbnail.jpg">
+		//	</a>
+		//</div>
+
+		const arDiv = document.createElement("div");
+		const arLink = document.createElement("a");
+		arLink.rel = "ar";
+		const usdz = await this.exportUsdz();
+		arLink.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
+		const arImg = document.createElement("img");
+		arLink.download = "schematic.usdz";
+		arImg.src = "https://www.gstatic.com/webp/gallery/1.jpg";
+		arLink.appendChild(arImg);
+		arDiv.appendChild(arLink);
+		document.body.appendChild(arDiv);
+
 		this.options.progressController?.hideProgress();
 	}
 
@@ -186,7 +219,6 @@ export class SchematicRenderer {
 		const elevation = Math.asin(
 			(this.renderer.camera.position.y - centerPosition.y) / distance
 		);
-		console.log(distance, elevation);
 		this.options.progressController?.showProgress();
 		const webm = this.renderer.takeRotationWebM(
 			resolutionX,
@@ -200,5 +232,10 @@ export class SchematicRenderer {
 			this.options?.progressController
 		);
 		return webm;
+	}
+
+	async exportUsdz() {
+		const obj = this.renderer.exportUsdz();
+		return obj;
 	}
 }

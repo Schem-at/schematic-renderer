@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import GIF from "gif.js.optimized";
 import WebMWriter from "webm-writer";
+import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
 // import Stats from "stats.js";
 export class Renderer {
 	canvas: HTMLCanvasElement;
@@ -230,11 +231,14 @@ export class Renderer {
 						this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
 						this.renderer.render(this.scene, this.camera);
 						videoWriter.complete().then((blob: any) => {
-							const b64 = URL.createObjectURL(blob);
-							progressController.hideProgress();
-							progressController.setProgress(0);
-							progressController.setProgressMessage("");
-							return resolve(b64);
+							const reader = new FileReader();
+							reader.onload = function () {
+								progressController.hideProgress();
+								progressController.setProgress(0);
+								progressController.setProgressMessage("");
+								resolve(reader.result);
+							};
+							reader.readAsDataURL(blob);
 						});
 					}
 				});
@@ -242,5 +246,11 @@ export class Renderer {
 
 			renderStep(0);
 		});
+	}
+
+	exportUsdz() {
+		const exporter = new USDZExporter();
+		const usdz = exporter.parse(this.scene);
+		return usdz;
 	}
 }

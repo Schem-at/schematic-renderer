@@ -175,7 +175,8 @@ export class RessourceLoader {
 
 		return new THREE.MeshStandardMaterial({
 			map: texture,
-			side: transparent ? THREE.DoubleSide : THREE.FrontSide,
+			//side: transparent ? THREE.DoubleSide : THREE.FrontSide,
+			side: THREE.FrontSide,
 			alphaTest: 0.1,
 			transparent: transparent,
 			color: color ?? 0xffffff,
