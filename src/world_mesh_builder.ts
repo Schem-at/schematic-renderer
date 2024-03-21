@@ -1,131 +1,145 @@
 import * as THREE from "three";
 
-const TRANSPARENT_BLOCKS = ["air"];
-class ElementFace {
-	public face: string;
-	public uv: number[];
-	public textureRef: string;
-	constructor(face: string, uv: number[], textureRef: string) {
-		this.face = face;
-		this.uv = uv;
-		this.textureRef = textureRef;
-	}
-}
+import { BlockMeshBuilder } from "./block_mesh_builder";
+import { INVISIBLE_BLOCKS, TRANSPARENT_BLOCKS } from "./utils";
 
-class Element {
-	public faces: ElementFace[];
-	public from: THREE.Vector3;
-	public to: THREE.Vector3;
-	constructor(faces: any, from: THREE.Vector3, to: THREE.Vector3) {
-		this.faces = [];
-		for (const faceName in faces) {
-			const faceData = faces[faceName];
-			const uv = faceData.uv;
-			const textureRef = faceData.texture;
-			const face = new ElementFace(faceName, uv, textureRef);
-			this.faces.push(face);
-		}
-		this.from = from;
-		this.to = to;
-	}
-}
+export class WorldMeshBuilder {
+	schematic: any;
+	blockMeshBuilder: any;
+	ressourceLoader: any;
+	progressController: any;
 
-class Model {
-	public elements: Element[];
-	public textures: any[];
-	public ambientocclusion: boolean;
-
-	constructor(elements: any, textures: any[], ambientocclusion: boolean) {
-		this.elements = [];
-		for (const elementData of elements) {
-			const from = new THREE.Vector3(
-				elementData.from[0],
-				elementData.from[1],
-				elementData.from[2]
-			);
-			const to = new THREE.Vector3(
-				elementData.to[0],
-				elementData.to[1],
-				elementData.to[2]
-			);
-			const element = new Element(elementData.faces, from, to);
-			this.elements.push(element);
-		}
-		this.textures = textures;
-		this.ambientocclusion = ambientocclusion;
-	}
-}
-
-class Block {
-	public blockDescriptor: any;
-	public blockStateDefinition: any;
-	public blockModelData: any;
-	public blockModelOption: any;
-	public ressourceLoader: any;
-	public type: string;
-	public models: Model[] = [];
-	constructor(blockDescriptor: any, ressourceLoader: any) {
-		this.blockDescriptor = blockDescriptor;
-		this.type = blockDescriptor.type;
+	constructor(ressourceLoader: any, progressController: any) {
 		this.ressourceLoader = ressourceLoader;
-		this.initialize();
+		this.progressController = progressController;
+		this.blockMeshBuilder = new BlockMeshBuilder(ressourceLoader);
 	}
 
-	async initialize() {
-		await this.computeBlockStateDefinition();
-		this.blockModelData = this.ressourceLoader.getBlockModelData(
-			this.blockDescriptor,
-			this.blockStateDefinition
-		);
-		this.blockModelOption = this.ressourceLoader.getModelOption(
-			this.blockModelData
-		);
-		await this.computeBlockModels();
-	}
-
-	async computeBlockStateDefinition() {
-		const blockStateDefinition =
-			await this.ressourceLoader.getBlockStateDefinition(this.type);
-		this.blockStateDefinition = blockStateDefinition;
-	}
-
-	async computeBlockModels() {
-		for (const holder of this.blockModelOption.holders) {
-			const modelData = await this.ressourceLoader.loadModel(holder.model);
-			const model = new Model(
-				modelData.elements,
-				modelData.textures,
-				modelData.ambientocclusion
-			);
-			this.models.push(model);
-		}
-	}
-}
-
-export class World {
-	public schematic: any;
-	public ressourceLoader: any;
-	public worldWidth: number;
-	public worldHeight: number;
-	public worldLength: number;
-	public blocks: Block[] = [];
-	constructor(schematic: any, ressourceLoader: any) {
+	public setSchematic(schematic: any) {
 		this.schematic = schematic;
-		this.ressourceLoader = ressourceLoader;
-		this.worldWidth = schematic.width;
-		this.worldHeight = schematic.height;
-		this.worldLength = schematic.length;
-		this.computeBlocks();
+		this.blockMeshBuilder.setSchematic(schematic);
 	}
 
-	public computeBlocks() {
+	public splitSchemaIntoChunks(
+		dimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
+	) {
+		const chunks: any[] = [];
+		const { chunkWidth, chunkHeight, chunkLength } = dimensions;
+		const { width, height, length } = this.schematic;
+		const chunkCountX = Math.ceil(width / chunkWidth);
+		const chunkCountY = Math.ceil(height / chunkHeight);
+		const chunkCountZ = Math.ceil(length / chunkLength);
 		for (const pos of this.schematic) {
 			const { x, y, z } = pos;
-			const blockData = this.schematic.getBlock(pos);
-			if (TRANSPARENT_BLOCKS.includes(blockData.type)) {
+			const chunkX = Math.floor(x / chunkWidth);
+			const chunkY = Math.floor(y / chunkHeight);
+			const chunkZ = Math.floor(z / chunkLength);
+			const chunkIndex =
+				chunkX + chunkY * chunkCountX + chunkZ * chunkCountX * chunkCountY;
+			if (!chunks[chunkIndex]) {
+				chunks[chunkIndex] = [];
+			}
+			chunks[chunkIndex].push(pos);
+		}
+		return chunks;
+	}
+
+	public async processChunkBlocks(
+		materialGroups: any,
+		chunk: any,
+		chunkDimensions: any,
+		offset: { x: number; y: number; z: number }
+	) {
+		const maxBlocksAllowed = 1000000;
+		let count = 0;
+		for (const pos of chunk) {
+			if (count > maxBlocksAllowed) {
+				break;
+			}
+			const { x, y, z } = pos;
+			const block = this.schematic.getBlock(pos);
+			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			const block = new Block(blockData, this.ressourceLoader);
+			//console.log("position", pos, " block", block);
+
+			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
+				block
+			);
+			const rotatedBlockComponents =
+				this.blockMeshBuilder.rotateBlockComponents(
+					blockComponents,
+					block.properties?.["facing"]
+				);
+
+			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
+				block.type,
+				pos
+			);
+
+			for (const key in rotatedBlockComponents) {
+				this.ressourceLoader.addBlockToMaterialGroup(
+					materialGroups,
+					rotatedBlockComponents[key],
+					occludedFaces,
+					x,
+					y,
+					z,
+					offset ?? { x: 0, y: 0, z: 0 }
+				);
+			}
+			count++;
 		}
+	}
+
+	public isSolid(x: number, y: number, z: number) {
+		const block = this.schematic.getBlock(new THREE.Vector3(x, y, z));
+		return block && !TRANSPARENT_BLOCKS.has(block.type);
+	}
+
+	public initializeMeshCreation() {
+		if (this.schematic === undefined) {
+			return { materialGroups: null };
+		}
+		const worldWidth = this.schematic.width;
+		const worldHeight = this.schematic.height;
+		const worldLength = this.schematic.length;
+		// const offset = new THREE.Vector3(-worldWidth / 2, 0, -worldLength / 2);
+		const offset = { x: 0, y: 0, z: 0 };
+		return { worldWidth, worldHeight, worldLength, offset };
+	}
+
+	public async getSchematicMeshes(
+		chunkDimensions = { chunkWidth: 16, chunkHeight: 16, chunkLength: 16 }
+	) {
+		const { worldWidth, worldHeight, worldLength, offset } =
+			this.initializeMeshCreation();
+		const chunks = await this.splitSchemaIntoChunks({
+			chunkWidth: 64,
+			chunkHeight: 64,
+			chunkLength: 64,
+		});
+		const chunkMeshes = [];
+		const totalChunks = chunks.length;
+		let currentChunk = 0;
+		for (const chunk of chunks) {
+			//console.log(`Processing chunk ${currentChunk} of ${totalChunks}`);
+			this.progressController?.setProgress((currentChunk / totalChunks) * 100);
+			this.progressController?.setProgressMessage(
+				`Processing chunk ${currentChunk} of ${totalChunks}`
+			);
+			currentChunk++;
+			const materialGroups = {};
+			await this.processChunkBlocks(
+				materialGroups,
+				chunk,
+				chunkDimensions,
+				offset ?? { x: 0, y: 0, z: 0 }
+			);
+			chunkMeshes.push(
+				...this.ressourceLoader.createMeshesFromMaterialGroups(materialGroups)
+			);
+		}
+		return chunkMeshes;
 	}
 }

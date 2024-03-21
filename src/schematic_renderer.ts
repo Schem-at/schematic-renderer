@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { loadSchematic } from "@enginehub/schematicjs";
 import { Renderer } from "./renderer";
-import { RessourceLoader } from "./ressource_loader";
+import { ResourceLoader } from "./resource_loader";
+import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
 import type { TagMap } from "nbt-ts";
 
-import { World } from "./world_mesh_builder";
 export class SchematicRenderer {
 	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
 	URL_1_13 =
@@ -17,7 +17,8 @@ export class SchematicRenderer {
 	renderer: Renderer;
 	schematicData: string;
 	loadedSchematic: any;
-	ressourceLoader: any;
+	resourceLoader: any;
+	worldMeshBuilder: WorldMeshBuilder | undefined;
 	jarUrl: string | string[] | undefined;
 	schematicMeshes: THREE.Mesh[] | undefined;
 
@@ -41,11 +42,16 @@ export class SchematicRenderer {
 				corsBypassUrl: "",
 			}),
 		];
-		this.ressourceLoader = new RessourceLoader(
+		this.resourceLoader = new ResourceLoader(
 			this.jarUrl,
 			this.options?.progressController
 		);
-		await this.ressourceLoader.initialize();
+		await this.resourceLoader.initialize();
+
+		this.worldMeshBuilder = new WorldMeshBuilder(
+			this.resourceLoader,
+			this.options?.progressController
+		);
 		await this.render();
 	}
 
@@ -91,10 +97,11 @@ export class SchematicRenderer {
 		);
 		this.renderer.camera.lookAt(center);
 		console.log("render");
-		this.ressourceLoader.setSchematic(this.loadedSchematic);
+		this.resourceLoader.setSchematic(this.loadedSchematic);
+		this.worldMeshBuilder?.setSchematic(this.loadedSchematic);
 		console.log("setSchematicasdasd");
-
-		this.schematicMeshes = await this.ressourceLoader.getSchematicMeshes();
+		console.log(this.loadedSchematic);
+		this.schematicMeshes = await this.worldMeshBuilder?.getSchematicMeshes();
 		this.options.progressController?.setProgressMessage("Rendering Schematic");
 		if (this.schematicMeshes && this.schematicMeshes.length > 0) {
 			console.log("rendering");
@@ -126,17 +133,17 @@ export class SchematicRenderer {
 		//	</a>
 		//</div>
 
-		const arDiv = document.createElement("div");
-		const arLink = document.createElement("a");
-		arLink.rel = "ar";
-		const usdz = await this.exportUsdz();
-		arLink.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
-		const arImg = document.createElement("img");
-		arLink.download = "schematic.usdz";
-		arImg.src = "https://www.gstatic.com/webp/gallery/1.jpg";
-		arLink.appendChild(arImg);
-		arDiv.appendChild(arLink);
-		document.body.appendChild(arDiv);
+		//const arDiv = document.createElement("div");
+		//const arLink = document.createElement("a");
+		//arLink.rel = "ar";
+		//const usdz = await this.exportUsdz();
+		//arLink.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
+		//const arImg = document.createElement("img");
+		//arLink.download = "schematic.usdz";
+		//arImg.src = "https://www.gstatic.com/webp/gallery/1.jpg";
+		//arLink.appendChild(arImg);
+		//arDiv.appendChild(arLink);
+		//document.body.appendChild(arDiv);
 
 		this.options.progressController?.hideProgress();
 	}
