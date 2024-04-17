@@ -1,6 +1,5 @@
 import { unzip } from "gzip-js";
-import type { TagMap } from "nbt-ts";
-import { decode } from "nbt-ts";
+import { decode, TagMap } from "@enginehub/nbt-ts"
 import type { Faces, Vector } from "./types";
 import NonOccludingBlocks from "./nonOccluding.json";
 import TransparentBlocks from "./transparent.json";

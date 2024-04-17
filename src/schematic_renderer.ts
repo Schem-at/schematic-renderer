@@ -1,10 +1,15 @@
 import * as THREE from "three";
 import { loadSchematic } from "@enginehub/schematicjs";
+import type { TagMap } from "@enginehub/nbt-ts";
+
 import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
-import type { TagMap } from "nbt-ts";
+
+
+
+import { Buffer } from 'buffer';
 
 export class SchematicRenderer {
 	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
@@ -36,12 +41,14 @@ export class SchematicRenderer {
 		parsedNbt = parseNbtFromBase64(this.schematicData);
 
 		this.loadedSchematic = loadSchematic(parsedNbt);
+		console.log("this.loadedSchematic", this.loadedSchematic);
 		this.jarUrl = [
 			await this.options.getClientJarUrl({
 				dataVersion: this.loadedSchematic.dataVersion,
 				corsBypassUrl: "",
 			}),
 		];
+		console.log("this.jarUrl", this.jarUrl);
 		this.resourceLoader = new ResourceLoader(
 			this.jarUrl,
 			this.options?.progressController
