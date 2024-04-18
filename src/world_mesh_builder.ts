@@ -9,10 +9,14 @@ export class WorldMeshBuilder {
 	ressourceLoader: any;
 	progressController: any;
 
-	constructor(ressourceLoader: any, progressController: any) {
+	constructor(
+		ressourceLoader: any,
+		progressController: any,
+		materialMap: Map<string, THREE.Material>
+	) {
 		this.ressourceLoader = ressourceLoader;
 		this.progressController = progressController;
-		this.blockMeshBuilder = new BlockMeshBuilder(ressourceLoader);
+		this.blockMeshBuilder = new BlockMeshBuilder(ressourceLoader, materialMap);
 	}
 
 	public setSchematic(schematic: any) {
@@ -76,7 +80,6 @@ export class WorldMeshBuilder {
 				block.type,
 				pos
 			);
-
 			for (const key in rotatedBlockComponents) {
 				this.ressourceLoader.addBlockToMaterialGroup(
 					materialGroups,

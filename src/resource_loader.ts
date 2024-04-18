@@ -48,7 +48,11 @@ export class ResourceLoader {
 	DEG2RAD = Math.PI / 180;
 
 	DEBUG = false;
-	constructor(jarUrl: string | string[], progressController?: any) {
+	constructor(
+		jarUrl: string | string[],
+		progressController?: any,
+		materialMap?: Map<string, THREE.Material>
+	) {
 		this.textureCache = new Map();
 		this.blobCache = new Map();
 		this.stringCache = new Map();
@@ -57,7 +61,7 @@ export class ResourceLoader {
 		this.blockModelCache = new Map();
 		this.faceDataCache = new Map();
 		this.blockStateDefinitionCache = new Map();
-		this.materialMap = new Map();
+		this.materialMap = materialMap ?? new Map();
 		this.base64MaterialMap = new Map();
 		this.jarUrl = jarUrl;
 		this.progressController = progressController;
@@ -313,6 +317,7 @@ export class ResourceLoader {
 		const meshes: THREE.Mesh[] = [];
 		Object.keys(materialGroups).forEach((materialId) => {
 			const group = materialGroups[materialId];
+			console.log(this.materialMap);
 			const material = this.materialMap.get(materialId);
 			const geometry = new THREE.BufferGeometry();
 			geometry.setAttribute(
@@ -342,7 +347,7 @@ export class ResourceLoader {
 			meshes.push(mesh);
 			// this.materialMap.delete(materialId);
 		});
-
+		console.log(meshes);
 		return meshes;
 	}
 

@@ -7,9 +7,7 @@ import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
 
-
-
-import { Buffer } from 'buffer';
+import { Buffer } from "buffer";
 
 export class SchematicRenderer {
 	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
@@ -23,6 +21,7 @@ export class SchematicRenderer {
 	schematicData: string;
 	loadedSchematic: any;
 	resourceLoader: any;
+	materialMap: Map<string, THREE.Material> = new Map();
 	worldMeshBuilder: WorldMeshBuilder | undefined;
 	jarUrl: string | string[] | undefined;
 	schematicMeshes: THREE.Mesh[] | undefined;
@@ -49,15 +48,18 @@ export class SchematicRenderer {
 			}),
 		];
 		console.log("this.jarUrl", this.jarUrl);
+		this.materialMap = new Map();
 		this.resourceLoader = new ResourceLoader(
 			this.jarUrl,
-			this.options?.progressController
+			this.options?.progressController,
+			this.materialMap
 		);
 		await this.resourceLoader.initialize();
 
 		this.worldMeshBuilder = new WorldMeshBuilder(
 			this.resourceLoader,
-			this.options?.progressController
+			this.options?.progressController,
+			this.materialMap
 		);
 		await this.render();
 	}

@@ -34,9 +34,9 @@ export class BlockMeshBuilder {
 	ressourceLoader: ResourceLoader;
 	schematic: any;
 
-	constructor(ressourceLoader: any) {
+	constructor(ressourceLoader: any, materialMap: Map<string, THREE.Material>) {
 		this.blockMeshCache = new Map();
-		this.materialMap = new Map();
+		this.materialMap = materialMap;
 		this.base64MaterialMap = new Map();
 		this.ressourceLoader = ressourceLoader;
 	}
