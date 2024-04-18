@@ -1,1 +1,0 @@
-# schematic-renderer
