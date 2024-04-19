@@ -68,60 +68,65 @@ export class BlockMeshBuilder {
 
 	public faceToRotation(face: string) {
 		switch (face) {
-			case "north":
-				return { angle: 180, axis: [0, 1, 0] };
-			case "south":
-				return { angle: 0, axis: [0, 1, 0] };
-			case "east":
-				return { angle: 90, axis: [0, 1, 0] };
-			case "west":
-				return { angle: 270, axis: [0, 1, 0] };
-			case "up":
-				return { angle: 270, axis: [1, 0, 0] };
-			case "down":
-				return { angle: 90, axis: [1, 0, 0] };
-			default:
-				return { angle: 0, axis: [0, 1, 0] };
+		  case "north":
+			return { angle: 0, axis: [0, 1, 0] };
+		  case "south":
+			return { angle: 180, axis: [0, 1, 0] };
+		  case "east":
+			return { angle: 90, axis: [0, 1, 0] };
+		  case "west":
+			return { angle: 270, axis: [0, 1, 0] };
+		  case "up":
+			return { angle: 0, axis: [1, 0, 0] };
+		  case "down":
+			return { angle: 180, axis: [1, 0, 0] };
+		  default:
+			return { angle: 0, axis: [0, 1, 0] };
 		}
-	}
-
-	public rotateBlockComponents(blockComponents: any, facing: string) {
+	  }
+	  
+	  public rotateBlockComponents(blockComponents: any, facing: string) {
 		const rotation = this.faceToRotation(facing);
-		// console.log("rotation", rotation);
 		const rotatedBlockComponents: any = {};
+	  
 		for (const key in blockComponents) {
-			const blockComponent = blockComponents[key];
-			const { positions, normals, uvs } = blockComponent;
-			const rotatedPositions = [];
-			const rotatedNormals = [];
-			const rotatedUvs = [];
-			for (let i = 0; i < positions.length; i += 3) {
-				const [x, y, z] = rotateVector(
-					[positions[i], positions[i + 1], positions[i + 2]],
-					rotation,
-					[0.5, 0.5, 0.5]
-				);
-				rotatedPositions.push(x, y, z);
-			}
-			for (let i = 0; i < normals.length; i += 3) {
-				const [x, y, z] = rotateVector(
-					[normals[i], normals[i + 1], normals[i + 2]],
-					rotation
-				);
-				rotatedNormals.push(x, y, z);
-			}
-			for (let i = 0; i < uvs.length; i += 2) {
-				rotatedUvs.push(uvs[i], uvs[i + 1]);
-			}
-			rotatedBlockComponents[key] = {
-				...blockComponent,
-				positions: rotatedPositions,
-				normals: rotatedNormals,
-				uvs: rotatedUvs,
-			};
+		  const blockComponent = blockComponents[key];
+		  const { positions, normals, uvs } = blockComponent;
+		  const rotatedPositions = [];
+		  const rotatedNormals = [];
+		  const rotatedUvs = [];
+	  
+		  for (let i = 0; i < positions.length; i += 3) {
+			const [x, y, z] = rotateVector(
+			  [positions[i], positions[i + 1], positions[i + 2]],
+			  rotation,
+			  [0.5, 0.5, 0.5]
+			);
+			rotatedPositions.push(x, y, z);
+		  }
+	  
+		  for (let i = 0; i < normals.length; i += 3) {
+			const [x, y, z] = rotateVector(
+			  [normals[i], normals[i + 1], normals[i + 2]],
+			  rotation
+			);
+			rotatedNormals.push(x, y, z);
+		  }
+	  
+		  for (let i = 0; i < uvs.length; i += 2) {
+			rotatedUvs.push(uvs[i], uvs[i + 1]);
+		  }
+	  
+		  rotatedBlockComponents[key] = {
+			...blockComponent,
+			positions: rotatedPositions,
+			normals: rotatedNormals,
+			uvs: rotatedUvs,
+		  };
 		}
+	  
 		return rotatedBlockComponents;
-	}
+	  }
 
 	public async processFaceData(
 		element: BlockModel["elements"][0],
@@ -196,7 +201,8 @@ export class BlockMeshBuilder {
 			uvs: number[];
 		};
 	}> {
-		const blockComponents: {
+		
+			const blockComponents: {
 			[key: string]: {
 				materialId: string;
 				face: string;
@@ -211,6 +217,7 @@ export class BlockMeshBuilder {
 				continue;
 			}
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
+			
 			const elements = model?.elements;
 			if (!elements) {
 				continue;
@@ -221,6 +228,11 @@ export class BlockMeshBuilder {
 				}
 				this.normalizeElementCoords(element);
 				const faceData = await this.processFaceData(element, model, block);
+				if (block.type === "barrel") {
+					console.log("getBlockMesh", block);
+					console.log("element", element);
+					console.log("faceData", faceData);
+				}
 				const from = element.from;
 				const to = element.to;
 				if (!from || !to) {
@@ -230,10 +242,12 @@ export class BlockMeshBuilder {
 				const directionData = getDirectionData(faceData.uvs);
 				const faces = POSSIBLE_FACES;
 				for (const dir of faces) {
+					// console.log("dir", dir);
 					const materialId = faceData.subMaterials[dir];
 					if (!materialId) {
 						continue;
 					}
+					console.log("materialId", materialId);
 					const uniqueKey = `${materialId}-${dir}`;
 					if (!blockComponents[uniqueKey]) {
 						blockComponents[uniqueKey] = {

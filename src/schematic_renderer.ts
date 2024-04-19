@@ -7,7 +7,6 @@ import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
 
-import { Buffer } from "buffer";
 
 export class SchematicRenderer {
 	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
@@ -30,7 +29,6 @@ export class SchematicRenderer {
 		this.canvas = canvas;
 		this.schematicData = schematicData;
 		this.options = options;
-		console.log("options", options);
 		this.renderer = new Renderer(canvas, options);
 		this.initialize();
 	}
@@ -40,14 +38,12 @@ export class SchematicRenderer {
 		parsedNbt = parseNbtFromBase64(this.schematicData);
 
 		this.loadedSchematic = loadSchematic(parsedNbt);
-		console.log("this.loadedSchematic", this.loadedSchematic);
 		this.jarUrl = [
 			await this.options.getClientJarUrl({
 				dataVersion: this.loadedSchematic.dataVersion,
 				corsBypassUrl: "",
 			}),
 		];
-		console.log("this.jarUrl", this.jarUrl);
 		this.materialMap = new Map();
 		this.resourceLoader = new ResourceLoader(
 			this.jarUrl,

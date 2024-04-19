@@ -65,11 +65,11 @@ export class WorldMeshBuilder {
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			//console.log("position", pos, " block", block);
 
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
 				block
 			);
+
 			const rotatedBlockComponents =
 				this.blockMeshBuilder.rotateBlockComponents(
 					blockComponents,

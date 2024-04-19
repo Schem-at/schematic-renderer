@@ -317,7 +317,6 @@ export class ResourceLoader {
 		const meshes: THREE.Mesh[] = [];
 		Object.keys(materialGroups).forEach((materialId) => {
 			const group = materialGroups[materialId];
-			console.log(this.materialMap);
 			const material = this.materialMap.get(materialId);
 			const geometry = new THREE.BufferGeometry();
 			geometry.setAttribute(
@@ -347,7 +346,6 @@ export class ResourceLoader {
 			meshes.push(mesh);
 			// this.materialMap.delete(materialId);
 		});
-		console.log(meshes);
 		return meshes;
 	}
 
