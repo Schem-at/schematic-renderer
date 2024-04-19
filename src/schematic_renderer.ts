@@ -101,11 +101,8 @@ export class SchematicRenderer {
 			this.loadedSchematic.length / 2
 		);
 		this.renderer.camera.lookAt(center);
-		console.log("render");
 		this.resourceLoader.setSchematic(this.loadedSchematic);
 		this.worldMeshBuilder?.setSchematic(this.loadedSchematic);
-		console.log("setSchematicasdasd");
-		console.log(this.loadedSchematic);
 		this.schematicMeshes = await this.worldMeshBuilder?.getSchematicMeshes();
 		this.options.progressController?.setProgressMessage("Rendering Schematic");
 		if (this.schematicMeshes && this.schematicMeshes.length > 0) {
@@ -113,7 +110,6 @@ export class SchematicRenderer {
 			this.renderer.scene.add(...this.schematicMeshes);
 			console.log("rendering done");
 			this.renderer.animate();
-			console.log("animate done");
 		} else {
 			console.log("no schematic meshes");
 		}

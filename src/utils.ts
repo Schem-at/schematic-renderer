@@ -254,37 +254,119 @@ export function normalize(input: number): number {
 export function rotateVector(
 	position: number[],
 	rotation: { angle: number; axis: number[] },
-	center = [0, 0, 0]
-): number[] {
+	center: number[] = [0, 0, 0]
+  ): number[] {
 	const DEG2RAD = Math.PI / 180;
-	if (!rotation || rotation.angle % 360 === 0) {
-		return position;
-	}
-	let [x, y, z] = position;
+	const angle = rotation.angle * DEG2RAD;
+	const [x, y, z] = position;
 	const [cx, cy, cz] = center;
-	x -= cx;
-	y -= cy;
-	z -= cz;
-	const { angle, axis } = rotation;
-	const cos = Math.cos(angle * DEG2RAD);
-	const sin = Math.sin(angle * DEG2RAD);
-	const [xAxis, yAxis, zAxis] = axis;
-	const result = [
-		x * (xAxis * xAxis * (1 - cos) + cos) +
-			y * (xAxis * yAxis * (1 - cos) - zAxis * sin) +
-			z * (xAxis * zAxis * (1 - cos) + yAxis * sin),
-		x * (yAxis * xAxis * (1 - cos) + zAxis * sin) +
-			y * (yAxis * yAxis * (1 - cos) + cos) +
-			z * (yAxis * zAxis * (1 - cos) - xAxis * sin),
-		x * (zAxis * xAxis * (1 - cos) - yAxis * sin) +
-			y * (zAxis * yAxis * (1 - cos) + xAxis * sin) +
-			z * (zAxis * zAxis * (1 - cos) + cos),
-	];
-	result[0] += cx;
-	result[1] += cy;
-	result[2] += cz;
-	return result;
-}
+	const [xAxis, yAxis, zAxis] = rotation.axis;
+  
+	const cosAngle = Math.cos(angle);
+	const sinAngle = Math.sin(angle);
+	const oneMinusCos = 1 - cosAngle;
+  
+	const xx = xAxis * xAxis;
+	const yy = yAxis * yAxis;
+	const zz = zAxis * zAxis;
+	const xy = xAxis * yAxis;
+	const xz = xAxis * zAxis;
+	const yz = yAxis * zAxis;
+  
+	const mat00 = xx * oneMinusCos + cosAngle;
+	const mat01 = xy * oneMinusCos - zAxis * sinAngle;
+	const mat02 = xz * oneMinusCos + yAxis * sinAngle;
+	const mat10 = xy * oneMinusCos + zAxis * sinAngle;
+	const mat11 = yy * oneMinusCos + cosAngle;
+	const mat12 = yz * oneMinusCos - xAxis * sinAngle;
+	const mat20 = xz * oneMinusCos - yAxis * sinAngle;
+	const mat21 = yz * oneMinusCos + xAxis * sinAngle;
+	const mat22 = zz * oneMinusCos + cosAngle;
+  
+	const translatedX = x - cx;
+	const translatedY = y - cy;
+	const translatedZ = z - cz;
+  
+	const rotatedX =
+	  translatedX * mat00 + translatedY * mat01 + translatedZ * mat02;
+	const rotatedY =
+	  translatedX * mat10 + translatedY * mat11 + translatedZ * mat12;
+	const rotatedZ =
+	  translatedX * mat20 + translatedY * mat21 + translatedZ * mat22;
+  
+	return [rotatedX + cx, rotatedY + cy, rotatedZ + cz];
+  }
+
+
+export function faceToRotation(face: string) {
+	switch (face) {
+	  case "north":
+		return { angle: 0, axis: [0, 1, 0] };
+	  case "south":
+		return { angle: 180, axis: [0, 1, 0] };
+	  case "east":
+		return { angle: 90, axis: [0, 1, 0] };
+	  case "west":
+		return { angle: 270, axis: [0, 1, 0] };
+	  case "up":
+		return { angle: 0, axis: [1, 0, 0] };
+	  case "down":
+		return { angle: 180, axis: [1, 0, 0] };
+	  default:
+		return { angle: 0, axis: [0, 1, 0] };
+	}
+  }
+  
+  const ROTATION_MATRICES: { [angle: number]: number[] } = {
+	0: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+	90: [0, 0, 1, 0, 1, 0, -1, 0, 0],
+	180: [-1, 0, 0, 0, -1, 0, 0, 0, 1],
+	270: [0, 0, -1, 0, 1, 0, 1, 0, 0],
+  };
+  
+  export function rotateBlockComponents(blockComponents: any, facing: string): any {
+	const rotation = faceToRotation(facing);
+	const [mat00, mat01, mat02, mat10, mat11, mat12, mat20, mat21, mat22] =
+	  ROTATION_MATRICES[rotation.angle];
+  
+	const rotatedBlockComponents: any = {};
+  
+	for (const key in blockComponents) {
+	  const blockComponent = blockComponents[key];
+	  const { positions, normals, uvs } = blockComponent;
+	  const rotatedPositions = new Array(positions.length);
+	  const rotatedNormals = new Array(normals.length);
+  
+	  for (let i = 0; i < positions.length; i += 3) {
+		const x = positions[i] - 0.5;
+		const y = positions[i + 1] - 0.5;
+		const z = positions[i + 2] - 0.5;
+  
+		rotatedPositions[i] = x * mat00 + y * mat01 + z * mat02 + 0.5;
+		rotatedPositions[i + 1] = x * mat10 + y * mat11 + z * mat12 + 0.5;
+		rotatedPositions[i + 2] = x * mat20 + y * mat21 + z * mat22 + 0.5;
+	  }
+  
+	  for (let i = 0; i < normals.length; i += 3) {
+		const x = normals[i];
+		const y = normals[i + 1];
+		const z = normals[i + 2];
+  
+		rotatedNormals[i] = x * mat00 + y * mat01 + z * mat02;
+		rotatedNormals[i + 1] = x * mat10 + y * mat11 + z * mat12;
+		rotatedNormals[i + 2] = x * mat20 + y * mat21 + z * mat22;
+	  }
+  
+	  rotatedBlockComponents[key] = {
+		...blockComponent,
+		positions: rotatedPositions,
+		normals: rotatedNormals,
+		uvs,
+	  };
+	}
+  
+	return rotatedBlockComponents;
+  }
 
 export const INVISIBLE_BLOCKS = new Set([
 	"air",
@@ -337,7 +419,15 @@ export function parseNbtFromBase64(nbt: string): TagMap {
 }
 
 export function hashBlockForMap(block: Block) {
-	return `${block.type}:${JSON.stringify(block.properties)}`;
+	//return `${block.type}:${JSON.stringify(block.properties)}`;
+	//avoid JSON.stringify since it's slow
+	let key = block.type;
+	if (block.properties) {
+		for (const property in block.properties) {
+			key += property + block.properties[property];
+		}
+	}
+	return key;
 }
 
 export function occludedFacesIntToList(occludedFaces: number) {
