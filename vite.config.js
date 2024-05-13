@@ -7,7 +7,7 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     lib: {
-      entry: path.resolve(__dirname, 'src/index.ts'),
+      entry: path.resolve(__dirname, 'src/schematic_renderer.ts'),
       name: 'SchematicRenderer',
       fileName: 'schematic-renderer',
       formats: ['umd'],
@@ -26,17 +26,17 @@ export default defineConfig({
     alias: {
       buffer: 'buffer',
     },
-    },
-    optimizeDeps: {
-        esbuildOptions: {
-            define: {
-                global: 'globalThis'
-            },
-            plugins: [
-                NodeGlobalsPolyfillPlugin({
-                    buffer: true
-                })
-            ]
-        }
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      },
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          buffer: true
+        })
+      ]
     }
+  }
 });

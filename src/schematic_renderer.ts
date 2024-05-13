@@ -7,8 +7,7 @@ import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
 
-
-export class SchematicRenderer {
+export default class SchematicRenderer {
 	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
 	URL_1_13 =
 		"https://launcher.mojang.com/v1/objects/c0b970952cdd279912da384cdbfc0c26e6c6090b/client.jar";
@@ -34,6 +33,8 @@ export class SchematicRenderer {
 	}
 
 	async initialize() {
+		console.log("SchematicRenderer");
+
 		let parsedNbt: TagMap;
 		parsedNbt = parseNbtFromBase64(this.schematicData);
 
