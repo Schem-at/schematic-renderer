@@ -66,14 +66,13 @@ export class BlockMeshBuilder {
 		}
 	}
 
-	
-
 	public async processFaceData(
 		element: BlockModel["elements"][0],
 		model: BlockModel,
 		block: any,
 		rotation = 0
 	) {
+		console.log(block);
 		const subMaterials: { [key: string]: string | null } = {};
 		const uvs: { [key: string]: [number, number, number, number] } = {};
 		if (!element.faces) {
@@ -141,8 +140,8 @@ export class BlockMeshBuilder {
 			uvs: number[];
 		};
 	}> {
-		
-			const blockComponents: {
+		console.log(block);
+		const blockComponents: {
 			[key: string]: {
 				materialId: string;
 				face: string;
@@ -157,7 +156,7 @@ export class BlockMeshBuilder {
 				continue;
 			}
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
-			
+
 			const elements = model?.elements;
 			if (!elements) {
 				continue;
@@ -168,7 +167,7 @@ export class BlockMeshBuilder {
 				}
 				this.normalizeElementCoords(element);
 				const faceData = await this.processFaceData(element, model, block);
-				
+
 				const from = element.from;
 				const to = element.to;
 				if (!from || !to) {

@@ -1,9 +1,7 @@
 import * as THREE from "three";
 import deepmerge from "deepmerge";
 import type { Block } from "@enginehub/schematicjs";
-import { loadSchematic } from "@enginehub/schematicjs";
 import {
-	faceToFacingVector,
 	hashBlockForMap,
 	INVISIBLE_BLOCKS,
 	NON_OCCLUDING_BLOCKS,
@@ -35,9 +33,9 @@ export class ResourceLoader {
 
 	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
-	jarUrl: string | string[];
+	resourcePackBlobs: any;
 	progressController: any;
-	zip: any;
+	zips: any;
 	textureLoader = new THREE.TextureLoader();
 
 	TINT_COLOR = new THREE.Color(145 / 255, 189 / 255, 89 / 255);
@@ -49,7 +47,7 @@ export class ResourceLoader {
 
 	DEBUG = false;
 	constructor(
-		jarUrl: string | string[],
+		resourcePackBlobs: any,
 		progressController?: any,
 		materialMap?: Map<string, THREE.Material>
 	) {
@@ -63,7 +61,7 @@ export class ResourceLoader {
 		this.blockStateDefinitionCache = new Map();
 		this.materialMap = materialMap ?? new Map();
 		this.base64MaterialMap = new Map();
-		this.jarUrl = jarUrl;
+		this.resourcePackBlobs = resourcePackBlobs;
 		this.progressController = progressController;
 		this.textureLoader = new THREE.TextureLoader();
 		this.schematic = undefined;
@@ -73,44 +71,62 @@ export class ResourceLoader {
 		this.schematic = schematic;
 	}
 	async initialize() {
-		this.zip = await this.loadZip(this.jarUrl);
+		//this.zip = await this.loadZip(this.resourcePackBlob);
+		this.zips = await Promise.all(
+			this.resourcePackBlobs.map((blob: string) => this.loadZip(blob))
+		);
 	}
 
-	public async loadZip(jarUrl: string | string[]) {
-		if (Array.isArray(jarUrl)) {
-			return await Promise.all(
-				jarUrl.map(async (url) => {
-					const zipFile = await (await fetch(url)).blob();
-					const zip = await JSZip.loadAsync(zipFile);
-
-					return zip;
-				})
-			);
-		} else {
-			const zipFile = await (await fetch(jarUrl)).blob();
-			const zip = await JSZip.loadAsync(zipFile);
-
-			return zip;
-		}
+	public async loadZip(resourcePackBlob: string | string[]) {
+		return await JSZip.loadAsync(resourcePackBlob);
 	}
 
 	public async getResourceBase64(name: string): Promise<string> {
+		for (const zip of this.zips) {
+			const data = await zip.file(`assets/minecraft/${name}`)?.async("base64");
+			if (data) {
+				return data;
+			}
+		}
+		return undefined;
+	}
+
+	public async getResourceBase64FromZip(
+		zip: JSZip,
+		name: string
+	): Promise<string> {
 		let data: string = "";
-		if (Array.isArray(this.zip)) {
-			for (const zipFile of this.zip) {
+		if (Array.isArray(zip)) {
+			for (const zipFile of zip) {
 				data = await zipFile.file(`assets/minecraft/${name}`)?.async("base64");
 				if (data) {
 					break;
 				}
 			}
 		} else {
-			data = await this.zip.file(`assets/minecraft/${name}`, { base64: true });
+			data = await zip.file(`assets/minecraft/${name}`)?.async("base64");
 		}
 		this.blobCache.set(name, data);
 		return data;
 	}
 
+	public async getResourceString(name: string) {
+		if (this.stringCache.has(name)) {
+			return this.stringCache.get(name);
+		} else {
+			for (const zip of this.zips) {
+				const data = await zip.file(`assets/minecraft/${name}`)?.async("text");
+				if (data) {
+					this.stringCache.set(name, data);
+					return data;
+				}
+			}
+			return undefined;
+		}
+	}
+
 	public async getBase64Image(model: BlockModel, faceData: any) {
+		console.log("Getting base64 image", faceData.texture);
 		const textureName = this.resolveTextureName(faceData.texture, model);
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
@@ -151,6 +167,7 @@ export class ResourceLoader {
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
 		);
+		console.log("Base64 resource", base64Resource);
 		if (base64Resource === undefined) {
 			return undefined;
 		}
@@ -245,12 +262,14 @@ export class ResourceLoader {
 	}
 
 	public async getBlockMeta(block: any) {
+		console.log("Getting block meta", block);
 		if (this.blockMetaCache.has(hashBlockForMap(block))) {
 			return this.blockMetaCache.get(hashBlockForMap(block));
 		}
 		const blockStateDefinition = await this.loadBlockStateDefinition(
 			block.type
 		);
+		console.log("Block state definition", blockStateDefinition);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
 		const blockMeta = { blockStateDefinition, modelData, modelOptions };
@@ -350,6 +369,7 @@ export class ResourceLoader {
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
+		console.log("Resolving texture name", ref);
 		while (ref.startsWith("#")) {
 			if (!model.textures) {
 				return ref;
@@ -402,8 +422,13 @@ export class ResourceLoader {
 		} else if (blockState.multipart) {
 			const doesFilterPass = (filter: BlockStateDefinitionVariant<string>) => {
 				for (const property of Object.keys(filter)) {
-					const filterProperties = filter[property].split("|");
-
+					console.log("Checking property", filter);
+					let filterProperties = filter[property];
+					//if numeric, convert to string
+					if (typeof filterProperties === "number") {
+						filterProperties = "" + filterProperties;
+					}
+					const splitFilter = property.split(",");
 					if (filterProperties.indexOf(block.properties[property]) === -1) {
 						return false;
 					}
@@ -439,28 +464,6 @@ export class ResourceLoader {
 			variantName.length > 0 ? `${block.type}[${variantName}]` : block.type;
 
 		return { models, name };
-	}
-
-	public async getResourceString(name: string) {
-		if (this.stringCache.has(name)) {
-			return this.stringCache.get(name);
-		} else {
-			let data: string = "";
-			if (Array.isArray(this.zip)) {
-				for (const zipFile of this.zip) {
-					data = await zipFile
-						.file(`assets/minecraft/${name}`)
-						?.async("string");
-					if (data) {
-						break;
-					}
-				}
-			} else {
-				data = await this.zip.file(`assets/minecraft/${name}`)?.async("string");
-			}
-			this.stringCache.set(name, data);
-			return data;
-		}
 	}
 
 	public async loadBlockStateDefinition(

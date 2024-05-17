@@ -7,12 +7,7 @@ import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
 
-export default class SchematicRenderer {
-	CASSETTE_DECK_URL = `https://services.enginehub.org/cassette-deck/minecraft-versions/find?dataVersion=`;
-	URL_1_13 =
-		"https://launcher.mojang.com/v1/objects/c0b970952cdd279912da384cdbfc0c26e6c6090b/client.jar";
-	URL_1_20_4 =
-		"https://piston-data.mojang.com/v1/objects/fd19469fed4a4b4c15b2d5133985f0e3e7816a8a/client.jar";
+export class SchematicRenderer {
 	canvas: HTMLCanvasElement;
 	options: any;
 	renderer: Renderer;
@@ -33,47 +28,26 @@ export default class SchematicRenderer {
 	}
 
 	async initialize() {
-		console.log("SchematicRenderer");
-
 		let parsedNbt: TagMap;
 		parsedNbt = parseNbtFromBase64(this.schematicData);
 
 		this.loadedSchematic = loadSchematic(parsedNbt);
-		this.jarUrl = [
-			await this.options.getClientJarUrl({
-				dataVersion: this.loadedSchematic.dataVersion,
-				corsBypassUrl: "",
-			}),
-		];
 		this.materialMap = new Map();
 		this.resourceLoader = new ResourceLoader(
-			this.jarUrl,
+			this.options?.resourcePackBlobs,
 			this.options?.progressController,
 			this.materialMap
 		);
-		await this.resourceLoader.initialize();
 
+		await this.resourceLoader.initialize();
+		console.log("resource loader initialized");
+		console.log(this.resourceLoader);
 		this.worldMeshBuilder = new WorldMeshBuilder(
 			this.resourceLoader,
 			this.options?.progressController,
 			this.materialMap
 		);
 		await this.render();
-	}
-
-	public async getClientJarUrlDefault({
-		dataVersion,
-		corsBypassUrl,
-	}: any): Promise<string> {
-		const versionManifestFile = dataVersion
-			? await (
-					await fetch(`${corsBypassUrl}${this.CASSETTE_DECK_URL}${dataVersion}`)
-			  ).json()
-			: undefined;
-
-		return `${corsBypassUrl}${
-			versionManifestFile?.[0]?.clientJarUrl ?? this.URL_1_13
-		}`;
 	}
 
 	async render() {
