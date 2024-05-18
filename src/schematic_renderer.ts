@@ -40,8 +40,6 @@ export class SchematicRenderer {
 		);
 
 		await this.resourceLoader.initialize();
-		console.log("resource loader initialized");
-		console.log(this.resourceLoader);
 		this.worldMeshBuilder = new WorldMeshBuilder(
 			this.resourceLoader,
 			this.options?.progressController,
@@ -81,9 +79,7 @@ export class SchematicRenderer {
 		this.schematicMeshes = await this.worldMeshBuilder?.getSchematicMeshes();
 		this.options.progressController?.setProgressMessage("Rendering Schematic");
 		if (this.schematicMeshes && this.schematicMeshes.length > 0) {
-			console.log("rendering");
 			this.renderer.scene.add(...this.schematicMeshes);
-			console.log("rendering done");
 			this.renderer.animate();
 		} else {
 			console.log("no schematic meshes");

@@ -126,7 +126,6 @@ export class ResourceLoader {
 	}
 
 	public async getBase64Image(model: BlockModel, faceData: any) {
-		console.log("Getting base64 image", faceData.texture);
 		const textureName = this.resolveTextureName(faceData.texture, model);
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
@@ -142,8 +141,7 @@ export class ResourceLoader {
 		model: BlockModel,
 		faceData: any,
 		transparent?: boolean,
-		color?: THREE.Color,
-		materialRotation?: number
+		color?: THREE.Color
 	): Promise<THREE.MeshStandardMaterial | undefined> {
 		let textureName = faceData.texture;
 		while (textureName.startsWith("#")) {
@@ -155,19 +153,12 @@ export class ResourceLoader {
 			textureName = model.textures[textureName.substring(1)];
 		}
 
-		let rotation = materialRotation || faceData?.rotation || 0;
-		if (rotation === 0) {
-			rotation = undefined;
-		} else {
-			console.log(rotation);
-		}
 		if (textureName.startsWith("minecraft:")) {
 			textureName = textureName.substring("minecraft:".length);
 		}
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
 		);
-		console.log("Base64 resource", base64Resource);
 		if (base64Resource === undefined) {
 			return undefined;
 		}
@@ -178,6 +169,12 @@ export class ResourceLoader {
 			texture.needsUpdate = true;
 		});
 
+		//check if the faceData is rotated if so rotate the texture
+		const rotation = faceData.rotation;
+		if (rotation) {
+			texture.center = new THREE.Vector2(0.5, 0.5);
+			texture.rotation = rotation * Math.PI * 0.25;
+		}
 		return new THREE.MeshStandardMaterial({
 			map: texture,
 			//side: transparent ? THREE.DoubleSide : THREE.FrontSide,
@@ -262,14 +259,12 @@ export class ResourceLoader {
 	}
 
 	public async getBlockMeta(block: any) {
-		console.log("Getting block meta", block);
 		if (this.blockMetaCache.has(hashBlockForMap(block))) {
 			return this.blockMetaCache.get(hashBlockForMap(block));
 		}
 		const blockStateDefinition = await this.loadBlockStateDefinition(
 			block.type
 		);
-		console.log("Block state definition", blockStateDefinition);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
 		const blockMeta = { blockStateDefinition, modelData, modelOptions };
@@ -369,7 +364,6 @@ export class ResourceLoader {
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
-		console.log("Resolving texture name", ref);
 		while (ref.startsWith("#")) {
 			if (!model.textures) {
 				return ref;
@@ -422,7 +416,6 @@ export class ResourceLoader {
 		} else if (blockState.multipart) {
 			const doesFilterPass = (filter: BlockStateDefinitionVariant<string>) => {
 				for (const property of Object.keys(filter)) {
-					console.log("Checking property", filter);
 					let filterProperties = filter[property];
 					//if numeric, convert to string
 					if (typeof filterProperties === "number") {

@@ -13,6 +13,8 @@ import type {
 
 import {
 	faceToFacingVector,
+	isExtendedPiston,
+	getOppositeFace,
 	INVISIBLE_BLOCKS,
 	NON_OCCLUDING_BLOCKS,
 	normalize,
@@ -50,7 +52,11 @@ export class BlockMeshBuilder {
 			faceData.texture,
 			model
 		);
-		return `${textureName}-${color?.r ?? 1}-${color?.g ?? 1}-${color?.b ?? 1}`;
+		const rotation = faceData.rotation;
+		const idSuffix = rotation ? `-${rotation}` : "";
+		return `${textureName}-${color?.r ?? 1}-${color?.g ?? 1}-${
+			color?.b ?? 1
+		}${idSuffix}`;
 	}
 
 	public normalizeElementCoords(element: BlockModel["elements"][0]) {
@@ -69,10 +75,8 @@ export class BlockMeshBuilder {
 	public async processFaceData(
 		element: BlockModel["elements"][0],
 		model: BlockModel,
-		block: any,
-		rotation = 0
+		block: any
 	) {
-		console.log(block);
 		const subMaterials: { [key: string]: string | null } = {};
 		const uvs: { [key: string]: [number, number, number, number] } = {};
 		if (!element.faces) {
@@ -90,6 +94,7 @@ export class BlockMeshBuilder {
 				];
 				continue;
 			}
+
 			const materialColor = this.ressourceLoader.getColorForElement(
 				faceData,
 				this.ressourceLoader.resolveTextureName(faceData.texture, model),
@@ -106,8 +111,7 @@ export class BlockMeshBuilder {
 					faceData,
 					TRANSPARENT_BLOCKS.has(block.type) ||
 						faceData.texture.includes("overlay"),
-					materialColor,
-					rotation
+					materialColor
 				);
 				this.materialMap.set(
 					materialId,
@@ -121,16 +125,32 @@ export class BlockMeshBuilder {
 			}
 
 			subMaterials[face] = materialId;
-			uvs[face] = (faceData.uv || DEFAULT_UV).map((u: number) => u / 16) as [
-				number,
-				number,
-				number,
-				number
-			];
+			const faceRotation = faceData.rotation || 0;
+
+			uvs[face] = this.rotateUv(
+				(faceData.uv || DEFAULT_UV).map((u: number) => u / 16),
+				faceRotation
+			) as [number, number, number, number];
 		}
 		return { subMaterials, uvs };
 	}
 
+	public rotateUv(uv: [number, number, number, number], rotation: number) {
+		if (rotation === 0) {
+			return uv;
+		}
+		const uvArray = [...uv];
+		const numberOfRotations = rotation / 90;
+		for (let i = 0; i < numberOfRotations; i++) {
+			const temp = uvArray[0];
+			const temp2 = uvArray[2];
+			uvArray[2] = 1 - uvArray[1];
+			uvArray[1] = temp2;
+			uvArray[0] = 1 - uvArray[3];
+			uvArray[3] = temp;
+		}
+		return uvArray;
+	}
 	public async getBlockMesh(block: any): Promise<{
 		[key: string]: {
 			materialId: string;
@@ -140,7 +160,6 @@ export class BlockMeshBuilder {
 			uvs: number[];
 		};
 	}> {
-		console.log(block);
 		const blockComponents: {
 			[key: string]: {
 				materialId: string;
@@ -162,6 +181,12 @@ export class BlockMeshBuilder {
 				continue;
 			}
 			for (const element of elements) {
+				// TODO: handle elements with a name, it's a special vanilla tweaks thing
+				if (element.name) {
+					continue;
+				}
+				console.log(element);
+
 				if (!element.from || !element.to) {
 					continue;
 				}
@@ -220,10 +245,8 @@ export class BlockMeshBuilder {
 		return result;
 	}
 
-	public getOccludedFacesForBlock(
-		blockType: string,
-		pos: THREE.Vector3
-	): number {
+	public getOccludedFacesForBlock(block: any, pos: THREE.Vector3): number {
+		const blockType = block.type;
 		const { x, y, z } = pos;
 		const directionVectors = {
 			east: new THREE.Vector3(1, 0, 0),
@@ -240,11 +263,18 @@ export class BlockMeshBuilder {
 			down: false,
 			south: false,
 			north: false,
-		};
+		} as { [key: string]: boolean };
 		if (
 			NON_OCCLUDING_BLOCKS.has(blockType) ||
 			TRANSPARENT_BLOCKS.has(blockType)
 		) {
+			return this.occludedFacesListToInt(occludedFaces);
+		}
+
+		if (isExtendedPiston(block)) {
+			const facing = block.properties?.["facing"] as string;
+			const oppositeFace = getOppositeFace(facing);
+			occludedFaces[oppositeFace] = true;
 			return this.occludedFacesListToInt(occludedFaces);
 		}
 		for (const face of POSSIBLE_FACES) {
@@ -295,9 +325,7 @@ export class BlockMeshBuilder {
 	}
 
 	public async getBlockMeshFromCache(block: any) {
-		// console.time("getBlockMeshFromCache");
 		const blockUniqueKey = hashBlockForMap(block);
-		// console.timeEnd("getBlockMeshFromCache");
 		if (this.blockMeshCache.has(blockUniqueKey)) {
 			return this.blockMeshCache.get(blockUniqueKey);
 		} else {
