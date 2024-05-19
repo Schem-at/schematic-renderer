@@ -84,7 +84,7 @@ export class BlockMeshBuilder {
 		}
 		for (const face of POSSIBLE_FACES) {
 			const faceData: any = element.faces[face];
-			if (!faceData) {
+			if (!faceData || faceData.texture == "#overlay") {
 				subMaterials[face] = null;
 				uvs[face] = DEFAULT_UV.map((u) => u / 16) as [
 					number,
@@ -169,47 +169,51 @@ export class BlockMeshBuilder {
 				uvs: number[];
 			};
 		} = {};
+
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
 		for (const modelHolder of modelOptions.holders) {
-			if (modelHolder === undefined) {
-				continue;
-			}
-			const model = await this.ressourceLoader.loadModel(modelHolder.model);
+			if (modelHolder === undefined) continue;
 
-			const elements = model?.elements;
-			if (!elements) {
-				continue;
+			let modelHolderRotation = { x: 0, y: 0, z: 0 };
+
+			if (block.type === "redstone_wire") {
+				modelHolderRotation = {
+					x: (modelHolder.x ?? 0) * (Math.PI / 180),
+					y: (modelHolder.y ?? 0) * (Math.PI / 180),
+					z: (modelHolder.z ?? 0) * (Math.PI / 180),
+				};
 			}
+
+			const model = await this.ressourceLoader.loadModel(modelHolder.model);
+			const elements = model?.elements;
+			if (!elements) continue;
+
 			for (const element of elements) {
 				// TODO: handle elements with a name, it's a special vanilla tweaks thing
-				if (element.name) {
-					continue;
-				}
-				console.log(element);
+				if (element.name) continue;
+				if (!element.from || !element.to) continue;
 
-				if (!element.from || !element.to) {
-					continue;
-				}
 				this.normalizeElementCoords(element);
-				const faceData = await this.processFaceData(element, model, block);
 
+				const faceData = await this.processFaceData(element, model, block);
 				const from = element.from;
 				const to = element.to;
-				if (!from || !to) {
-					continue;
-				}
+
+				if (!from || !to) continue;
+
 				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
 				const directionData = getDirectionData(faceData.uvs);
-				const faces = POSSIBLE_FACES;
+				const faces = ["east", "west", "up", "down", "south", "north"];
+
 				for (const dir of faces) {
 					const materialId = faceData.subMaterials[dir];
-					if (!materialId) {
-						continue;
-					}
+					if (!materialId) continue;
+
 					const uniqueKey = `${materialId}-${dir}`;
+
 					if (!blockComponents[uniqueKey]) {
 						blockComponents[uniqueKey] = {
-							materialId: materialId,
+							materialId,
 							face: dir,
 							positions: [],
 							normals: [],
@@ -218,23 +222,74 @@ export class BlockMeshBuilder {
 					}
 
 					const dirData = directionData[dir];
+
 					for (const { pos, uv } of dirData.corners) {
-						if (!from || !size || !pos || !uv) {
-							continue;
-						}
-						blockComponents[uniqueKey].positions.push(
-							from[0] + size[0] * pos[0],
-							from[1] + size[1] * pos[1],
-							from[2] + size[2] * pos[2]
+						if (!from || !size || !pos || !uv) continue;
+
+						const rotatedPos = this.applyRotation(
+							[
+								from[0] + size[0] * pos[0],
+								from[1] + size[1] * pos[1],
+								from[2] + size[2] * pos[2],
+							],
+							modelHolderRotation
 						);
-						const invertedUV = [1 - uv[0], 1 - uv[1]];
-						blockComponents[uniqueKey].uvs.push(...invertedUV);
+
+						blockComponents[uniqueKey].positions.push(...rotatedPos);
+						blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
 				}
 			}
 		}
+
 		return blockComponents;
+	}
+
+	private applyRotation(
+		position: number[],
+		rotation: { x: number; y: number; z: number },
+		center: number[] = [0.5, 0, 0.5]
+	) {
+		let { x, y, z } = rotation;
+
+		y = -y;
+
+		const translatedPosition = [
+			position[0] - center[0],
+			position[1] - center[1],
+			position[2] - center[2],
+		];
+
+		const rotationMatrix = [
+			[
+				Math.cos(y) * Math.cos(z),
+				Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z),
+				Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z),
+			],
+			[
+				Math.cos(y) * Math.sin(z),
+				Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z),
+				Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z),
+			],
+			[-Math.sin(y), Math.sin(x) * Math.cos(y), Math.cos(x) * Math.cos(y)],
+		];
+
+		const rotatedPosition = [0, 0, 0];
+
+		for (let i = 0; i < 3; i++) {
+			for (let j = 0; j < 3; j++) {
+				rotatedPosition[i] += translatedPosition[j] * rotationMatrix[i][j];
+			}
+		}
+
+		const finalPosition = [
+			rotatedPosition[0] + center[0],
+			rotatedPosition[1] + center[1],
+			rotatedPosition[2] + center[2],
+		];
+
+		return finalPosition;
 	}
 
 	public occludedFacesListToInt(occludedFaces: { [key: string]: boolean }) {

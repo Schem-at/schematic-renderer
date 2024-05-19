@@ -9,6 +9,12 @@ const redstoneTestBase64String =
 	"H4sIAAAAAAAA/4WRT2/bMAzFWauJY6fdaYd9CB+62zBMl2IFtmFFCxRYtwVDoFl0LNSRDIlGmm9f0Xbi7h928MGk+OPjezlkd2WNW0WmFJDfqgaJ8Fo9AkCWQzoWBHzaGoulVxW99agDOYvrnfG4QhVIBqOxsM5TLW3sFK3boZcXRXDdobTD8d2PiBYC3kzA1jBvXaPSq0qVxm5k1xahjjxZqSZgQfsWZYgaH/Y8vhDw6i96fjaufIjtEwEXU3sYWw9LVvhIaDVqSb7D4riNqYmAd9NY6bat8oqcP2jiS4ut0yiH3nhmZPUiGTEXcPlcWIuK0K80NmovXx/WsRUFaz2M/gmaCTifQMr4WEsFvJxqu9pQjMC5BtjQ/wTUR/DPgPr4fgnoNBLTL+iDcZatSWD+Ge2GahA5LK6RlFakBGT3VzdVFZC+DiqO/99++//OuUDEfECzqYnNXr6PiOOOF5RCdsmucDm+PmPCSSJOZ/N0kcF537uyZMhgyLm3BHHrQr+H4eMn4Oymo7ajO7OxqndnAclH/dy8KdwoaXZvdDwsWcJ80DoS+aSKj4cnw4eeISYDAAA=";
 const pistonTestBase64String =
 	"H4sIAAAAAAAA/12OQUvDQBCFX7rYmC36S3LrTclFLHiwKAjWWqUsm9ns0nRTsiO0/97dRKp4GIZ5zHvvkyhetKW9YqcF5LNqiZmW6ghgIpH/CALzvfOke2X4JsTf3Wl7cIE7v6Ejk6+prrj/otIo7XxT+a5n+xkzMoHbX+do2VpS9ebvZxlsXJVRbaCSTweqxo6UAAjkr9QH1/kENcH0kXzDNvFdLolVrVgJFKvFkzGB+G30nO/1v/s9YSHGPJBrLCfE2X2MOHdcc47iru30LsmpE1mBq0FZeHbsKEgM+sXK1ZEkm2E6hg9VwEccE0fiG0ZzKYphAQAA";
+const redstoneDot =
+	"H4sIAAAAAAAA/02OUWvCQBCEpwlNTMT+Eh98FnwRBZGKhYJaReVINuZQ78rdlvTn9y6XigsLO8PyzeTIPoua7oJlESP/EDdippX4BfCSI+2MGMu7VFQYUfHYUGlZKzo30tCBhOWJcnKotOE6nN+6ITMZDa3++bca6v6O8BMj3ZCxUisnogjJO6kL1z60tyIWpWARI9vO11VliXe+z5P+CoyH3rdQh1mQvNTsf/szh3hkvHGKbHrTxdXbnoYMg9aYK5YsyeYB8bqVpS/SRxLYbRJwclu5TfAHVSWHlDUBAAA=";
+const angle =
+	"H4sIAAAAAAAA/02OX0vDQBDExwYTk6KfJA8+C3kRCyIWBcH6B5UjmTSL7Z3crcSP710ixYV9mJnlN1uhfGgH7o1Km6G6Nzuqcm1+ABxVKP6MDDd7sWy96fXCswvqLD9G8XylCdoE6Vhb53VobEzqLzfSN+d1cN/RmtKR8S6Fb0iToXikD+JsFIsF8lvarQ6p9GRNNZ1Rk6HcrO76PlCf0j//9PPMOOiXCRox15TtoOl2eRURh44zLVBe7lz7mexEQ4nTyVhZFRWGakYcb6RLjyyRz+ypCXiP28fN8QtUakeBNQEAAA==";
+const fenceTestBase64String =
+	"H4sIAAAAAAAA/11O0UoDMRCcXrDnpeiX9AsEX8SCDxZFwapFdMlt7kKvCSRb6uebXI8+uLCwM7szsxrNq+l5T+KMgn6mgUV4Tb8AZhr1RCi87J1nE8nKTaDdt2VveMuU5NbSkHjpQ5R+mlM45FnigZdHEo5D6Dpup+WRs6bsvlBKoX7jmFzwGVQV5o/sO+lL+OWahVoSUmg2qydrE8v7SXPGH//wZ/kb2eaBXdcLZgqL+2xxzriWGs3dEMyu0ON1g6uRWHlx4jjp4lnhYuPa8sgC85P3mAT85La5Nf4Abf+wrT0BAAA=";
 const corsBypass = "http://localhost:8079/";
 
 async function getVanillaTweaksResourcePackLinks() {
@@ -60,7 +66,10 @@ async function getRessourcePackLinks() {
 		await getCachedVanillaTweaksResourcePackLink();
 	const vanillaPack =
 		"http://localhost:8079/https://www.curseforge.com/api/v1/mods/457153/files/5008188/download";
-	return [vanillaTweaksResourcePackLink, vanillaPack];
+	const packs = [];
+	// packs.push(vanillaTweaksResourcePackLink);
+	packs.push(vanillaPack);
+	return packs;
 }
 
 async function getAllResourcePackBlobs() {

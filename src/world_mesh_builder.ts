@@ -61,9 +61,9 @@ export class WorldMeshBuilder {
 		let count = 0;
 
 		for (let i = 0; i < chunk.length; i++) {
-			if (i != 7) {
-				continue;
-			}
+			// if (i != 7) {
+			// 	continue;
+			// }
 			const pos = chunk[i];
 			if (count > maxBlocksAllowed) {
 				break;
@@ -74,6 +74,7 @@ export class WorldMeshBuilder {
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
+			// if properties has east/west/north/south, rotate the block if it has "side"
 
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
 				block

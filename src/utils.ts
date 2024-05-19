@@ -96,6 +96,44 @@ export const CORNER_DICTIONARY = {
 	},
 };
 
+// export function getDirectionData(faceUVs) {
+// 	const directions = ["east", "west", "up", "down", "south", "north"];
+// 	const cornerOrder = ["north", "east", "south", "west"];
+// 	const result = {};
+
+// 	directions.forEach((dir) => {
+// 		const rotation = faceToRotation(dir);
+// 		result[dir] = {
+// 			// normal: rotation[2], // Assuming the normal is the third vector in the rotation matrix
+// 			normal: [-rotation[2][0], -rotation[2][1], -rotation[2][2]],
+// 			corners: [
+// 				{
+// 					// corner 1
+// 					pos: rotateVectorMatrix([0, 0, 0], rotation),
+// 					uv: [faceUVs[dir][0], faceUVs[dir][1]],
+// 				},
+// 				{
+// 					// corner 2
+// 					pos: rotateVectorMatrix([1, 0, 0], rotation),
+// 					uv: [faceUVs[dir][2], faceUVs[dir][1]],
+// 				},
+// 				{
+// 					// corner 3
+// 					pos: rotateVectorMatrix([0, 1, 0], rotation),
+// 					uv: [faceUVs[dir][0], faceUVs[dir][3]],
+// 				},
+// 				{
+// 					// corner 4
+// 					pos: rotateVectorMatrix([1, 1, 0], rotation),
+// 					uv: [faceUVs[dir][2], faceUVs[dir][3]],
+// 				},
+// 			],
+// 		};
+// 	});
+
+// 	return result;
+// }
+
 export function getDirectionData(faceUVs: any) {
 	const cornerDictionary = CORNER_DICTIONARY;
 	return {
@@ -251,71 +289,7 @@ export function normalize(input: number): number {
 	return input / 16;
 }
 
-export function rotateVector(
-	position: number[],
-	rotation: { angle: number; axis: number[] },
-	center: number[] = [0, 0, 0]
-): number[] {
-	const DEG2RAD = Math.PI / 180;
-	const angle = rotation.angle * DEG2RAD;
-	const [x, y, z] = position;
-	const [cx, cy, cz] = center;
-	const [xAxis, yAxis, zAxis] = rotation.axis;
-
-	const cosAngle = Math.cos(angle);
-	const sinAngle = Math.sin(angle);
-	const oneMinusCos = 1 - cosAngle;
-
-	const xx = xAxis * xAxis;
-	const yy = yAxis * yAxis;
-	const zz = zAxis * zAxis;
-	const xy = xAxis * yAxis;
-	const xz = xAxis * zAxis;
-	const yz = yAxis * zAxis;
-
-	const mat00 = xx * oneMinusCos + cosAngle;
-	const mat01 = xy * oneMinusCos - zAxis * sinAngle;
-	const mat02 = xz * oneMinusCos + yAxis * sinAngle;
-	const mat10 = xy * oneMinusCos + zAxis * sinAngle;
-	const mat11 = yy * oneMinusCos + cosAngle;
-	const mat12 = yz * oneMinusCos - xAxis * sinAngle;
-	const mat20 = xz * oneMinusCos - yAxis * sinAngle;
-	const mat21 = yz * oneMinusCos + xAxis * sinAngle;
-	const mat22 = zz * oneMinusCos + cosAngle;
-
-	const translatedX = x - cx;
-	const translatedY = y - cy;
-	const translatedZ = z - cz;
-
-	const rotatedX =
-		translatedX * mat00 + translatedY * mat01 + translatedZ * mat02;
-	const rotatedY =
-		translatedX * mat10 + translatedY * mat11 + translatedZ * mat12;
-	const rotatedZ =
-		translatedX * mat20 + translatedY * mat21 + translatedZ * mat22;
-
-	return [rotatedX + cx, rotatedY + cy, rotatedZ + cz];
-}
-
 export function faceToRotation(face: string) {
-	// switch (face) {
-	// 	case "north":
-	// 		return { angle: 0, axis: [0, 1, 0] };
-	// 	case "south":
-	// 		return { angle: 180, axis: [0, 1, 0] };
-	// 	case "east":
-	// 		return { angle: 90, axis: [0, 1, 0] };
-	// 	case "west":
-	// 		return { angle: 270, axis: [0, 1, 0] };
-	// 	case "up":
-	// 		return { angle: 0, axis: [1, 0, 0] };
-	// 	case "down":
-	// 		return { angle: 180, axis: [1, 0, 0] };
-	// 	default:
-	// 		return { angle: 0, axis: [0, 1, 0] };
-	// }
-
-	//return a rotation matrix
 	switch (face) {
 		case "north":
 			return [
@@ -364,14 +338,12 @@ export function faceToRotation(face: string) {
 
 const rotateVectorMatrix = (vector: number[], matrix: number[][]) => {
 	const offsetVector = vector.map((v, i) => v - 0.5);
-
 	const result = [0, 0, 0];
 	for (let i = 0; i < 3; i++) {
 		for (let j = 0; j < 3; j++) {
 			result[i] += matrix[i][j] * offsetVector[j];
 		}
 	}
-	//add the offset back
 	result[0] += 0.5;
 	result[1] += 0.5;
 	result[2] += 0.5;

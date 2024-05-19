@@ -45,7 +45,7 @@ export class ResourceLoader {
 	SHADOW_COLOR = new THREE.Color(0.5, 0.5, 0.5);
 	DEG2RAD = Math.PI / 180;
 
-	DEBUG = false;
+	DEBUG = true;
 	constructor(
 		resourcePackBlobs: any,
 		progressController?: any,
@@ -159,10 +159,12 @@ export class ResourceLoader {
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
 		);
+
 		if (base64Resource === undefined) {
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
+
 		const texture = this.textureLoader.load(base64Png, () => {
 			texture.minFilter = THREE.NearestFilter;
 			texture.magFilter = THREE.NearestFilter;
