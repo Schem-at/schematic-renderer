@@ -4,46 +4,49 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import GIF from "gif.js.optimized";
 import WebMWriter from "webm-writer";
 import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
-// import Stats from "stats.js";
+import * as POSTPROCESSING from "postprocessing";
+import { HBAOEffect, SSAOEffect } from "realism-effects";
+
 export class Renderer {
 	canvas: HTMLCanvasElement;
 	renderer: THREE.WebGLRenderer;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	controls: OrbitControls;
-	// stats: Stats;
+	composer: POSTPROCESSING.EffectComposer;
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;
 		this.renderer = new THREE.WebGLRenderer({
+			depth: false,
 			canvas: this.canvas,
-			antialias: true,
 			alpha: true,
 		});
 		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
 		this.controls = new OrbitControls(this.camera, this.canvas);
-		// this.stats = new Stats();
-		// document.body.appendChild(this.stats.dom);
-
+		this.composer = new POSTPROCESSING.EffectComposer(this.renderer);
+		this.composer.addPass(
+			new POSTPROCESSING.RenderPass(this.scene, this.camera)
+		);
 		this.setupScene(options);
 	}
 
 	getPerspectiveCamera() {
 		const d = 20;
 		const fov = 75;
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight; // dynamic based on the canvas size
+		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
 		const near = 0.1;
 		const far = 1000;
 		const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-		camera.position.set(d, 3 * d, d); // Default position
-		camera.lookAt(0, 0, 0); // Default look at
+		camera.position.set(d, 3 * d, d);
+		camera.lookAt(0, 0, 0);
 		return camera;
 	}
 
 	getIsometricCamera() {
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight; // dynamic based on the canvas size
+		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
 		const d = 20;
 		const camera = new THREE.OrthographicCamera(
 			-d * aspect,
@@ -53,53 +56,52 @@ export class Renderer {
 			1,
 			1000
 		);
-		camera.position.set(d, d, d); // Default position
+		camera.position.set(d, d, d);
 		return camera;
 	}
+
 	createCamera() {
 		return this.getPerspectiveCamera();
-		// return this.getIsometricCamera();
 	}
 
 	setupScene(options: any) {
 		this.renderer.shadowMap.enabled = true;
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+		this.createLights();
 
-		const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+		const hbaoEffect = new HBAOEffect(this.composer, this.camera, this.scene);
+		const ssaoEffect = new SSAOEffect(this.composer, this.camera, this.scene);
+		const smaaEffect = new POSTPROCESSING.SMAAEffect();
+		const effectPass = new POSTPROCESSING.EffectPass(
+			this.camera,
+			ssaoEffect,
+			smaaEffect
+		);
+
+		this.composer.addPass(effectPass);
+	}
+
+	createLights() {
+		const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 		ambientLight.intensity = 0.9;
 		this.scene.add(ambientLight);
 
-		const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+		const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
 		directionalLight.position.set(20, 20, -20);
 		directionalLight.intensity = 1;
 		directionalLight.castShadow = true;
 		directionalLight.shadow.bias = -0.01;
 		this.scene.add(directionalLight);
-
-		// const directionalLightHelper = new THREE.DirectionalLightHelper(
-		// 	directionalLight
-		// );
-		// this.scene.add(directionalLightHelper);
-	}
-
-	createLights() {
-		const color = 0xffffff;
-		const intensity = 1;
-		const light = new THREE.DirectionalLight(color, intensity);
-		light.position.set(-1, 2, 4);
-		this.scene.add(light);
 	}
 
 	render() {
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 	}
 
 	animate() {
-		// this.stats.begin();
 		requestAnimationFrame(() => this.animate());
 		this.controls.update();
 		this.render();
-		// this.stats.end();
 	}
 
 	takeScreenshot(resolutionX: number, resolutionY: number) {
@@ -109,10 +111,10 @@ export class Renderer {
 		tempCamera.aspect = resolutionX / resolutionY;
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
-		this.renderer.render(this.scene, tempCamera);
+		this.composer.render();
 		const screenshot = this.renderer.domElement.toDataURL();
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 		return screenshot;
 	}
 
@@ -152,14 +154,14 @@ export class Renderer {
 				centerPosition.z + distance * Math.sin(currentAngle)
 			);
 			tempCamera.lookAt(centerPosition);
-			this.renderer.render(this.scene, tempCamera);
+			this.composer.render();
 			gif.addFrame(this.renderer.domElement, {
 				copy: true,
 				delay: 1000 / frameRate,
 			});
 		}
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 		console.log("Rendering gif done");
 		return new Promise((resolve, reject) => {
 			gif.on("finished", function (blob: any) {
@@ -212,7 +214,7 @@ export class Renderer {
 						centerPosition.z + distance * Math.sin(currentAngle)
 					);
 					tempCamera.lookAt(centerPosition);
-					this.renderer.render(this.scene, tempCamera);
+					this.composer.render();
 					const tempContext = tempCanvas.getContext("2d");
 					tempContext?.clearRect(0, 0, resolutionX, resolutionY);
 					tempContext?.drawImage(this.renderer.domElement, 0, 0);
@@ -221,7 +223,7 @@ export class Renderer {
 						renderStep(i + 1);
 					} else {
 						this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-						this.renderer.render(this.scene, this.camera);
+						this.composer.render();
 						videoWriter.complete().then((blob: any) => {
 							const reader = new FileReader();
 							reader.onload = function () {

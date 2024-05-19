@@ -91,12 +91,7 @@ export class SchematicRenderer {
 			.onChange((value) => {
 				this.toggleAmbientOcclusion(value);
 			});
-		gui
-			.addColor(settings, "backgroundColor")
-			.name("Background Color")
-			.onChange((value) => {
-				this.renderer.setBackgroundColor(value);
-			});
+
 		gui.add(settings, "exportUSDZ").name("Export USDZ");
 	}
 

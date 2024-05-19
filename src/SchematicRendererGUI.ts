@@ -37,7 +37,7 @@ export class SchematicRendererGUI {
 					1920,
 					1080,
 					30,
-					10
+					1
 				);
 			},
 		};

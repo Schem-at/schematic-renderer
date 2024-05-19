@@ -19,6 +19,7 @@ export class SchematicMediaCapture {
 		const elevation = Math.asin(
 			(this.renderer.camera.position.y - centerPosition.y) / distance
 		);
+		console.log("centerPosition", centerPosition);
 		return { centerPosition, distance, elevation };
 	}
 
@@ -87,6 +88,7 @@ export class SchematicMediaCapture {
 		const gif = await this.takeRotationGif(
 			resolutionX,
 			resolutionY,
+			this.renderer.schematic,
 			frameRate,
 			duration,
 			angle
