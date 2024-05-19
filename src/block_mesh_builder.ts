@@ -177,6 +177,7 @@ export class BlockMeshBuilder {
 			let modelHolderRotation = { x: 0, y: 0, z: 0 };
 
 			if (block.type === "redstone_wire") {
+				// TODO: WHY DOES THIS BREAK THE REST ?!
 				modelHolderRotation = {
 					x: (modelHolder.x ?? 0) * (Math.PI / 180),
 					y: (modelHolder.y ?? 0) * (Math.PI / 180),
