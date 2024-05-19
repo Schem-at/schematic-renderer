@@ -1,1 +1,1 @@
-export { SchematicRenderer } from "./schematic_renderer";
+export { SchematicRenderer } from "./SchematicRenderer";

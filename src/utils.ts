@@ -437,6 +437,7 @@ export function parseNbtFromBase64(nbt: string): TagMap {
 }
 
 export function hashBlockForMap(block: Block) {
+	// TODO: FIX THE CACHE IT'S NOT WORKING
 	//return `${block.type}:${JSON.stringify(block.properties)}`;
 	//avoid JSON.stringify since it's slow
 	let key = block.type;

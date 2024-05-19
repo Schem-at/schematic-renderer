@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { loadSchematic } from "@enginehub/schematicjs";
 import type { TagMap } from "@enginehub/nbt-ts";
-
+import GUI from "lil-gui";
 import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
@@ -18,6 +18,8 @@ export class SchematicRenderer {
 	worldMeshBuilder: WorldMeshBuilder | undefined;
 	jarUrl: string | string[] | undefined;
 	schematicMeshes: THREE.Mesh[] | undefined;
+	gridHelper: THREE.GridHelper | undefined;
+	ambientLight: THREE.AmbientLight | undefined;
 
 	constructor(canvas: HTMLCanvasElement, schematicData: string, options: any) {
 		this.canvas = canvas;
@@ -46,15 +48,74 @@ export class SchematicRenderer {
 			this.materialMap
 		);
 		await this.render();
+
+		this.createGUI();
+	}
+
+	createGUI() {
+		const gui = new GUI();
+
+		// Create settings
+		const settings = {
+			rotationSpeed: 0.01,
+			zoom: 1,
+			showGrid: true,
+			ambientOcclusion: true,
+			backgroundColor: "#ffffff",
+			exportUSDZ: () => {
+				this.exportUsdz();
+			},
+		};
+
+		// Add settings to the GUI
+		gui
+			.add(settings, "rotationSpeed", 0, 0.1)
+			.step(0.001)
+			.name("Rotation Speed");
+		gui
+			.add(settings, "zoom", 0.1, 2)
+			.step(0.1)
+			.name("Zoom")
+			.onChange((value) => {
+				this.updateZoom(value);
+			});
+		gui
+			.add(settings, "showGrid")
+			.name("Show Grid")
+			.onChange((value) => {
+				this.toggleGrid(value);
+			});
+		gui
+			.add(settings, "ambientOcclusion")
+			.name("Ambient Occlusion")
+			.onChange((value) => {
+				this.toggleAmbientOcclusion(value);
+			});
+		gui
+			.addColor(settings, "backgroundColor")
+			.name("Background Color")
+			.onChange((value) => {
+				this.renderer.setBackgroundColor(value);
+			});
+		gui.add(settings, "exportUSDZ").name("Export USDZ");
+	}
+
+	updateZoom(value: number) {
+		const cameraDistance =
+			Math.max(
+				this.loadedSchematic.width,
+				this.loadedSchematic.height,
+				this.loadedSchematic.length
+			) * value;
+		this.renderer.camera.position.set(
+			cameraDistance * 1.1,
+			cameraDistance * 1.1,
+			cameraDistance * 1.1
+		);
+		this.renderer.camera.lookAt(this.renderer.scene.position);
 	}
 
 	async render() {
-		//set the camera to the correct position
-		//this.renderer.camera.position.set(
-		//	this.loadedSchematic.width * 2,
-		//	this.loadedSchematic.height * 2,
-		//	this.loadedSchematic.length * 2
-		//);
 		this.options.progressController?.showProgress();
 		this.options.progressController?.setProgressMessage("Loading Schematic");
 
@@ -85,44 +146,20 @@ export class SchematicRenderer {
 			console.log("no schematic meshes");
 		}
 
-		// add a usdz download button
-		//const usdzButton = document.createElement("button");
-		//usdzButton.innerText = "Download USDZ";
-		//usdzButton.onclick = async () => {
-		//	const usdz = await this.exportUsdz();
-		//	const link = document.createElement("a");
-		//	//link.href = usdz; Type 'Uint8Array' is not assignable to type 'string'
-		//	link.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
-		//	link.download = "schematic.usdz";
-		//	link.click();
-		//};
-		//document.body.appendChild(usdzButton);
-
-		// add a ar view button
-		//<div>
-		//	<a rel="ar" href="/assets/models/my-model.usdz">
-		//		<img src="/assets/models/my-model-thumbnail.jpg">
-		//	</a>
-		//</div>
-
-		//const arDiv = document.createElement("div");
-		//const arLink = document.createElement("a");
-		//arLink.rel = "ar";
-		//const usdz = await this.exportUsdz();
-		//arLink.href = URL.createObjectURL(new Blob([usdz], { type: "model/usdz" }));
-		//const arImg = document.createElement("img");
-		//arLink.download = "schematic.usdz";
-		//arImg.src = "https://www.gstatic.com/webp/gallery/1.jpg";
-		//arLink.appendChild(arImg);
-		//arDiv.appendChild(arLink);
-		//document.body.appendChild(arDiv);
-
 		this.options.progressController?.hideProgress();
 	}
 
 	public clearSchematic() {
 		if (this.schematicMeshes) {
 			this.renderer.scene.remove(...this.schematicMeshes);
+		}
+		if (this.gridHelper) {
+			this.renderer.scene.remove(this.gridHelper);
+			this.gridHelper = undefined;
+		}
+		if (this.ambientLight) {
+			this.renderer.scene.remove(this.ambientLight);
+			this.ambientLight = undefined;
 		}
 	}
 

@@ -1,4 +1,4 @@
-import { SchematicRenderer } from "../src/schematic_renderer";
+import { SchematicRenderer } from "../src/SchematicRenderer";
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const schematicBase64 =
@@ -84,7 +84,7 @@ async function getAllResourcePackBlobs() {
 }
 
 getAllResourcePackBlobs().then((resourcePackBlobs) => {
-	const renderer = new SchematicRenderer(canvas, redstoneTestBase64String, {
+	const renderer = new SchematicRenderer(canvas, adderSchematicBase64String, {
 		resourcePackBlobs,
 	});
 });

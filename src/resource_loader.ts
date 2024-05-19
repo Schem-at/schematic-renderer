@@ -34,7 +34,6 @@ export class ResourceLoader {
 	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
 	resourcePackBlobs: any;
-	progressController: any;
 	zips: any;
 	textureLoader = new THREE.TextureLoader();
 
@@ -48,7 +47,6 @@ export class ResourceLoader {
 	DEBUG = true;
 	constructor(
 		resourcePackBlobs: any,
-		progressController?: any,
 		materialMap?: Map<string, THREE.Material>
 	) {
 		this.textureCache = new Map();
@@ -62,7 +60,6 @@ export class ResourceLoader {
 		this.materialMap = materialMap ?? new Map();
 		this.base64MaterialMap = new Map();
 		this.resourcePackBlobs = resourcePackBlobs;
-		this.progressController = progressController;
 		this.textureLoader = new THREE.TextureLoader();
 		this.schematic = undefined;
 	}
@@ -261,6 +258,7 @@ export class ResourceLoader {
 	}
 
 	public async getBlockMeta(block: any) {
+		// TODO: Accomodate for vanilla tweaks and other resource packs
 		if (this.blockMetaCache.has(hashBlockForMap(block))) {
 			return this.blockMetaCache.get(hashBlockForMap(block));
 		}

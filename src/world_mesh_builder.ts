@@ -11,14 +11,8 @@ export class WorldMeshBuilder {
 	schematic: any;
 	blockMeshBuilder: any;
 	ressourceLoader: any;
-	progressController: any;
-	constructor(
-		ressourceLoader: any,
-		progressController: any,
-		materialMap: Map<string, THREE.Material>
-	) {
+	constructor(ressourceLoader: any, materialMap: Map<string, THREE.Material>) {
 		this.ressourceLoader = ressourceLoader;
-		this.progressController = progressController;
 		this.blockMeshBuilder = new BlockMeshBuilder(ressourceLoader, materialMap);
 	}
 
@@ -70,7 +64,6 @@ export class WorldMeshBuilder {
 			}
 			const { x, y, z } = pos;
 			const block = this.schematic.getBlock(pos);
-			console.log(`Index: ${i} has block:`, block);
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}

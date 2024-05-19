@@ -181,12 +181,8 @@ export class Renderer {
 		elevation: number,
 		frameRate: number,
 		duration: number,
-		angle: number = 360,
-		progressController: any
+		angle: number = 360
 	) {
-		progressController.setProgress(0);
-		progressController.setProgressMessage("Rendering webm");
-		progressController.showProgress();
 		const angleRad = (angle * Math.PI) / 180;
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
@@ -209,10 +205,6 @@ export class Renderer {
 			const renderStep = (i: number) => {
 				requestAnimationFrame(() => {
 					console.log(distance, elevation);
-					progressController.setProgress((i / frames) * 100);
-					progressController.setProgressMessage(
-						`Rendering webm: ${Math.round((i / frames) * 100)}%`
-					);
 					const currentAngle = step * i;
 					tempCamera.position.set(
 						centerPosition.x + distance * Math.cos(currentAngle),
@@ -233,9 +225,6 @@ export class Renderer {
 						videoWriter.complete().then((blob: any) => {
 							const reader = new FileReader();
 							reader.onload = function () {
-								progressController.hideProgress();
-								progressController.setProgress(0);
-								progressController.setProgressMessage("");
 								resolve(reader.result);
 							};
 							reader.readAsDataURL(blob);

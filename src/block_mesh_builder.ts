@@ -175,7 +175,7 @@ export class BlockMeshBuilder {
 			if (modelHolder === undefined) continue;
 
 			let modelHolderRotation = { x: 0, y: 0, z: 0 };
-
+			// console.log(modelHolder);
 			if (block.type === "redstone_wire") {
 				// TODO: WHY DOES THIS BREAK THE REST ?!
 				modelHolderRotation = {
@@ -382,7 +382,7 @@ export class BlockMeshBuilder {
 
 	public async getBlockMeshFromCache(block: any) {
 		const blockUniqueKey = hashBlockForMap(block);
-		if (this.blockMeshCache.has(blockUniqueKey)) {
+		if (this.blockMeshCache.has(blockUniqueKey) && false) {
 			return this.blockMeshCache.get(blockUniqueKey);
 		} else {
 			const blockComponents = await this.getBlockMesh(block);
