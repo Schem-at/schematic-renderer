@@ -60,9 +60,43 @@ export class Renderer {
 		return camera;
 	}
 
+	setBackgroundColor(color: string) {
+		this.renderer.setClearColor(color);
+	}
+
 	createCamera() {
 		return this.getPerspectiveCamera();
 	}
+
+
+	getGridHelper() {
+		const size = 100;
+		const divisions = 10;
+		const gridHelper = new THREE.GridHelper(size, divisions);
+		gridHelper.name = "GridHelper";
+		return gridHelper;
+	}
+
+	addGrid() {
+		const gridHelper = this.getGridHelper();
+		this.scene.add(gridHelper);
+	}
+
+	removeGrid() {
+		const gridHelper = this.scene.getObjectByName("GridHelper");
+		if (gridHelper) {
+			this.scene.remove(gridHelper);
+		}
+	}
+
+	toggleGrid() {
+		if (this.scene.getObjectByName("GridHelper")) {
+			this.removeGrid();
+		} else {
+			this.addGrid();
+		}
+	}
+	
 
 	setupScene(options: any) {
 		this.renderer.shadowMap.enabled = true;

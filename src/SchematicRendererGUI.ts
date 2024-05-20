@@ -58,7 +58,7 @@ export class SchematicRendererGUI {
 			.add(settings, "showGrid")
 			.name("Show Grid")
 			.onChange((value) => {
-				this.schematicRenderer.toggleGrid(value);
+				this.schematicRenderer.renderer.toggleGrid(value);
 			});
 
 		gui
