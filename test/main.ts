@@ -63,7 +63,7 @@ async function getCachedVanillaTweaksResourcePackLink() {
 }
 
 async function getRessourcePackLinks() {
-	// const vanillaTweaksResourcePackLink = await getCachedVanillaTweaksResourcePackLink();
+	const vanillaTweaksResourcePackLink = await getCachedVanillaTweaksResourcePackLink();
 	const vanillaPack =
 		"http://localhost:8079/https://www.curseforge.com/api/v1/mods/457153/files/5008188/download";
 	const packs = [];
@@ -84,7 +84,7 @@ async function getAllResourcePackBlobs() {
 }
 
 getAllResourcePackBlobs().then((resourcePackBlobs) => {
-	const renderer = new SchematicRenderer(canvas, diagonalCCA, {
+	const renderer = new SchematicRenderer(canvas, redstoneTestBase64String, {
 		resourcePackBlobs,
 	});
 });

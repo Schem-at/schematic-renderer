@@ -425,6 +425,10 @@ export class ResourceLoader {
 					if (filterProperties.indexOf(block.properties[property]) === -1) {
 						return false;
 					}
+					//TODO: Make this work as it should
+					// if (block.properties[property] !== filterProperties) {
+					// 	return false;
+					// }
 				}
 				return true;
 			};

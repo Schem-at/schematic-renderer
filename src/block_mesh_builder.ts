@@ -106,6 +106,7 @@ export class BlockMeshBuilder {
 				materialColor ?? new THREE.Color(1, 1, 1)
 			);
 			if (!this.materialMap.has(materialId)) {
+				// TODO: check performance, I think there might be redundant calls to getBase64Image
 				const material = await this.ressourceLoader.getTextureMaterial(
 					model,
 					faceData,
@@ -121,18 +122,59 @@ export class BlockMeshBuilder {
 					model,
 					faceData
 				);
+
+
+				// this.showTextureOverlay(base64Material, faceData.uv);
+				
+
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
 
 			subMaterials[face] = materialId;
 			const faceRotation = faceData.rotation || 0;
-
 			uvs[face] = this.rotateUv(
 				(faceData.uv || DEFAULT_UV).map((u: number) => u / 16),
 				faceRotation
 			) as [number, number, number, number];
 		}
 		return { subMaterials, uvs };
+	}
+
+	public showTextureOverlay(imageData: string , uv: [number, number, number, number]) {
+		if (!document.getElementById("all-images-container")) {
+			const allImagesContainer = document.createElement("div");
+			allImagesContainer.id = "all-images-container";
+			allImagesContainer.style.backgroundColor = "darkgrey";
+			allImagesContainer.style.display = "block";
+			//append it to the top of the body
+			document.body.prepend(allImagesContainer);
+		}
+		const allImagesContainer = document.getElementById("all-images-container");
+		const imageContainer = document.createElement("div");
+		imageContainer.style.backgroundColor = "black";
+		imageContainer.style.height = "100px";
+		imageContainer.style.position = "relative";
+		const image = document.createElement("img");
+		image.src = imageData;
+		image.style.imageRendering = "pixelated";
+		image.style.position = "absolute";
+		image.style.width = "100px";
+		image.style.height = "100px";
+		image.style.backgroundColor = "gray";
+		imageContainer.appendChild(image);
+		if (!uv) {
+			uv = [0, 0, 16, 16];
+		}
+		const rect = document.createElement("div");
+		rect.style.position = "absolute";
+		rect.style.width = `${(uv[2] - uv[0]) / 16 * 100 -1 }px`;
+		rect.style.height = `${(uv[3] - uv[1]) / 16 * 100 -1}px`;
+		rect.style.border = "1px solid blue";
+		rect.style.left = `${uv[0] / 16 * 100}px`;
+		rect.style.top = `${uv[1] / 16 * 100}px`;
+		imageContainer.appendChild(rect);
+		allImagesContainer.appendChild(imageContainer);
+		document.body.prepend(allImagesContainer);
 	}
 
 	public rotateUv(uv: [number, number, number, number], rotation: number) {
@@ -169,13 +211,12 @@ export class BlockMeshBuilder {
 				uvs: number[];
 			};
 		} = {};
-
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
 		for (const modelHolder of modelOptions.holders) {
+
 			if (modelHolder === undefined) continue;
 
 			let modelHolderRotation = { x: 0, y: 0, z: 0 };
-			// console.log(modelHolder);
 			if (block.type === "redstone_wire") {
 				// TODO: WHY DOES THIS BREAK THE REST ?!
 				modelHolderRotation = {
@@ -191,7 +232,7 @@ export class BlockMeshBuilder {
 
 			for (const element of elements) {
 				// TODO: handle elements with a name, it's a special vanilla tweaks thing
-				if (element.name) continue;
+				// if (element.name && element.name == "outline") continue;
 				if (!element.from || !element.to) continue;
 
 				this.normalizeElementCoords(element);
@@ -237,12 +278,15 @@ export class BlockMeshBuilder {
 						);
 
 						blockComponents[uniqueKey].positions.push(...rotatedPos);
-						blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
+						// this works but just for redstone
+						// blockComponents[uniqueKey].uvs.push(uv[0], 1- uv[1]);
+						blockComponents[uniqueKey].uvs.push(1- uv[0], 1- uv[1]);
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
 				}
 			}
 		}
+
 
 		return blockComponents;
 	}
