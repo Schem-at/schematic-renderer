@@ -38,7 +38,8 @@ export class SchematicRenderer {
 		this.resourceLoader.initialize();
 		this.worldMeshBuilder = new WorldMeshBuilder(
 			this.resourceLoader,
-			this.materialMap
+			this.materialMap,
+			this.renderer
 		);
 		this.schematicRendererGUI = new SchematicRendererGUI(this);
 		this.schematicRendererCore = new SchematicRendererCore(
@@ -65,10 +66,7 @@ export class SchematicRenderer {
 		);
 
 		await this.resourceLoader.initialize();
-		this.worldMeshBuilder = new WorldMeshBuilder(
-			this.resourceLoader,
-			this.materialMap
-		);
+
 		await this.schematicRendererCore.render(this.loadedSchematic);
 	}
 

@@ -405,6 +405,7 @@ export class ResourceLoader {
 			}
 			return [{ holder: model, weight: 1 }];
 		};
+
 		if (blockState.variants?.[""]) {
 			models.push({
 				options: createWeightedModels(blockState.variants[""]),
@@ -416,23 +417,28 @@ export class ResourceLoader {
 		} else if (blockState.multipart) {
 			const doesFilterPass = (filter: BlockStateDefinitionVariant<string>) => {
 				for (const property of Object.keys(filter)) {
-					let filterProperties = filter[property];
-					//if numeric, convert to string
-					if (typeof filterProperties === "number") {
-						filterProperties = "" + filterProperties;
-					}
-					const splitFilter = property.split(",");
-					if (filterProperties.indexOf(block.properties[property]) === -1) {
+					if (!block.properties[property]) {
 						return false;
 					}
-					//TODO: Make this work as it should
-					// if (block.properties[property] !== filterProperties) {
-					// 	return false;
-					// }
+
+					if (block.type == "minecraft:redstone_wall_torch") {
+						console.log(block);
+					}
+					const filterValue = filter[property];
+					const blockValue = block.properties[property];
+					if (!isNaN(Number(blockValue)) && !isNaN(Number(filterValue))) {
+						if (Number(blockValue) !== Number(filterValue)) {
+							return false;
+						}
+						continue;
+					}
+					const splitFilterValues = filterValue.split("|");
+					if (!splitFilterValues.includes(blockValue)) {
+						return false;
+					}
 				}
 				return true;
 			};
-
 			for (const part of blockState.multipart) {
 				if (part.when) {
 					if (part.when.OR) {

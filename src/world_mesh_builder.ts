@@ -11,9 +11,20 @@ export class WorldMeshBuilder {
 	schematic: any;
 	blockMeshBuilder: any;
 	ressourceLoader: any;
-	constructor(ressourceLoader: any, materialMap: Map<string, THREE.Material>) {
+	renderer: any;
+	constructor(
+		ressourceLoader: any,
+		materialMap: Map<string, THREE.Material>,
+		renderer: any
+	) {
 		this.ressourceLoader = ressourceLoader;
-		this.blockMeshBuilder = new BlockMeshBuilder(ressourceLoader, materialMap);
+		this.renderer = renderer;
+
+		this.blockMeshBuilder = new BlockMeshBuilder(
+			ressourceLoader,
+			materialMap,
+			this.renderer
+		);
 	}
 
 	public setSchematic(schematic: any) {
@@ -64,32 +75,23 @@ export class WorldMeshBuilder {
 			}
 			const { x, y, z } = pos;
 			const block = this.schematic.getBlock(pos);
+
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			// if properties has east/west/north/south, rotate the block if it has "side"
-
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
-				block
+				block,
+				pos
 			);
-			let rotatedBlockComponents = blockComponents;
-			const facing = block.properties?.["facing"];
-			if (facing && facing !== "north") {
-				rotatedBlockComponents = rotateBlockComponents(
-					blockComponents,
-					block.properties?.["facing"]
-				);
-			}
-
 			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
 				block,
 				pos
 			);
 
-			for (const key in rotatedBlockComponents) {
+			for (const key in blockComponents) {
 				this.ressourceLoader.addBlockToMaterialGroup(
 					materialGroups,
-					rotatedBlockComponents[key],
+					blockComponents[key],
 					occludedFaces,
 					x,
 					y,

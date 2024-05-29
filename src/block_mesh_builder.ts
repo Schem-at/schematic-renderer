@@ -35,12 +35,18 @@ export class BlockMeshBuilder {
 	base64MaterialMap: Map<string, string>;
 	ressourceLoader: ResourceLoader;
 	schematic: any;
+	renderer: any;
 
-	constructor(ressourceLoader: any, materialMap: Map<string, THREE.Material>) {
+	constructor(
+		ressourceLoader: any,
+		materialMap: Map<string, THREE.Material>,
+		renderer: any
+	) {
 		this.blockMeshCache = new Map();
 		this.materialMap = materialMap;
 		this.base64MaterialMap = new Map();
 		this.ressourceLoader = ressourceLoader;
+		this.renderer = renderer;
 	}
 
 	public setSchematic(schematic: any) {
@@ -123,9 +129,7 @@ export class BlockMeshBuilder {
 					faceData
 				);
 
-
 				// this.showTextureOverlay(base64Material, faceData.uv);
-				
 
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
@@ -140,7 +144,10 @@ export class BlockMeshBuilder {
 		return { subMaterials, uvs };
 	}
 
-	public showTextureOverlay(imageData: string , uv: [number, number, number, number]) {
+	public showTextureOverlay(
+		imageData: string,
+		uv: [number, number, number, number]
+	) {
 		if (!document.getElementById("all-images-container")) {
 			const allImagesContainer = document.createElement("div");
 			allImagesContainer.id = "all-images-container";
@@ -167,11 +174,11 @@ export class BlockMeshBuilder {
 		}
 		const rect = document.createElement("div");
 		rect.style.position = "absolute";
-		rect.style.width = `${(uv[2] - uv[0]) / 16 * 100 -1 }px`;
-		rect.style.height = `${(uv[3] - uv[1]) / 16 * 100 -1}px`;
+		rect.style.width = `${((uv[2] - uv[0]) / 16) * 100 - 1}px`;
+		rect.style.height = `${((uv[3] - uv[1]) / 16) * 100 - 1}px`;
 		rect.style.border = "1px solid blue";
-		rect.style.left = `${uv[0] / 16 * 100}px`;
-		rect.style.top = `${uv[1] / 16 * 100}px`;
+		rect.style.left = `${(uv[0] / 16) * 100}px`;
+		rect.style.top = `${(uv[1] / 16) * 100}px`;
 		imageContainer.appendChild(rect);
 		allImagesContainer.appendChild(imageContainer);
 		document.body.prepend(allImagesContainer);
@@ -193,7 +200,10 @@ export class BlockMeshBuilder {
 		}
 		return uvArray;
 	}
-	public async getBlockMesh(block: any): Promise<{
+	public async getBlockMesh(
+		block: any,
+		blockPosition?: any
+	): Promise<{
 		[key: string]: {
 			materialId: string;
 			face: string;
@@ -211,41 +221,33 @@ export class BlockMeshBuilder {
 				uvs: number[];
 			};
 		} = {};
+		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
 		for (const modelHolder of modelOptions.holders) {
-
 			if (modelHolder === undefined) continue;
+			if (modelHolder.model.includes("redstone_power_level_")) continue;
 
-			let modelHolderRotation = { x: 0, y: 0, z: 0 };
-			if (block.type === "redstone_wire") {
-				// TODO: WHY DOES THIS BREAK THE REST ?!
-				modelHolderRotation = {
-					x: (modelHolder.x ?? 0) * (Math.PI / 180),
-					y: (modelHolder.y ?? 0) * (Math.PI / 180),
-					z: (modelHolder.z ?? 0) * (Math.PI / 180),
-				};
-			}
-
+			let modelHolderRotation = {
+				x: (modelHolder.x ?? 0) * (Math.PI / 180),
+				y: (modelHolder.y ?? 0) * (Math.PI / 180),
+				z: (modelHolder.z ?? 0) * (Math.PI / 180),
+			};
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
 			const elements = model?.elements;
 			if (!elements) continue;
 
 			for (const element of elements) {
-				// TODO: handle elements with a name, it's a special vanilla tweaks thing
-				// if (element.name && element.name == "outline") continue;
 				if (!element.from || !element.to) continue;
-
 				this.normalizeElementCoords(element);
-
 				const faceData = await this.processFaceData(element, model, block);
 				const from = element.from;
 				const to = element.to;
+				const elementRotation = element.rotation || null;
 
 				if (!from || !to) continue;
 
 				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
 				const directionData = getDirectionData(faceData.uvs);
-				const faces = ["east", "west", "up", "down", "south", "north"];
 
 				for (const dir of faces) {
 					const materialId = faceData.subMaterials[dir];
@@ -267,26 +269,32 @@ export class BlockMeshBuilder {
 
 					for (const { pos, uv } of dirData.corners) {
 						if (!from || !size || !pos || !uv) continue;
+						let cornerPos = [
+							from[0] + size[0] * pos[0],
+							from[1] + size[1] * pos[1],
+							from[2] + size[2] * pos[2],
+						];
+						if (elementRotation) {
+							cornerPos = this.applyElementRotation(cornerPos, elementRotation);
+						}
+						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
-						const rotatedPos = this.applyRotation(
-							[
-								from[0] + size[0] * pos[0],
-								from[1] + size[1] * pos[1],
-								from[2] + size[2] * pos[2],
-							],
-							modelHolderRotation
-						);
+						//if the element has a rotation, apply it
 
-						blockComponents[uniqueKey].positions.push(...rotatedPos);
-						// this works but just for redstone
-						// blockComponents[uniqueKey].uvs.push(uv[0], 1- uv[1]);
-						blockComponents[uniqueKey].uvs.push(1- uv[0], 1- uv[1]);
+						blockComponents[uniqueKey].positions.push(...cornerPos);
+						// // this works but just for redstone
+						// // blockComponents[uniqueKey].uvs.push(uv[0], 1- uv[1]);
+						// blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
+						if (modelHolder.model.includes("redstone")) {
+							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
+						} else {
+							blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
+						}
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
 				}
 			}
 		}
-
 
 		return blockComponents;
 	}
@@ -294,11 +302,12 @@ export class BlockMeshBuilder {
 	private applyRotation(
 		position: number[],
 		rotation: { x: number; y: number; z: number },
-		center: number[] = [0.5, 0, 0.5]
+		center: number[] = [0.5, 0.5, 0.5]
 	) {
 		let { x, y, z } = rotation;
-
 		y = -y;
+		x = -x;
+		z = -z;
 
 		const translatedPosition = [
 			position[0] - center[0],
@@ -337,6 +346,61 @@ export class BlockMeshBuilder {
 		return finalPosition;
 	}
 
+	private applyElementRotation(
+		position: number[],
+		rotation: { origin: number[]; axis: string; angle: number }
+	) {
+		let { origin, axis, angle } = rotation;
+		//convert angle to radians
+		angle = (angle * Math.PI) / 180;
+		const translatedPosition = [
+			position[0] - origin[0],
+			position[1] - origin[1],
+			position[2] - origin[2],
+		];
+
+		let rotationMatrix = [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+		];
+
+		if (axis === "x") {
+			rotationMatrix = [
+				[1, 0, 0],
+				[0, Math.cos(angle), -Math.sin(angle)],
+				[0, Math.sin(angle), Math.cos(angle)],
+			];
+		} else if (axis === "y") {
+			rotationMatrix = [
+				[Math.cos(angle), 0, Math.sin(angle)],
+				[0, 1, 0],
+				[-Math.sin(angle), 0, Math.cos(angle)],
+			];
+		} else if (axis === "z") {
+			rotationMatrix = [
+				[Math.cos(angle), -Math.sin(angle), 0],
+				[Math.sin(angle), Math.cos(angle), 0],
+				[0, 0, 1],
+			];
+		}
+
+		const rotatedPosition = [0, 0, 0];
+
+		for (let i = 0; i < 3; i++) {
+			for (let j = 0; j < 3; j++) {
+				rotatedPosition[i] += translatedPosition[j] * rotationMatrix[i][j];
+			}
+		}
+
+		const finalPosition = [
+			rotatedPosition[0] + origin[0],
+			rotatedPosition[1] + origin[1],
+			rotatedPosition[2] + origin[2],
+		];
+
+		return finalPosition;
+	}
 	public occludedFacesListToInt(occludedFaces: { [key: string]: boolean }) {
 		let result = 0;
 		for (const face of POSSIBLE_FACES) {
@@ -424,12 +488,13 @@ export class BlockMeshBuilder {
 		return blockModelLookup;
 	}
 
-	public async getBlockMeshFromCache(block: any) {
+	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);
-		if (this.blockMeshCache.has(blockUniqueKey) && false) {
+		if (this.blockMeshCache.has(blockUniqueKey)) {
+			// console.log("cache hit for block", block);
 			return this.blockMeshCache.get(blockUniqueKey);
 		} else {
-			const blockComponents = await this.getBlockMesh(block);
+			const blockComponents = await this.getBlockMesh(block, pos);
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);
 			return blockComponents;
 		}

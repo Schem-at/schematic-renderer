@@ -31,6 +31,20 @@ export class Renderer {
 			new POSTPROCESSING.RenderPass(this.scene, this.camera)
 		);
 		this.setupScene(options);
+
+		this.addGrid();
+
+		this.setBackgroundColor("#000000");
+		// const axesHelper = new THREE.AxesHelper(50);
+		// this.scene.add(axesHelper);
+	}
+
+	addDebugCuboide(position: THREE.Vector3, size: THREE.Vector3, color: number) {
+		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+		const material = new THREE.MeshBasicMaterial({ color: color });
+		const cube = new THREE.Mesh(geometry, material);
+		cube.position.copy(position);
+		this.scene.add(cube);
 	}
 
 	getPerspectiveCamera() {
@@ -68,10 +82,9 @@ export class Renderer {
 		return this.getPerspectiveCamera();
 	}
 
-
 	getGridHelper() {
 		const size = 100;
-		const divisions = 10;
+		const divisions = size;
 		const gridHelper = new THREE.GridHelper(size, divisions);
 		gridHelper.name = "GridHelper";
 		return gridHelper;
@@ -96,14 +109,13 @@ export class Renderer {
 			this.addGrid();
 		}
 	}
-	
 
 	setupScene(options: any) {
 		this.renderer.shadowMap.enabled = true;
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 		this.createLights();
 
-		const hbaoEffect = new HBAOEffect(this.composer, this.camera, this.scene);
+		// const hbaoEffect = new HBAOEffect(this.composer, this.camera, this.scene);
 		const ssaoEffect = new SSAOEffect(this.composer, this.camera, this.scene);
 		const smaaEffect = new POSTPROCESSING.SMAAEffect();
 		const effectPass = new POSTPROCESSING.EffectPass(

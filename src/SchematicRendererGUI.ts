@@ -12,8 +12,8 @@ export class SchematicRendererGUI {
 		const settings = {
 			rotationSpeed: 0.01,
 			zoom: 1,
-			showGrid: false,
-			backgroundColor: "#ffffff",
+			showGrid: true,
+			backgroundColor: "#000000",
 			exportUSDZ: () => {
 				this.schematicRenderer.exportUsdz();
 			},
