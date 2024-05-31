@@ -437,16 +437,14 @@ export function parseNbtFromBase64(nbt: string): TagMap {
 }
 
 export function hashBlockForMap(block: Block) {
-	// TODO: FIX THE CACHE IT'S NOT WORKING
-	//return `${block.type}:${JSON.stringify(block.properties)}`;
-	//avoid JSON.stringify since it's slow
-	let key = block.type;
+	// make the md5 hash of the block
+	let hash = block.type;
 	if (block.properties) {
-		for (const property in block.properties) {
-			key += property + block.properties[property];
+		for (const key in block.properties) {
+			hash += block.properties[key];
 		}
 	}
-	return key;
+	return hash;
 }
 
 export function occludedFacesIntToList(occludedFaces: number) {

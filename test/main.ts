@@ -1,6 +1,8 @@
 import { SchematicRenderer } from "../src/SchematicRenderer";
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+const corsBypass = "http://localhost:8079/";
+
 const schematicBase64 =
 	"H4sIAAAAAAAAA11P20rEQAw9ncHtdrx8hJ8h6IO44IOLguJ6QSS2aRvsTqETUF/9UT9FM6ywYiAk53BykgRU13XPa1KpS1Snw1i/npESgLkliqJwDrNzlq5X5PaCY6c9XMB8yUqNiT2q1eKybRPr3bfFH3z/Dz9kU+xitoHWexN8WT2x+hlQXtHAquyxv5bI9UStHpFM+RaPwy3XTZTS80s++DHF8e3juKUh8VP29zjYChPFxjhnbPg1X9J7VlXYu5GBF1FFhVPYjJa3PCUZY97osLOSJr+LH/Ay+vAqAQAA";
 const adderSchematicBase64String =
@@ -19,8 +21,8 @@ const diagonalCCA =
 	"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";
 const complexTest =
 	"H4sIAAAAAAAA/41Tf2/TMBC9xOuPpCvbH8CHQP0DCYFgUiU0mMQkJiaBGFChymsujTU3zuwr2fgIfGk4J02zllVgKXJ8znv37t4lhujjLMOFJDUTEJ9LjUR4Jm8AYBhDbxUQ8HKhcpxZmdJRoRyZfJqhTCapnKl8Pl4WI5cZS+NUaocjui1w7Jjy6vY7E/UEPGnhmSkKtBPM5aXGZEx2iaMVTWLK3AMGAp62gJpoWqed4A1hnmwBl4WHdQU8bmHXS2np5/RSm9kVX4KAV+0l1+yoUY/SUa3ZqnlGo1ISWm3mc85SFeTJ9wU8bPFlpginpTGar/YEPGuvNP7g8pgax6XUupFYcsJRYUq0K+2eVAg4bpFkVVEqi9PMmKuJJJIscyWhoXFmSdmaZ62us+HQjuo0pjuKiwU8b+HM7FvN9bH+KRk7yxqynE3ORlpRiw0FDFusVJZjgYBHdwzUaoFrI/oCjnZIrXpUDw8fNd4vNmIre5/ROmVynz+E7nvM55SBiKF/hiQTSVJAdHHyIU0d0pfa/vX5629ed87f/BmY5h16//0cDd4yxTrHA+pBdOz1+zCTvYBmBWEg9oKgE/jVDVar17z0gyDiLQ4G+7xFMKxYTnJSpNDFfngGIM6NqxQynY/4oiLonBIuXJWkD+FpAgdbXYMNZOinAKr2/Bu58Y2Aw09W5i5F+4YH2v+ELfRw+8f9S26n2u/VEvyPlhA6Fyrx7g2gWxviadiSX7wf8PMa/gAtf+TdpwQAAA==";
-const corsBypass = "http://localhost:8079/";
-
+const redstoneTest =
+	"H4sIAAAAAAAA/6WQTU/DMAyG3WRbaachTvwGDj1wRuoFMZgQE0hIjA+hKbTeGrGlI3E1xJnfTXHWscEBLkSKEr+OH79ODNF1VuBckc4kxFdqhkQ4VK8A0I4hXAsSzufaYGbVhI4s5o5Kg+OltviAylHqdI6JKS0VqeFMsiiXaNPDxJXVl7TE9btHRgsJvS1QactaIGF/q71UytLb+GlWZs+cBAmDfzioFj/7Swmnf+K4oIGtuL+NUy08rMXmwhu0TpfGzyagc4FmSgWIGHaGSCpXpCREo/7lZOKQbuu6/vgW3zUDbuJ7/xvAmAHqaUHQktA9YcSmxy6FEB37r/Eyvz7wBAj8EkIKEQRNwIvtrW8iEBBBb1XXN6RJo4t9nYD2SOfst92FTmPBG2KX73zu8T6DT5nRNOMpAgAA";
 async function getVanillaTweaksResourcePackLinks() {
 	return fetch(
 		"http://localhost:8079/https://vanillatweaks.net/assets/server/zipresourcepacks.php",
@@ -87,8 +89,22 @@ async function getAllResourcePackBlobs() {
 	return resourcePackBlobs;
 }
 
+// let mpuschematicBase64String = "";
+// fetch("mpu_base64.txt")
+// 	.then((response) => response.text())
+// 	.then((text) => {
+// 		mpuschematicBase64String = text;
+// 	})
+// 	.then(() => {
+// 		console.log(mpuschematicBase64String);
+// 		getAllResourcePackBlobs().then((resourcePackBlobs) => {
+// 			const renderer = new SchematicRenderer(canvas, mpuschematicBase64String, {
+// 				resourcePackBlobs,
+// 			});
+// 		});
+// 	});
 getAllResourcePackBlobs().then((resourcePackBlobs) => {
-	const renderer = new SchematicRenderer(canvas, complexTest, {
+	const renderer = new SchematicRenderer(canvas, diagonalCCA, {
 		resourcePackBlobs,
 	});
 });

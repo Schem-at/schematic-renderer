@@ -47,6 +47,48 @@ export class Renderer {
 		this.scene.add(cube);
 	}
 
+	addDebugBoundingBox(
+		position: THREE.Vector3,
+		size: THREE.Vector3,
+		color: number
+	) {
+		// create a rectangular bounding box that contains the cuboid
+		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+		const edges = new THREE.EdgesGeometry(geometry);
+		const line = new THREE.LineSegments(
+			edges,
+			new THREE.LineBasicMaterial({ color: color })
+		);
+		line.position.copy(position);
+		this.scene.add(line);
+	}
+
+	addDebugText(
+		text: string,
+		position: THREE.Vector3,
+		color: number,
+		backgroundColor: number
+	) {
+		const canvas = document.createElement("canvas");
+		const context = canvas.getContext("2d");
+		if (context) {
+			context.font = "Bold 40px Arial";
+			context.fillStyle = "rgba(255, 255, 255, 0.95)";
+			context.fillRect(0, 0, context.measureText(text).width, 50);
+			context.fillStyle = "rgba(0, 0, 0, 0.95)";
+			context.fillText(text, 0, 40);
+		}
+		const texture = new THREE.CanvasTexture(canvas);
+		const material = new THREE.SpriteMaterial({
+			map: texture,
+			transparent: true,
+		});
+		const sprite = new THREE.Sprite(material);
+		sprite.position.copy(position);
+		sprite.scale.set(5, 2, 1);
+		this.scene.add(sprite);
+	}
+
 	getPerspectiveCamera() {
 		const d = 20;
 		const fov = 75;

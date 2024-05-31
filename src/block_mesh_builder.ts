@@ -100,7 +100,6 @@ export class BlockMeshBuilder {
 				];
 				continue;
 			}
-
 			const materialColor = this.ressourceLoader.getColorForElement(
 				faceData,
 				this.ressourceLoader.resolveTextureName(faceData.texture, model),
@@ -120,6 +119,7 @@ export class BlockMeshBuilder {
 						faceData.texture.includes("overlay"),
 					materialColor
 				);
+
 				this.materialMap.set(
 					materialId,
 					material ?? new THREE.MeshBasicMaterial()
@@ -128,6 +128,7 @@ export class BlockMeshBuilder {
 					model,
 					faceData
 				);
+				// console.log(faceData, materialColor, model, block);
 
 				// this.showTextureOverlay(base64Material, faceData.uv);
 
@@ -144,24 +145,69 @@ export class BlockMeshBuilder {
 		return { subMaterials, uvs };
 	}
 
+	public rotateUv(uv: [number, number, number, number], rotation: number) {
+		//convert rotation to radians
+		rotation = (rotation * Math.PI) / 180;
+		const center = [0.5, 0.5];
+		const uvCentered = [
+			uv[0] - center[0],
+			uv[1] - center[1],
+			uv[2] - center[0],
+			uv[3] - center[1],
+		];
+		const uvRotated = [
+			uvCentered[0] * Math.cos(rotation) - uvCentered[1] * Math.sin(rotation),
+			uvCentered[0] * Math.sin(rotation) + uvCentered[1] * Math.cos(rotation),
+			uvCentered[2] * Math.cos(rotation) - uvCentered[3] * Math.sin(rotation),
+			uvCentered[2] * Math.sin(rotation) + uvCentered[3] * Math.cos(rotation),
+		];
+		const uvFinal = [
+			uvRotated[0] + center[0],
+			uvRotated[1] + center[1],
+			uvRotated[2] + center[0],
+			uvRotated[3] + center[1],
+		];
+		return uvFinal;
+	}
+
+	private popupWindow: Window | null = null;
+
 	public showTextureOverlay(
 		imageData: string,
 		uv: [number, number, number, number]
 	) {
-		if (!document.getElementById("all-images-container")) {
-			const allImagesContainer = document.createElement("div");
+		if (!this.popupWindow || this.popupWindow.closed) {
+			this.popupWindow = window.open("", "_blank", "width=200,height=400");
+		}
+
+		if (!this.popupWindow) {
+			console.error("Failed to open popup window");
+			return;
+		}
+
+		const popupDocument = this.popupWindow.document;
+
+		let allImagesContainer = popupDocument.getElementById(
+			"all-images-container"
+		);
+		if (!allImagesContainer) {
+			allImagesContainer = popupDocument.createElement("div");
 			allImagesContainer.id = "all-images-container";
 			allImagesContainer.style.backgroundColor = "darkgrey";
 			allImagesContainer.style.display = "block";
-			//append it to the top of the body
-			document.body.prepend(allImagesContainer);
+			allImagesContainer.style.width = "100%";
+			allImagesContainer.style.height = "100%";
+			allImagesContainer.style.overflowY = "auto";
+			popupDocument.body.appendChild(allImagesContainer);
 		}
-		const allImagesContainer = document.getElementById("all-images-container");
-		const imageContainer = document.createElement("div");
+
+		const imageContainer = popupDocument.createElement("div");
 		imageContainer.style.backgroundColor = "black";
 		imageContainer.style.height = "100px";
 		imageContainer.style.position = "relative";
-		const image = document.createElement("img");
+		imageContainer.style.marginBottom = "10px";
+
+		const image = popupDocument.createElement("img");
 		image.src = imageData;
 		image.style.imageRendering = "pixelated";
 		image.style.position = "absolute";
@@ -169,10 +215,12 @@ export class BlockMeshBuilder {
 		image.style.height = "100px";
 		image.style.backgroundColor = "gray";
 		imageContainer.appendChild(image);
+
 		if (!uv) {
 			uv = [0, 0, 16, 16];
 		}
-		const rect = document.createElement("div");
+
+		const rect = popupDocument.createElement("div");
 		rect.style.position = "absolute";
 		rect.style.width = `${((uv[2] - uv[0]) / 16) * 100 - 1}px`;
 		rect.style.height = `${((uv[3] - uv[1]) / 16) * 100 - 1}px`;
@@ -180,26 +228,10 @@ export class BlockMeshBuilder {
 		rect.style.left = `${(uv[0] / 16) * 100}px`;
 		rect.style.top = `${(uv[1] / 16) * 100}px`;
 		imageContainer.appendChild(rect);
+
 		allImagesContainer.appendChild(imageContainer);
-		document.body.prepend(allImagesContainer);
 	}
 
-	public rotateUv(uv: [number, number, number, number], rotation: number) {
-		if (rotation === 0) {
-			return uv;
-		}
-		const uvArray = [...uv];
-		const numberOfRotations = rotation / 90;
-		for (let i = 0; i < numberOfRotations; i++) {
-			const temp = uvArray[0];
-			const temp2 = uvArray[2];
-			uvArray[2] = 1 - uvArray[1];
-			uvArray[1] = temp2;
-			uvArray[0] = 1 - uvArray[3];
-			uvArray[3] = temp;
-		}
-		return uvArray;
-	}
 	public async getBlockMesh(
 		block: any,
 		blockPosition?: any
@@ -223,23 +255,42 @@ export class BlockMeshBuilder {
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
+		let modelIndex = 0;
 		for (const modelHolder of modelOptions.holders) {
+			modelIndex++;
+			// if (modelIndex != 1) continue;
 			if (modelHolder === undefined) continue;
-			if (modelHolder.model.includes("redstone_power_level_")) continue;
-
+			// if (modelHolder.model.includes("redstone_power_level_")) continue;
 			let modelHolderRotation = {
 				x: (modelHolder.x ?? 0) * (Math.PI / 180),
 				y: (modelHolder.y ?? 0) * (Math.PI / 180),
 				z: (modelHolder.z ?? 0) * (Math.PI / 180),
 			};
+			const start = performance.now();
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
+			// if over 100ms log the model
+			if (performance.now() - start > 100) {
+				console.error(
+					"Slow model",
+					modelHolder.model,
+					"took",
+					performance.now() - start
+				);
+			}
 			const elements = model?.elements;
 			if (!elements) continue;
-
+			let elementIndex = 0;
 			for (const element of elements) {
+				elementIndex++;
+				// if (elementIndex != 2) continue;
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
-				const faceData = await this.processFaceData(element, model, block);
+				let faceData;
+				try {
+					faceData = await this.processFaceData(element, model, block);
+				} catch (e) {
+					continue;
+				}
 				const from = element.from;
 				const to = element.to;
 				const elementRotation = element.rotation || null;
@@ -248,8 +299,10 @@ export class BlockMeshBuilder {
 
 				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
 				const directionData = getDirectionData(faceData.uvs);
-
+				let faceIndex = 0;
 				for (const dir of faces) {
+					faceIndex++;
+					// if (faceIndex != 1) continue;
 					const materialId = faceData.subMaterials[dir];
 					if (!materialId) continue;
 
@@ -279,13 +332,8 @@ export class BlockMeshBuilder {
 						}
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
-						//if the element has a rotation, apply it
-
 						blockComponents[uniqueKey].positions.push(...cornerPos);
-						// // this works but just for redstone
-						// // blockComponents[uniqueKey].uvs.push(uv[0], 1- uv[1]);
-						// blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
-						if (modelHolder.model.includes("redstone")) {
+						if (block.type === "redstone_wire") {
 							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
 						} else {
 							blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
@@ -491,10 +539,20 @@ export class BlockMeshBuilder {
 	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);
 		if (this.blockMeshCache.has(blockUniqueKey)) {
-			// console.log("cache hit for block", block);
 			return this.blockMeshCache.get(blockUniqueKey);
 		} else {
+			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
+			// if over 100ms log the block
+			if (performance.now() - start > 100) {
+				console.error(
+					"Slow block",
+					pos,
+					block,
+					"took",
+					performance.now() - start
+				);
+			}
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);
 			return blockComponents;
 		}

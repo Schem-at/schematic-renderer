@@ -40,7 +40,6 @@ export class WorldMeshBuilder {
 		const { width, height, length } = this.schematic;
 		const chunkCountX = Math.ceil(width / chunkWidth);
 		const chunkCountY = Math.ceil(height / chunkHeight);
-		const chunkCountZ = Math.ceil(length / chunkLength);
 		for (const pos of this.schematic) {
 			const { x, y, z } = pos;
 			const chunkX = Math.floor(x / chunkWidth);
@@ -66,23 +65,31 @@ export class WorldMeshBuilder {
 		let count = 0;
 
 		for (let i = 0; i < chunk.length; i++) {
-			// if (i != 7) {
-			// 	continue;
-			// }
 			const pos = chunk[i];
 			if (count > maxBlocksAllowed) {
 				break;
 			}
-			const { x, y, z } = pos;
-			const block = this.schematic.getBlock(pos);
 
+			const { x, y, z } = pos;
+
+			const block = this.schematic.getBlock(pos);
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
+			const start = performance.now();
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
 				block,
 				pos
 			);
+			if (performance.now() - start > 100) {
+				console.error(
+					"Slow block",
+					pos,
+					block,
+					"took",
+					performance.now() - start
+				);
+			}
 			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
 				block,
 				pos
@@ -115,44 +122,46 @@ export class WorldMeshBuilder {
 		const worldWidth = this.schematic.width;
 		const worldHeight = this.schematic.height;
 		const worldLength = this.schematic.length;
-		// const offset = new THREE.Vector3(-worldWidth / 2, 0, -worldLength / 2);
 		const offset = { x: 0, y: 0, z: 0 };
 		return { worldWidth, worldHeight, worldLength, offset };
 	}
 
-	//TODO: yield meshes from a worker so that the update is not blocking
 	public async getSchematicMeshes(
 		chunkDimensions = { chunkWidth: 16, chunkHeight: 16, chunkLength: 16 }
 	) {
 		const { worldWidth, worldHeight, worldLength, offset } =
 			this.initializeMeshCreation();
 		const chunks = await this.splitSchemaIntoChunks({
-			chunkWidth: 64,
-			chunkHeight: 64,
-			chunkLength: 64,
+			chunkWidth: 16,
+			chunkHeight: 16,
+			chunkLength: 16,
 		});
-		console.time("createMeshes");
 		const chunkMeshes = [];
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
+		let materialGroups = {};
 		for (const chunk of chunks) {
-			this.progressController?.setProgress((currentChunk / totalChunks) * 100);
-			this.progressController?.setProgressMessage(
-				`Processing chunk ${currentChunk} of ${totalChunks}`
-			);
 			currentChunk++;
-			const materialGroups = {};
+			const start = performance.now();
 			await this.processChunkBlocks(
 				materialGroups,
 				chunk,
 				chunkDimensions,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
-			chunkMeshes.push(
-				...this.ressourceLoader.createMeshesFromMaterialGroups(materialGroups)
-			);
+			if (performance.now() - start > 100) {
+				console.error("Slow chunk", currentChunk, "of", totalChunks);
+			}
+			const materialGroupMeshs = [
+				...this.ressourceLoader.createMeshesFromMaterialGroups(materialGroups),
+			];
+			if (materialGroupMeshs.length === 0) {
+				continue;
+			}
+			this.renderer.scene.add(...materialGroupMeshs);
+			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
+			materialGroups = {};
 		}
-		console.timeEnd("createMeshes");
-		return chunkMeshes;
+		this.renderer.animate();
 	}
 }

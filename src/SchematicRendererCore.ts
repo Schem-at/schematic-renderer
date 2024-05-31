@@ -31,13 +31,8 @@ export class SchematicRendererCore {
 		this.renderer.camera.lookAt(center);
 		this.resourceLoader.setSchematic(loadedSchematic);
 		this.worldMeshBuilder.setSchematic(loadedSchematic);
-		const schematicMeshes = await this.worldMeshBuilder.getSchematicMeshes();
-		if (schematicMeshes && schematicMeshes.length > 0) {
-			this.renderer.scene.add(...schematicMeshes);
-			this.renderer.animate();
-		} else {
-			console.log("no schematic meshes");
-		}
+		await this.worldMeshBuilder.getSchematicMeshes();
+		console.log("Schematic rendered");
 	}
 
 	async updateSchematic(schematicData: string) {

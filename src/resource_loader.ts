@@ -141,6 +141,7 @@ export class ResourceLoader {
 		color?: THREE.Color
 	): Promise<THREE.MeshStandardMaterial | undefined> {
 		let textureName = faceData.texture;
+
 		while (textureName.startsWith("#")) {
 			if (!model.textures) {
 				throw new Error(
@@ -148,6 +149,9 @@ export class ResourceLoader {
 				);
 			}
 			textureName = model.textures[textureName.substring(1)];
+			if (!textureName) {
+				throw new Error(`Texture ${textureName} not found`);
+			}
 		}
 
 		if (textureName.startsWith("minecraft:")) {
@@ -258,7 +262,6 @@ export class ResourceLoader {
 	}
 
 	public async getBlockMeta(block: any) {
-		// TODO: Accomodate for vanilla tweaks and other resource packs
 		if (this.blockMetaCache.has(hashBlockForMap(block))) {
 			return this.blockMetaCache.get(hashBlockForMap(block));
 		}
@@ -364,6 +367,11 @@ export class ResourceLoader {
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
+		// check if the texture is "#missing"
+		if (ref === "#missing") {
+			return ref;
+		}
+
 		while (ref.startsWith("#")) {
 			if (!model.textures) {
 				return ref;
@@ -420,10 +428,6 @@ export class ResourceLoader {
 					if (!block.properties[property]) {
 						return false;
 					}
-
-					if (block.type == "minecraft:redstone_wall_torch") {
-						console.log(block);
-					}
 					const filterValue = filter[property];
 					const blockValue = block.properties[property];
 					if (!isNaN(Number(blockValue)) && !isNaN(Number(filterValue))) {
@@ -478,9 +482,6 @@ export class ResourceLoader {
 	}
 
 	public async loadModel(modelRef: string): Promise<BlockModel | undefined> {
-		if (this.blockModelCache.has(modelRef)) {
-			return this.blockModelCache.get(modelRef);
-		}
 		if (modelRef.startsWith("minecraft:")) {
 			modelRef = modelRef.substring("minecraft:".length);
 		}
