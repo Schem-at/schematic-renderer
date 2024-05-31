@@ -89,20 +89,6 @@ async function getAllResourcePackBlobs() {
 	return resourcePackBlobs;
 }
 
-// let mpuschematicBase64String = "";
-// fetch("mpu_base64.txt")
-// 	.then((response) => response.text())
-// 	.then((text) => {
-// 		mpuschematicBase64String = text;
-// 	})
-// 	.then(() => {
-// 		console.log(mpuschematicBase64String);
-// 		getAllResourcePackBlobs().then((resourcePackBlobs) => {
-// 			const renderer = new SchematicRenderer(canvas, mpuschematicBase64String, {
-// 				resourcePackBlobs,
-// 			});
-// 		});
-// 	});
 getAllResourcePackBlobs().then((resourcePackBlobs) => {
 	const renderer = new SchematicRenderer(canvas, diagonalCCA, {
 		resourcePackBlobs,

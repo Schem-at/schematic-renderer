@@ -31,6 +31,7 @@ export class SchematicRendererCore {
 		this.renderer.camera.lookAt(center);
 		this.resourceLoader.setSchematic(loadedSchematic);
 		this.worldMeshBuilder.setSchematic(loadedSchematic);
+		this.renderer.animate();
 		await this.worldMeshBuilder.getSchematicMeshes();
 		console.log("Schematic rendered");
 	}

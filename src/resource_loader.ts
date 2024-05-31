@@ -332,7 +332,8 @@ export class ResourceLoader {
 
 	public createMeshesFromMaterialGroups(materialGroups: any) {
 		const meshes: THREE.Mesh[] = [];
-		Object.keys(materialGroups).forEach((materialId) => {
+		const materialGroupKeys = Object.keys(materialGroups);
+		for (const materialId of materialGroupKeys) {
 			const group = materialGroups[materialId];
 			const material = this.materialMap.get(materialId);
 			const geometry = new THREE.BufferGeometry();
@@ -348,21 +349,19 @@ export class ResourceLoader {
 				"uv",
 				new THREE.Float32BufferAttribute(group.uvs, 2)
 			);
-			// geometry.setAttribute(
-			// 	"color",
-			// 	new THREE.Float32BufferAttribute(group.colors, 3)
-			// );
-			const recalculateIndices = group.indices
-				.map((index: number) => this.recalculateIndex(index))
-				.flat();
+			const recalculateIndices = [];
+			for (const index of group.indices) {
+				const indices = this.recalculateIndex(index);
+				recalculateIndices.push(...indices);
+			}
+
 			geometry.setIndex(recalculateIndices);
 
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			meshes.push(mesh);
-			// this.materialMap.delete(materialId);
-		});
+		}
 		return meshes;
 	}
 

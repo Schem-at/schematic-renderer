@@ -76,20 +76,11 @@ export class WorldMeshBuilder {
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			const start = performance.now();
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
 				block,
 				pos
 			);
-			if (performance.now() - start > 100) {
-				console.error(
-					"Slow block",
-					pos,
-					block,
-					"took",
-					performance.now() - start
-				);
-			}
+
 			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
 				block,
 				pos
@@ -131,27 +122,20 @@ export class WorldMeshBuilder {
 	) {
 		const { worldWidth, worldHeight, worldLength, offset } =
 			this.initializeMeshCreation();
-		const chunks = await this.splitSchemaIntoChunks({
-			chunkWidth: 16,
-			chunkHeight: 16,
-			chunkLength: 16,
-		});
+		const chunks = await this.splitSchemaIntoChunks(chunkDimensions);
 		const chunkMeshes = [];
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
 		let materialGroups = {};
+
 		for (const chunk of chunks) {
 			currentChunk++;
-			const start = performance.now();
 			await this.processChunkBlocks(
 				materialGroups,
 				chunk,
 				chunkDimensions,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
-			if (performance.now() - start > 100) {
-				console.error("Slow chunk", currentChunk, "of", totalChunks);
-			}
 			const materialGroupMeshs = [
 				...this.ressourceLoader.createMeshesFromMaterialGroups(materialGroups),
 			];
@@ -159,9 +143,9 @@ export class WorldMeshBuilder {
 				continue;
 			}
 			this.renderer.scene.add(...materialGroupMeshs);
+
 			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
 			materialGroups = {};
 		}
-		this.renderer.animate();
 	}
 }

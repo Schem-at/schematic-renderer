@@ -128,10 +128,6 @@ export class BlockMeshBuilder {
 					model,
 					faceData
 				);
-				// console.log(faceData, materialColor, model, block);
-
-				// this.showTextureOverlay(base64Material, faceData.uv);
-
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
 
@@ -266,17 +262,8 @@ export class BlockMeshBuilder {
 				y: (modelHolder.y ?? 0) * (Math.PI / 180),
 				z: (modelHolder.z ?? 0) * (Math.PI / 180),
 			};
-			const start = performance.now();
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
-			// if over 100ms log the model
-			if (performance.now() - start > 100) {
-				console.error(
-					"Slow model",
-					modelHolder.model,
-					"took",
-					performance.now() - start
-				);
-			}
+
 			const elements = model?.elements;
 			if (!elements) continue;
 			let elementIndex = 0;
