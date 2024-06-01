@@ -90,11 +90,16 @@ export class BlockMeshBuilder {
 				];
 				continue;
 			}
+			const textureName = this.ressourceLoader.resolveTextureName(
+				faceData.texture,
+				model
+			);
 			const materialColor = this.ressourceLoader.getColorForElement(
 				faceData,
-				this.ressourceLoader.resolveTextureName(faceData.texture, model),
+				textureName,
 				block
 			);
+			console.log("materialColor", materialColor, "faceData", faceData);
 			const materialId = this.getMaterialId(
 				model,
 				faceData,
@@ -120,6 +125,10 @@ export class BlockMeshBuilder {
 				);
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
+			// this.showTextureOverlay(
+			// 	this.base64MaterialMap.get(materialId) ?? "",
+			// 	faceData.uv
+			// );
 
 			subMaterials[face] = materialId;
 			const faceRotation = faceData.rotation || 0;
@@ -132,7 +141,6 @@ export class BlockMeshBuilder {
 	}
 
 	public rotateUv(uv: [number, number, number, number], rotation: number) {
-		//convert rotation to radians
 		rotation = (rotation * Math.PI) / 180;
 		const center = [0.5, 0.5];
 		const uvCentered = [
@@ -160,7 +168,8 @@ export class BlockMeshBuilder {
 
 	public showTextureOverlay(
 		imageData: string,
-		uv: [number, number, number, number]
+		uv: [number, number, number, number],
+		name: string = ""
 	) {
 		if (!this.popupWindow || this.popupWindow.closed) {
 			this.popupWindow = window.open("", "_blank", "width=200,height=400");
@@ -202,6 +211,12 @@ export class BlockMeshBuilder {
 		image.style.backgroundColor = "gray";
 		imageContainer.appendChild(image);
 
+		const nameElement = popupDocument.createElement("div");
+		nameElement.innerText = name;
+		nameElement.style.color = "white";
+		nameElement.style.backgroundColor = "black";
+		imageContainer.appendChild(nameElement);
+
 		if (!uv) {
 			uv = [0, 0, 16, 16];
 		}
@@ -240,7 +255,16 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
+		const start = performance.now();
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
+		if (performance.now() - start > 100) {
+			console.error(
+				"Slow block meta",
+				block,
+				"took",
+				performance.now() - start
+			);
+		}
 		let modelIndex = 0;
 		for (const modelHolder of modelOptions.holders) {
 			modelIndex++;
@@ -250,8 +274,16 @@ export class BlockMeshBuilder {
 				y: (modelHolder.y ?? 0) * (Math.PI / 180),
 				z: (modelHolder.z ?? 0) * (Math.PI / 180),
 			};
+			const start = performance.now();
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
-
+			if (performance.now() - start > 100) {
+				console.error(
+					"Slow model",
+					modelHolder.model,
+					"took",
+					performance.now() - start
+				);
+			}
 			const elements = model?.elements;
 			if (!elements) continue;
 			let elementIndex = 0;

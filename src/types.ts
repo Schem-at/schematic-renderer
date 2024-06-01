@@ -54,6 +54,7 @@ export interface BlockModel {
 		[texture: string]: string | undefined;
 	};
 	elements: {
+		name: string;
 		from?: Vector;
 		to?: Vector;
 		rotation?: {

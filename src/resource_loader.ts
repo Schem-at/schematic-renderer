@@ -185,7 +185,6 @@ export class ResourceLoader {
 			alphaTest: 0.1,
 			transparent: transparent,
 			color: color ?? 0xffffff,
-			// vertexColors: true,
 		});
 	}
 
@@ -226,15 +225,20 @@ export class ResourceLoader {
 		tex: string,
 		block: Block | undefined
 	) {
-		if (tex.startsWith("block/redstone_dust_")) {
-			const power = block?.properties?.["power"] ?? 0;
-			return REDSTONE_COLORS[power as number];
-		} else if (faceData.tintindex !== undefined) {
-			return this.TINT_COLOR;
-		} else if (tex.startsWith("block/water_")) {
-			return this.WATER_COLOR;
-		} else if (tex.startsWith("block/lava_")) {
-			return this.LAVA_COLOR;
+		if (faceData.tintindex !== undefined) {
+			if (tex.startsWith("block/water_")) {
+				return this.WATER_COLOR;
+			} else if (tex.startsWith("block/lava_")) {
+				return this.LAVA_COLOR;
+			} else if (
+				tex.startsWith("block/redstone_dust_") ||
+				tex.startsWith("block/redstone_power")
+			) {
+				const power = block?.properties?.["power"] ?? 0;
+				return REDSTONE_COLORS[power as number];
+			} else if (faceData.tintindex !== undefined) {
+				return this.TINT_COLOR;
+			}
 		}
 
 		return undefined;

@@ -192,7 +192,6 @@ export class Renderer {
 	}
 
 	animate() {
-		console.log("Animating");
 		requestAnimationFrame(() => this.animate());
 		this.controls.update();
 		this.render();
