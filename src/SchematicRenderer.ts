@@ -115,4 +115,8 @@ export class SchematicRenderer {
 	async exportUsdz() {
 		return this.schematicExporter.exportUsdz();
 	}
+
+	updateZoom(value: number) {
+		this.renderer.updateZoom(value);
+	}
 }

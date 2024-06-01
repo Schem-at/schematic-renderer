@@ -3,13 +3,8 @@ import deepmerge from "deepmerge";
 import type { Block } from "@enginehub/schematicjs";
 import {
 	hashBlockForMap,
-	INVISIBLE_BLOCKS,
-	NON_OCCLUDING_BLOCKS,
-	normalize,
 	occludedFacesIntToList,
 	REDSTONE_COLORS,
-	rotateVector,
-	TRANSPARENT_BLOCKS,
 } from "./utils";
 import JSZip from "jszip";
 import type {
@@ -18,7 +13,6 @@ import type {
 	BlockStateDefinition,
 	BlockStateDefinitionVariant,
 	BlockStateModelHolder,
-	Vector,
 } from "./types";
 export class ResourceLoader {
 	schematic: any;
@@ -75,10 +69,13 @@ export class ResourceLoader {
 	}
 
 	public async loadZip(resourcePackBlob: string | string[]) {
+		if (Array.isArray(resourcePackBlob)) {
+			throw new Error("Invalid resource pack blob");
+		}
 		return await JSZip.loadAsync(resourcePackBlob);
 	}
 
-	public async getResourceBase64(name: string): Promise<string> {
+	public async getResourceBase64(name: string): Promise<string | undefined> {
 		for (const zip of this.zips) {
 			const data = await zip.file(`assets/minecraft/${name}`)?.async("base64");
 			if (data) {
@@ -95,13 +92,16 @@ export class ResourceLoader {
 		let data: string = "";
 		if (Array.isArray(zip)) {
 			for (const zipFile of zip) {
-				data = await zipFile.file(`assets/minecraft/${name}`)?.async("base64");
+				data =
+					(await zipFile.file(`assets/minecraft/${name}`)?.async("base64")) ??
+					"";
 				if (data) {
 					break;
 				}
 			}
 		} else {
-			data = await zip.file(`assets/minecraft/${name}`)?.async("base64");
+			data =
+				(await zip.file(`assets/minecraft/${name}`)?.async("base64")) ?? "";
 		}
 		this.blobCache.set(name, data);
 		return data;

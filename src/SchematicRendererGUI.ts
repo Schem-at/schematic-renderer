@@ -19,11 +19,10 @@ export class SchematicRendererGUI {
 				this.schematicRenderer.exportUsdz();
 			},
 			takeScreenshot: () => {
-				const screenshot =
-					this.schematicRenderer.schematicMediaCapture.downloadScreenshot(
-						1920,
-						1080
-					);
+				this.schematicRenderer.schematicMediaCapture.downloadScreenshot(
+					1920,
+					1080
+				);
 			},
 			takeRotationGif: () => {
 				this.schematicRenderer.schematicMediaCapture.downloadRotationGif(
@@ -52,20 +51,20 @@ export class SchematicRendererGUI {
 			.add(settings, "zoom", 0.1, 2)
 			.step(0.1)
 			.name("Zoom")
-			.onChange((value) => {
+			.onChange((value: any) => {
 				this.schematicRenderer.updateZoom(value);
 			});
 		gui
 			.add(settings, "showGrid")
 			.name("Show Grid")
-			.onChange((value) => {
-				this.schematicRenderer.renderer.toggleGrid(value);
+			.onChange((_value: any) => {
+				this.schematicRenderer.renderer.toggleGrid();
 			});
 
 		gui
 			.addColor(settings, "backgroundColor")
 			.name("Background Color")
-			.onChange((value) => {
+			.onChange((value: string) => {
 				this.schematicRenderer.renderer.setBackgroundColor(value);
 			});
 		gui.add(settings, "exportUSDZ").name("Export USDZ");

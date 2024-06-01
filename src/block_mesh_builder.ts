@@ -1,26 +1,16 @@
 import * as THREE from "three";
 
-import type { Block, loadSchematic } from "@enginehub/schematicjs";
+import type { loadSchematic } from "@enginehub/schematicjs";
 
-import type {
-	BlockModel,
-	BlockModelData,
-	BlockStateDefinition,
-	BlockStateDefinitionVariant,
-	BlockStateModelHolder,
-	Vector,
-} from "./types";
+import type { BlockModel, BlockModelData, Vector } from "./types";
 
 import {
-	faceToFacingVector,
 	isExtendedPiston,
 	getOppositeFace,
 	INVISIBLE_BLOCKS,
 	NON_OCCLUDING_BLOCKS,
 	normalize,
-	rotateVector,
 	TRANSPARENT_BLOCKS,
-	REDSTONE_COLORS,
 	getDirectionData,
 	hashBlockForMap,
 	POSSIBLE_FACES,
@@ -230,7 +220,7 @@ export class BlockMeshBuilder {
 
 	public async getBlockMesh(
 		block: any,
-		blockPosition?: any
+		_blockPosition?: any
 	): Promise<{
 		[key: string]: {
 			materialId: string;
@@ -254,9 +244,7 @@ export class BlockMeshBuilder {
 		let modelIndex = 0;
 		for (const modelHolder of modelOptions.holders) {
 			modelIndex++;
-			// if (modelIndex != 1) continue;
 			if (modelHolder === undefined) continue;
-			// if (modelHolder.model.includes("redstone_power_level_")) continue;
 			let modelHolderRotation = {
 				x: (modelHolder.x ?? 0) * (Math.PI / 180),
 				y: (modelHolder.y ?? 0) * (Math.PI / 180),
@@ -269,7 +257,6 @@ export class BlockMeshBuilder {
 			let elementIndex = 0;
 			for (const element of elements) {
 				elementIndex++;
-				// if (elementIndex != 2) continue;
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
 				let faceData;
@@ -281,15 +268,12 @@ export class BlockMeshBuilder {
 				const from = element.from;
 				const to = element.to;
 				const elementRotation = element.rotation || null;
-
 				if (!from || !to) continue;
-
 				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
 				const directionData = getDirectionData(faceData.uvs);
 				let faceIndex = 0;
 				for (const dir of faces) {
 					faceIndex++;
-					// if (faceIndex != 1) continue;
 					const materialId = faceData.subMaterials[dir];
 					if (!materialId) continue;
 
@@ -315,7 +299,10 @@ export class BlockMeshBuilder {
 							from[2] + size[2] * pos[2],
 						];
 						if (elementRotation) {
-							cornerPos = this.applyElementRotation(cornerPos, elementRotation);
+							cornerPos = this.applyElementRotation(
+								cornerPos,
+								elementRotation as any
+							);
 						}
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 

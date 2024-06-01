@@ -1,11 +1,14 @@
-// Renderer.ts
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+// import { FlyControls } from "three/examples/jsm/controls/FlyControls.js";
+// @ts-ignore
 import GIF from "gif.js.optimized";
+// @ts-ignore
 import WebMWriter from "webm-writer";
 import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
 import * as POSTPROCESSING from "postprocessing";
-import { HBAOEffect, SSAOEffect } from "realism-effects";
+// @ts-ignore
+import { SSAOEffect } from "realism-effects";
 
 export class Renderer {
 	canvas: HTMLCanvasElement;
@@ -27,6 +30,8 @@ export class Renderer {
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
 		this.controls = new OrbitControls(this.camera, this.canvas);
+		// this.controls = new FlyControls(this.camera, this.canvas);
+
 		this.composer = new POSTPROCESSING.EffectComposer(this.renderer);
 		this.composer.addPass(
 			new POSTPROCESSING.RenderPass(this.scene, this.camera)
@@ -53,7 +58,6 @@ export class Renderer {
 		size: THREE.Vector3,
 		color: number
 	) {
-		// create a rectangular bounding box that contains the cuboid
 		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 		const edges = new THREE.EdgesGeometry(geometry);
 		const line = new THREE.LineSegments(
@@ -67,16 +71,16 @@ export class Renderer {
 	addDebugText(
 		text: string,
 		position: THREE.Vector3,
-		color: number,
-		backgroundColor: number
+		color: number = 0x000000,
+		backgroundColor: number = 0xffffff
 	) {
 		const canvas = document.createElement("canvas");
 		const context = canvas.getContext("2d");
 		if (context) {
 			context.font = "Bold 40px Arial";
-			context.fillStyle = "rgba(255, 255, 255, 0.95)";
+			context.fillStyle = "rgba(" + backgroundColor + ", 1)";
 			context.fillRect(0, 0, context.measureText(text).width, 50);
-			context.fillStyle = "rgba(0, 0, 0, 0.95)";
+			context.fillStyle = "rgba(" + color + ", 1)";
 			context.fillText(text, 0, 40);
 		}
 		const texture = new THREE.CanvasTexture(canvas);
@@ -153,7 +157,7 @@ export class Renderer {
 		}
 	}
 
-	setupScene(options: any) {
+	setupScene(_options: any) {
 		this.renderer.shadowMap.enabled = true;
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 		this.createLights();
@@ -188,6 +192,7 @@ export class Renderer {
 	}
 
 	animate() {
+		console.log("Animating");
 		requestAnimationFrame(() => this.animate());
 		this.controls.update();
 		this.render();
@@ -252,7 +257,7 @@ export class Renderer {
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
 		this.composer.render();
 		console.log("Rendering gif done");
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, _reject) => {
 			gif.on("finished", function (blob: any) {
 				const reader = new FileReader();
 				reader.onload = function () {
@@ -292,7 +297,7 @@ export class Renderer {
 		tempCanvas.width = resolutionX;
 		tempCanvas.height = resolutionY;
 		console.log(distance, elevation);
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, _reject) => {
 			const renderStep = (i: number) => {
 				requestAnimationFrame(() => {
 					console.log(distance, elevation);
@@ -332,5 +337,10 @@ export class Renderer {
 		const exporter = new USDZExporter();
 		const usdz = exporter.parse(this.scene);
 		return usdz;
+	}
+
+	updateZoom(value: number) {
+		this.camera.zoom = value;
+		this.camera.updateProjectionMatrix();
 	}
 }

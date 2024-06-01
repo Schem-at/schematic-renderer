@@ -116,7 +116,7 @@ export class SchematicMediaCapture {
 			angle
 		);
 		const a = document.createElement("a");
-		a.href = URL.createObjectURL(webm);
+		a.href = URL.createObjectURL(webm as Blob);
 		a.download = "schematic-rotation.webm";
 		a.click();
 		URL.revokeObjectURL(a.href);

@@ -4,7 +4,6 @@
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
 	"module": "dist/schematic-renderer.umd.js",
-	"types": "dist/schematic-renderer.d.ts",
 	"files": [
 		"dist"
 	],
@@ -19,6 +18,7 @@
 		"@types/gzip-js": "^0.3.5",
 		"@types/pako": "^2.0.3",
 		"@types/three": "^0.161.2",
+		"cors-anywhere": "^0.4.4",
 		"express": "^4.19.2",
 		"request": "^2.88.2",
 		"typescript": "^5.4.5",
@@ -33,7 +33,10 @@
 		"gzip-js": "^0.3.2",
 		"http-proxy-middleware": "^2.0.0",
 		"jszip": "^3.10.1",
+		"lil-gui": "^0.19.2",
 		"pako": "^2.1.0",
+		"postprocessing": "^6.35.4",
+		"realism-effects": "^1.1.2",
 		"stats-js": "^1.0.1",
 		"three": "^0.161.0",
 		"webm-writer": "^1.0.0"

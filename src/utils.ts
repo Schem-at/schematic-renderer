@@ -134,7 +134,7 @@ export const CORNER_DICTIONARY = {
 // 	return result;
 // }
 
-export function getDirectionData(faceUVs: any) {
+export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 	const cornerDictionary = CORNER_DICTIONARY;
 	return {
 		east: {
@@ -337,7 +337,7 @@ export function faceToRotation(face: string) {
 }
 
 const rotateVectorMatrix = (vector: number[], matrix: number[][]) => {
-	const offsetVector = vector.map((v, i) => v - 0.5);
+	const offsetVector = vector.map((v, _i) => v - 0.5);
 	const result = [0, 0, 0];
 	for (let i = 0; i < 3; i++) {
 		for (let j = 0; j < 3; j++) {
