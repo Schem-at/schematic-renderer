@@ -1,49 +1,113 @@
-// Renderer.ts
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+// import { FlyControls } from "three/examples/jsm/controls/FlyControls.js";
+// @ts-ignore
 import GIF from "gif.js.optimized";
+// @ts-ignore
 import WebMWriter from "webm-writer";
 import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
-// import Stats from "stats.js";
+import * as POSTPROCESSING from "postprocessing";
+// @ts-ignore
+import { SSAOEffect } from "realism-effects";
+
 export class Renderer {
 	canvas: HTMLCanvasElement;
 	renderer: THREE.WebGLRenderer;
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	controls: OrbitControls;
-	// stats: Stats;
+	composer: POSTPROCESSING.EffectComposer;
+	schematic: any;
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;
 		this.renderer = new THREE.WebGLRenderer({
+			depth: false,
 			canvas: this.canvas,
-			antialias: true,
 			alpha: true,
 		});
 		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
 		this.controls = new OrbitControls(this.camera, this.canvas);
-		// this.stats = new Stats();
-		// document.body.appendChild(this.stats.dom);
+		// this.controls = new FlyControls(this.camera, this.canvas);
 
+		this.composer = new POSTPROCESSING.EffectComposer(this.renderer);
+		this.composer.addPass(
+			new POSTPROCESSING.RenderPass(this.scene, this.camera)
+		);
 		this.setupScene(options);
+
+		this.addGrid();
+
+		this.setBackgroundColor("#000000");
+		// const axesHelper = new THREE.AxesHelper(50);
+		// this.scene.add(axesHelper);
+	}
+
+	addDebugCuboide(position: THREE.Vector3, size: THREE.Vector3, color: number) {
+		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+		const material = new THREE.MeshBasicMaterial({ color: color });
+		const cube = new THREE.Mesh(geometry, material);
+		cube.position.copy(position);
+		this.scene.add(cube);
+	}
+
+	addDebugBoundingBox(
+		position: THREE.Vector3,
+		size: THREE.Vector3,
+		color: number
+	) {
+		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+		const edges = new THREE.EdgesGeometry(geometry);
+		const line = new THREE.LineSegments(
+			edges,
+			new THREE.LineBasicMaterial({ color: color })
+		);
+		line.position.copy(position);
+		this.scene.add(line);
+	}
+
+	addDebugText(
+		text: string,
+		position: THREE.Vector3,
+		color: number = 0x000000,
+		backgroundColor: number = 0xffffff
+	) {
+		const canvas = document.createElement("canvas");
+		const context = canvas.getContext("2d");
+		if (context) {
+			context.font = "Bold 40px Arial";
+			context.fillStyle = "rgba(" + backgroundColor + ", 1)";
+			context.fillRect(0, 0, context.measureText(text).width, 50);
+			context.fillStyle = "rgba(" + color + ", 1)";
+			context.fillText(text, 0, 40);
+		}
+		const texture = new THREE.CanvasTexture(canvas);
+		const material = new THREE.SpriteMaterial({
+			map: texture,
+			transparent: true,
+		});
+		const sprite = new THREE.Sprite(material);
+		sprite.position.copy(position);
+		sprite.scale.set(5, 2, 1);
+		this.scene.add(sprite);
 	}
 
 	getPerspectiveCamera() {
 		const d = 20;
 		const fov = 75;
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight; // dynamic based on the canvas size
+		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
 		const near = 0.1;
 		const far = 1000;
 		const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-		camera.position.set(d, 3 * d, d); // Default position
-		camera.lookAt(0, 0, 0); // Default look at
+		camera.position.set(d, 3 * d, d);
+		camera.lookAt(0, 0, 0);
 		return camera;
 	}
 
 	getIsometricCamera() {
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight; // dynamic based on the canvas size
+		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
 		const d = 20;
 		const camera = new THREE.OrthographicCamera(
 			-d * aspect,
@@ -53,53 +117,85 @@ export class Renderer {
 			1,
 			1000
 		);
-		camera.position.set(d, d, d); // Default position
+		camera.position.set(d, d, d);
 		return camera;
 	}
-	createCamera() {
-		return this.getPerspectiveCamera();
-		// return this.getIsometricCamera();
+
+	setBackgroundColor(color: string) {
+		this.renderer.setClearColor(color);
 	}
 
-	setupScene(options: any) {
+	createCamera() {
+		return this.getPerspectiveCamera();
+	}
+
+	getGridHelper() {
+		const size = 100;
+		const divisions = size;
+		const gridHelper = new THREE.GridHelper(size, divisions);
+		gridHelper.name = "GridHelper";
+		return gridHelper;
+	}
+
+	addGrid() {
+		const gridHelper = this.getGridHelper();
+		this.scene.add(gridHelper);
+	}
+
+	removeGrid() {
+		const gridHelper = this.scene.getObjectByName("GridHelper");
+		if (gridHelper) {
+			this.scene.remove(gridHelper);
+		}
+	}
+
+	toggleGrid() {
+		if (this.scene.getObjectByName("GridHelper")) {
+			this.removeGrid();
+		} else {
+			this.addGrid();
+		}
+	}
+
+	setupScene(_options: any) {
 		this.renderer.shadowMap.enabled = true;
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+		this.createLights();
 
-		const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+		// const hbaoEffect = new HBAOEffect(this.composer, this.camera, this.scene);
+		const ssaoEffect = new SSAOEffect(this.composer, this.camera, this.scene);
+		const smaaEffect = new POSTPROCESSING.SMAAEffect();
+		const effectPass = new POSTPROCESSING.EffectPass(
+			this.camera,
+			ssaoEffect,
+			smaaEffect
+		);
+
+		this.composer.addPass(effectPass);
+	}
+
+	createLights() {
+		const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 		ambientLight.intensity = 0.9;
 		this.scene.add(ambientLight);
 
-		const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+		const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
 		directionalLight.position.set(20, 20, -20);
 		directionalLight.intensity = 1;
 		directionalLight.castShadow = true;
 		directionalLight.shadow.bias = -0.01;
 		this.scene.add(directionalLight);
-
-		// const directionalLightHelper = new THREE.DirectionalLightHelper(
-		// 	directionalLight
-		// );
-		// this.scene.add(directionalLightHelper);
-	}
-
-	createLights() {
-		const color = 0xffffff;
-		const intensity = 1;
-		const light = new THREE.DirectionalLight(color, intensity);
-		light.position.set(-1, 2, 4);
-		this.scene.add(light);
 	}
 
 	render() {
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 	}
 
 	animate() {
-		// this.stats.begin();
+		console.log("Animating");
 		requestAnimationFrame(() => this.animate());
 		this.controls.update();
 		this.render();
-		// this.stats.end();
 	}
 
 	takeScreenshot(resolutionX: number, resolutionY: number) {
@@ -109,10 +205,10 @@ export class Renderer {
 		tempCamera.aspect = resolutionX / resolutionY;
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
-		this.renderer.render(this.scene, tempCamera);
+		this.composer.render();
 		const screenshot = this.renderer.domElement.toDataURL();
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 		return screenshot;
 	}
 
@@ -152,16 +248,16 @@ export class Renderer {
 				centerPosition.z + distance * Math.sin(currentAngle)
 			);
 			tempCamera.lookAt(centerPosition);
-			this.renderer.render(this.scene, tempCamera);
+			this.composer.render();
 			gif.addFrame(this.renderer.domElement, {
 				copy: true,
 				delay: 1000 / frameRate,
 			});
 		}
 		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.renderer.render(this.scene, this.camera);
+		this.composer.render();
 		console.log("Rendering gif done");
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, _reject) => {
 			gif.on("finished", function (blob: any) {
 				const reader = new FileReader();
 				reader.onload = function () {
@@ -181,12 +277,8 @@ export class Renderer {
 		elevation: number,
 		frameRate: number,
 		duration: number,
-		angle: number = 360,
-		progressController: any
+		angle: number = 360
 	) {
-		progressController.setProgress(0);
-		progressController.setProgressMessage("Rendering webm");
-		progressController.showProgress();
 		const angleRad = (angle * Math.PI) / 180;
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
@@ -205,14 +297,10 @@ export class Renderer {
 		tempCanvas.width = resolutionX;
 		tempCanvas.height = resolutionY;
 		console.log(distance, elevation);
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, _reject) => {
 			const renderStep = (i: number) => {
 				requestAnimationFrame(() => {
 					console.log(distance, elevation);
-					progressController.setProgress((i / frames) * 100);
-					progressController.setProgressMessage(
-						`Rendering webm: ${Math.round((i / frames) * 100)}%`
-					);
 					const currentAngle = step * i;
 					tempCamera.position.set(
 						centerPosition.x + distance * Math.cos(currentAngle),
@@ -220,7 +308,7 @@ export class Renderer {
 						centerPosition.z + distance * Math.sin(currentAngle)
 					);
 					tempCamera.lookAt(centerPosition);
-					this.renderer.render(this.scene, tempCamera);
+					this.composer.render();
 					const tempContext = tempCanvas.getContext("2d");
 					tempContext?.clearRect(0, 0, resolutionX, resolutionY);
 					tempContext?.drawImage(this.renderer.domElement, 0, 0);
@@ -229,13 +317,10 @@ export class Renderer {
 						renderStep(i + 1);
 					} else {
 						this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-						this.renderer.render(this.scene, this.camera);
+						this.composer.render();
 						videoWriter.complete().then((blob: any) => {
 							const reader = new FileReader();
 							reader.onload = function () {
-								progressController.hideProgress();
-								progressController.setProgress(0);
-								progressController.setProgressMessage("");
 								resolve(reader.result);
 							};
 							reader.readAsDataURL(blob);
@@ -252,5 +337,10 @@ export class Renderer {
 		const exporter = new USDZExporter();
 		const usdz = exporter.parse(this.scene);
 		return usdz;
+	}
+
+	updateZoom(value: number) {
+		this.camera.zoom = value;
+		this.camera.updateProjectionMatrix();
 	}
 }

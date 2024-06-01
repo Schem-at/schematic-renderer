@@ -1,17 +1,10 @@
 import * as THREE from "three";
 import deepmerge from "deepmerge";
 import type { Block } from "@enginehub/schematicjs";
-import { loadSchematic } from "@enginehub/schematicjs";
 import {
-	faceToFacingVector,
 	hashBlockForMap,
-	INVISIBLE_BLOCKS,
-	NON_OCCLUDING_BLOCKS,
-	normalize,
 	occludedFacesIntToList,
 	REDSTONE_COLORS,
-	rotateVector,
-	TRANSPARENT_BLOCKS,
 } from "./utils";
 import JSZip from "jszip";
 import type {
@@ -20,7 +13,6 @@ import type {
 	BlockStateDefinition,
 	BlockStateDefinitionVariant,
 	BlockStateModelHolder,
-	Vector,
 } from "./types";
 export class ResourceLoader {
 	schematic: any;
@@ -35,9 +27,8 @@ export class ResourceLoader {
 
 	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
-	jarUrl: string | string[];
-	progressController: any;
-	zip: any;
+	resourcePackBlobs: any;
+	zips: any;
 	textureLoader = new THREE.TextureLoader();
 
 	TINT_COLOR = new THREE.Color(145 / 255, 189 / 255, 89 / 255);
@@ -47,10 +38,9 @@ export class ResourceLoader {
 	SHADOW_COLOR = new THREE.Color(0.5, 0.5, 0.5);
 	DEG2RAD = Math.PI / 180;
 
-	DEBUG = false;
+	DEBUG = true;
 	constructor(
-		jarUrl: string | string[],
-		progressController?: any,
+		resourcePackBlobs: any,
 		materialMap?: Map<string, THREE.Material>
 	) {
 		this.textureCache = new Map();
@@ -63,8 +53,7 @@ export class ResourceLoader {
 		this.blockStateDefinitionCache = new Map();
 		this.materialMap = materialMap ?? new Map();
 		this.base64MaterialMap = new Map();
-		this.jarUrl = jarUrl;
-		this.progressController = progressController;
+		this.resourcePackBlobs = resourcePackBlobs;
 		this.textureLoader = new THREE.TextureLoader();
 		this.schematic = undefined;
 	}
@@ -73,41 +62,64 @@ export class ResourceLoader {
 		this.schematic = schematic;
 	}
 	async initialize() {
-		this.zip = await this.loadZip(this.jarUrl);
+		//this.zip = await this.loadZip(this.resourcePackBlob);
+		this.zips = await Promise.all(
+			this.resourcePackBlobs.map((blob: string) => this.loadZip(blob))
+		);
 	}
 
-	public async loadZip(jarUrl: string | string[]) {
-		if (Array.isArray(jarUrl)) {
-			return await Promise.all(
-				jarUrl.map(async (url) => {
-					const zipFile = await (await fetch(url)).blob();
-					const zip = await JSZip.loadAsync(zipFile);
-
-					return zip;
-				})
-			);
-		} else {
-			const zipFile = await (await fetch(jarUrl)).blob();
-			const zip = await JSZip.loadAsync(zipFile);
-
-			return zip;
+	public async loadZip(resourcePackBlob: string | string[]) {
+		if (Array.isArray(resourcePackBlob)) {
+			throw new Error("Invalid resource pack blob");
 		}
+		return await JSZip.loadAsync(resourcePackBlob);
 	}
 
-	public async getResourceBase64(name: string): Promise<string> {
+	public async getResourceBase64(name: string): Promise<string | undefined> {
+		for (const zip of this.zips) {
+			const data = await zip.file(`assets/minecraft/${name}`)?.async("base64");
+			if (data) {
+				return data;
+			}
+		}
+		return undefined;
+	}
+
+	public async getResourceBase64FromZip(
+		zip: JSZip,
+		name: string
+	): Promise<string> {
 		let data: string = "";
-		if (Array.isArray(this.zip)) {
-			for (const zipFile of this.zip) {
-				data = await zipFile.file(`assets/minecraft/${name}`)?.async("base64");
+		if (Array.isArray(zip)) {
+			for (const zipFile of zip) {
+				data =
+					(await zipFile.file(`assets/minecraft/${name}`)?.async("base64")) ??
+					"";
 				if (data) {
 					break;
 				}
 			}
 		} else {
-			data = await this.zip.file(`assets/minecraft/${name}`, { base64: true });
+			data =
+				(await zip.file(`assets/minecraft/${name}`)?.async("base64")) ?? "";
 		}
 		this.blobCache.set(name, data);
 		return data;
+	}
+
+	public async getResourceString(name: string) {
+		if (this.stringCache.has(name)) {
+			return this.stringCache.get(name);
+		} else {
+			for (const zip of this.zips) {
+				const data = await zip.file(`assets/minecraft/${name}`)?.async("text");
+				if (data) {
+					this.stringCache.set(name, data);
+					return data;
+				}
+			}
+			return undefined;
+		}
 	}
 
 	public async getBase64Image(model: BlockModel, faceData: any) {
@@ -126,10 +138,10 @@ export class ResourceLoader {
 		model: BlockModel,
 		faceData: any,
 		transparent?: boolean,
-		color?: THREE.Color,
-		materialRotation?: number
+		color?: THREE.Color
 	): Promise<THREE.MeshStandardMaterial | undefined> {
 		let textureName = faceData.texture;
+
 		while (textureName.startsWith("#")) {
 			if (!model.textures) {
 				throw new Error(
@@ -137,30 +149,35 @@ export class ResourceLoader {
 				);
 			}
 			textureName = model.textures[textureName.substring(1)];
+			if (!textureName) {
+				throw new Error(`Texture ${textureName} not found`);
+			}
 		}
 
-		let rotation = materialRotation || faceData?.rotation || 0;
-		if (rotation === 0) {
-			rotation = undefined;
-		} else {
-			console.log(rotation);
-		}
 		if (textureName.startsWith("minecraft:")) {
 			textureName = textureName.substring("minecraft:".length);
 		}
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
 		);
+
 		if (base64Resource === undefined) {
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
+
 		const texture = this.textureLoader.load(base64Png, () => {
 			texture.minFilter = THREE.NearestFilter;
 			texture.magFilter = THREE.NearestFilter;
 			texture.needsUpdate = true;
 		});
 
+		//check if the faceData is rotated if so rotate the texture
+		const rotation = faceData.rotation;
+		if (rotation) {
+			texture.center = new THREE.Vector2(0.5, 0.5);
+			texture.rotation = rotation * Math.PI * 0.25;
+		}
 		return new THREE.MeshStandardMaterial({
 			map: texture,
 			//side: transparent ? THREE.DoubleSide : THREE.FrontSide,
@@ -315,7 +332,8 @@ export class ResourceLoader {
 
 	public createMeshesFromMaterialGroups(materialGroups: any) {
 		const meshes: THREE.Mesh[] = [];
-		Object.keys(materialGroups).forEach((materialId) => {
+		const materialGroupKeys = Object.keys(materialGroups);
+		for (const materialId of materialGroupKeys) {
 			const group = materialGroups[materialId];
 			const material = this.materialMap.get(materialId);
 			const geometry = new THREE.BufferGeometry();
@@ -331,25 +349,28 @@ export class ResourceLoader {
 				"uv",
 				new THREE.Float32BufferAttribute(group.uvs, 2)
 			);
-			// geometry.setAttribute(
-			// 	"color",
-			// 	new THREE.Float32BufferAttribute(group.colors, 3)
-			// );
-			const recalculateIndices = group.indices
-				.map((index: number) => this.recalculateIndex(index))
-				.flat();
+			const recalculateIndices = [];
+			for (const index of group.indices) {
+				const indices = this.recalculateIndex(index);
+				recalculateIndices.push(...indices);
+			}
+
 			geometry.setIndex(recalculateIndices);
 
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			meshes.push(mesh);
-			// this.materialMap.delete(materialId);
-		});
+		}
 		return meshes;
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
+		// check if the texture is "#missing"
+		if (ref === "#missing") {
+			return ref;
+		}
+
 		while (ref.startsWith("#")) {
 			if (!model.textures) {
 				return ref;
@@ -391,6 +412,7 @@ export class ResourceLoader {
 			}
 			return [{ holder: model, weight: 1 }];
 		};
+
 		if (blockState.variants?.[""]) {
 			models.push({
 				options: createWeightedModels(blockState.variants[""]),
@@ -402,15 +424,24 @@ export class ResourceLoader {
 		} else if (blockState.multipart) {
 			const doesFilterPass = (filter: BlockStateDefinitionVariant<string>) => {
 				for (const property of Object.keys(filter)) {
-					const filterProperties = filter[property].split("|");
-
-					if (filterProperties.indexOf(block.properties[property]) === -1) {
+					if (!block.properties[property]) {
+						return false;
+					}
+					const filterValue = filter[property];
+					const blockValue = block.properties[property];
+					if (!isNaN(Number(blockValue)) && !isNaN(Number(filterValue))) {
+						if (Number(blockValue) !== Number(filterValue)) {
+							return false;
+						}
+						continue;
+					}
+					const splitFilterValues = filterValue.split("|");
+					if (!splitFilterValues.includes(blockValue)) {
 						return false;
 					}
 				}
 				return true;
 			};
-
 			for (const part of blockState.multipart) {
 				if (part.when) {
 					if (part.when.OR) {
@@ -441,28 +472,6 @@ export class ResourceLoader {
 		return { models, name };
 	}
 
-	public async getResourceString(name: string) {
-		if (this.stringCache.has(name)) {
-			return this.stringCache.get(name);
-		} else {
-			let data: string = "";
-			if (Array.isArray(this.zip)) {
-				for (const zipFile of this.zip) {
-					data = await zipFile
-						.file(`assets/minecraft/${name}`)
-						?.async("string");
-					if (data) {
-						break;
-					}
-				}
-			} else {
-				data = await this.zip.file(`assets/minecraft/${name}`)?.async("string");
-			}
-			this.stringCache.set(name, data);
-			return data;
-		}
-	}
-
 	public async loadBlockStateDefinition(
 		block: string
 	): Promise<BlockStateDefinition> {
@@ -472,9 +481,6 @@ export class ResourceLoader {
 	}
 
 	public async loadModel(modelRef: string): Promise<BlockModel | undefined> {
-		if (this.blockModelCache.has(modelRef)) {
-			return this.blockModelCache.get(modelRef);
-		}
 		if (modelRef.startsWith("minecraft:")) {
 			modelRef = modelRef.substring("minecraft:".length);
 		}

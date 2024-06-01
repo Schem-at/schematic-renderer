@@ -7,8 +7,8 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     lib: {
-      entry: path.resolve(__dirname, 'src/schematic_renderer.ts'),
-      name: 'SchematicRenderer',
+      entry: path.resolve(__dirname, 'src/SchematicRenderer.ts'),
+      name: 'schematic-renderer',
       fileName: 'schematic-renderer',
       formats: ['umd'],
     },
