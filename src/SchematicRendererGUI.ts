@@ -1,4 +1,5 @@
 import GUI from "lil-gui";
+import { SchematicRenderer } from "./SchematicRenderer";
 
 export class SchematicRendererGUI {
 	constructor(private schematicRenderer: SchematicRenderer) {

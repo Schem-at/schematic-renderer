@@ -1,3 +1,5 @@
+import { Renderer } from "./renderer";
+
 export class SchematicExporter {
 	constructor(private renderer: Renderer) {}
 

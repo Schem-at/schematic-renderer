@@ -4,6 +4,7 @@ import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
+import { TagMap } from "@enginehub/nbt-ts";
 
 export class SchematicRendererCore {
 	constructor(

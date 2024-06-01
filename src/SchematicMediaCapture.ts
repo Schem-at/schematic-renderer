@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Renderer } from "./renderer";
 
 export class SchematicMediaCapture {
 	constructor(private renderer: Renderer) {}
@@ -94,7 +95,7 @@ export class SchematicMediaCapture {
 			angle
 		);
 		const a = document.createElement("a");
-		a.href = URL.createObjectURL(gif);
+		a.href = URL.createObjectURL(gif as Blob);
 		a.download = "schematic-rotation.gif";
 		a.click();
 		URL.revokeObjectURL(a.href);

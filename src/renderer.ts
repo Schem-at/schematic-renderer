@@ -14,6 +14,7 @@ export class Renderer {
 	camera: THREE.PerspectiveCamera;
 	controls: OrbitControls;
 	composer: POSTPROCESSING.EffectComposer;
+	schematic: any;
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;

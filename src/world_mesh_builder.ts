@@ -1,11 +1,7 @@
 import * as THREE from "three";
 
 import { BlockMeshBuilder } from "./block_mesh_builder";
-import {
-	INVISIBLE_BLOCKS,
-	TRANSPARENT_BLOCKS,
-	rotateBlockComponents,
-} from "./utils";
+import { INVISIBLE_BLOCKS, TRANSPARENT_BLOCKS } from "./utils";
 
 export class WorldMeshBuilder {
 	schematic: any;
@@ -37,7 +33,7 @@ export class WorldMeshBuilder {
 	) {
 		const chunks: any[] = [];
 		const { chunkWidth, chunkHeight, chunkLength } = dimensions;
-		const { width, height, length } = this.schematic;
+		const { width, height } = this.schematic;
 		const chunkCountX = Math.ceil(width / chunkWidth);
 		const chunkCountY = Math.ceil(height / chunkHeight);
 		for (const pos of this.schematic) {
@@ -58,7 +54,6 @@ export class WorldMeshBuilder {
 	public async processChunkBlocks(
 		materialGroups: any,
 		chunk: any,
-		chunkDimensions: any,
 		offset: { x: number; y: number; z: number }
 	) {
 		const maxBlocksAllowed = 1000000;
@@ -120,10 +115,8 @@ export class WorldMeshBuilder {
 	public async getSchematicMeshes(
 		chunkDimensions = { chunkWidth: 16, chunkHeight: 16, chunkLength: 16 }
 	) {
-		const { worldWidth, worldHeight, worldLength, offset } =
-			this.initializeMeshCreation();
+		const { offset } = this.initializeMeshCreation();
 		const chunks = await this.splitSchemaIntoChunks(chunkDimensions);
-		const chunkMeshes = [];
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
 		let materialGroups = {};
@@ -133,7 +126,6 @@ export class WorldMeshBuilder {
 			await this.processChunkBlocks(
 				materialGroups,
 				chunk,
-				chunkDimensions,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
 			const materialGroupMeshs = [
