@@ -108,12 +108,16 @@ export class WorldMeshBuilder {
 		const worldWidth = this.schematic.width;
 		const worldHeight = this.schematic.height;
 		const worldLength = this.schematic.length;
-		const offset = { x: 0, y: 0, z: 0 };
+		const offset = {
+			x: -worldWidth / 2,
+			y: 0,
+			z: -worldLength / 2,
+		};
 		return { worldWidth, worldHeight, worldLength, offset };
 	}
 
 	public async getSchematicMeshes(
-		chunkDimensions = { chunkWidth: 16, chunkHeight: 16, chunkLength: 16 }
+		chunkDimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
 	) {
 		const { offset } = this.initializeMeshCreation();
 		const chunks = await this.splitSchemaIntoChunks(chunkDimensions);

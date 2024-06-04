@@ -99,7 +99,6 @@ export class BlockMeshBuilder {
 				textureName,
 				block
 			);
-			console.log("materialColor", materialColor, "faceData", faceData);
 			const materialId = this.getMaterialId(
 				model,
 				faceData,

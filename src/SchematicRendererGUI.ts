@@ -15,6 +15,7 @@ export class SchematicRendererGUI {
 			zoom: 1,
 			showGrid: true,
 			backgroundColor: "#000000",
+			backgroundAlpha: 1,
 			exportUSDZ: () => {
 				this.schematicRenderer.exportUsdz();
 			},
@@ -65,7 +66,20 @@ export class SchematicRendererGUI {
 			.addColor(settings, "backgroundColor")
 			.name("Background Color")
 			.onChange((value: string) => {
-				this.schematicRenderer.renderer.setBackgroundColor(value);
+				this.schematicRenderer.renderer.setBackgroundColor(
+					value,
+					settings.backgroundAlpha
+				);
+			});
+		gui
+			.add(settings, "backgroundAlpha", 0, 1)
+			.step(0.1)
+			.name("Background Alpha")
+			.onChange((value: number) => {
+				this.schematicRenderer.renderer.setBackgroundColor(
+					settings.backgroundColor,
+					value
+				);
 			});
 		gui.add(settings, "exportUSDZ").name("Export USDZ");
 		gui.add(settings, "takeScreenshot").name("Take Screenshot");

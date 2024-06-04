@@ -121,8 +121,10 @@ export class Renderer {
 		return camera;
 	}
 
-	setBackgroundColor(color: string) {
-		this.renderer.setClearColor(color);
+	setBackgroundColor(color: string, alpha: number = 1) {
+		//split the argument into RGB values and a alpha value
+
+		this.renderer.setClearColor(color, alpha);
 	}
 
 	createCamera() {
