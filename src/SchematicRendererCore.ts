@@ -33,8 +33,13 @@ export class SchematicRendererCore {
 		this.resourceLoader.setSchematic(loadedSchematic);
 		this.worldMeshBuilder.setSchematic(loadedSchematic);
 		this.renderer.animate();
+		const startPerformance = performance.now();
 		await this.worldMeshBuilder.getSchematicMeshes();
-		console.log("Schematic rendered");
+		console.log(
+			"Schematic rendered in",
+			performance.now() - startPerformance,
+			"ms"
+		);
 	}
 
 	async updateSchematic(schematicData: string) {

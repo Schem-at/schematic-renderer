@@ -3,6 +3,10 @@ import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfil
 import path from 'path';
 
 export default defineConfig({
+  server: {
+    port: 4000,
+    open: true,
+  },
   root: './test',
   build: {
     outDir: '../dist',

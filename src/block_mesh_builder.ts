@@ -26,6 +26,7 @@ export class BlockMeshBuilder {
 	ressourceLoader: ResourceLoader;
 	schematic: any;
 	renderer: any;
+	faceDataCache: Map<string, any>;
 
 	constructor(
 		ressourceLoader: any,
@@ -37,6 +38,7 @@ export class BlockMeshBuilder {
 		this.base64MaterialMap = new Map();
 		this.ressourceLoader = ressourceLoader;
 		this.renderer = renderer;
+		this.faceDataCache = new Map();
 	}
 
 	public setSchematic(schematic: any) {
@@ -105,7 +107,7 @@ export class BlockMeshBuilder {
 				materialColor ?? new THREE.Color(1, 1, 1)
 			);
 			if (!this.materialMap.has(materialId)) {
-				// TODO: check performance, I think there might be redundant calls to getBase64Image
+				// TODO: check performance, I think there might be redundant calls to getBase 64 Image
 				const material = await this.ressourceLoader.getTextureMaterial(
 					model,
 					faceData,
@@ -254,17 +256,10 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
-		const start = performance.now();
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-		if (performance.now() - start > 100) {
-			console.error(
-				"Slow block meta",
-				block,
-				"took",
-				performance.now() - start
-			);
-		}
+
 		let modelIndex = 0;
+		let start = performance.now();
 		for (const modelHolder of modelOptions.holders) {
 			modelIndex++;
 			if (modelHolder === undefined) continue;
@@ -273,16 +268,9 @@ export class BlockMeshBuilder {
 				y: (modelHolder.y ?? 0) * (Math.PI / 180),
 				z: (modelHolder.z ?? 0) * (Math.PI / 180),
 			};
-			const start = performance.now();
+
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
-			if (performance.now() - start > 100) {
-				console.error(
-					"Slow model",
-					modelHolder.model,
-					"took",
-					performance.now() - start
-				);
-			}
+
 			const elements = model?.elements;
 			if (!elements) continue;
 			let elementIndex = 0;
@@ -291,10 +279,16 @@ export class BlockMeshBuilder {
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
 				let faceData;
-				try {
-					faceData = await this.processFaceData(element, model, block);
-				} catch (e) {
-					continue;
+				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
+				if (this.faceDataCache.has(faceDataCacheKey)) {
+					faceData = this.faceDataCache.get(faceDataCacheKey);
+				} else {
+					try {
+						faceData = await this.processFaceData(element, model, block);
+					} catch (e) {
+						continue;
+					}
+					this.faceDataCache.set(faceDataCacheKey, faceData);
 				}
 				const from = element.from;
 				const to = element.to;
@@ -347,6 +341,15 @@ export class BlockMeshBuilder {
 					}
 				}
 			}
+		}
+
+		if (performance.now() - start > 50) {
+			console.error(
+				"Slow block mesh builder",
+				block,
+				"took",
+				performance.now() - start
+			);
 		}
 
 		return blockComponents;
@@ -525,9 +528,12 @@ export class BlockMeshBuilder {
 			if (blockModelLookup.get(hashBlockForMap(block))) {
 				continue;
 			}
-			const blockState = await this.ressourceLoader.loadBlockStateDefinition(
+			const blockState = await this.ressourceLoader.getBlockStateDefinition(
 				block.type
 			);
+			if (!blockState) {
+				continue;
+			}
 			const blockModelData = this.ressourceLoader.getBlockModelData(
 				block,
 				blockState

@@ -14,7 +14,7 @@ export class Renderer {
 	canvas: HTMLCanvasElement;
 	renderer: THREE.WebGLRenderer;
 	scene: THREE.Scene;
-	camera: THREE.PerspectiveCamera;
+	camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
 	controls: OrbitControls;
 	composer: POSTPROCESSING.EffectComposer;
 	schematic: any;
@@ -129,6 +129,7 @@ export class Renderer {
 
 	createCamera() {
 		return this.getPerspectiveCamera();
+		// return this.getIsometricCamera();
 	}
 
 	getGridHelper() {
@@ -203,7 +204,16 @@ export class Renderer {
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
 		const tempCamera = this.camera.clone();
-		tempCamera.aspect = resolutionX / resolutionY;
+		// if the camera is orthographic we need to set the aspect ratio manually
+		if (tempCamera instanceof THREE.OrthographicCamera) {
+			const aspect = resolutionX / resolutionY;
+			tempCamera.left = -aspect;
+			tempCamera.right = aspect;
+			tempCamera.top = 1;
+			tempCamera.bottom = -1;
+		} else {
+			tempCamera.aspect = resolutionX / resolutionY;
+		}
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
 		this.composer.render();
@@ -227,7 +237,15 @@ export class Renderer {
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
 		const tempCamera = this.camera.clone();
-		tempCamera.aspect = resolutionX / resolutionY;
+		if (tempCamera instanceof THREE.OrthographicCamera) {
+			const aspect = resolutionX / resolutionY;
+			tempCamera.left = -distance * aspect;
+			tempCamera.right = distance * aspect;
+			tempCamera.top = distance;
+			tempCamera.bottom = -distance;
+		} else {
+			tempCamera.aspect = resolutionX / resolutionY;
+		}
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
 		const gif = new GIF({
@@ -284,7 +302,16 @@ export class Renderer {
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
 		const tempCamera = this.camera.clone();
-		tempCamera.aspect = resolutionX / resolutionY;
+		// if the camera is orthographic we need to set the aspect ratio manually
+		if (tempCamera instanceof THREE.OrthographicCamera) {
+			const aspect = resolutionX / resolutionY;
+			tempCamera.left = -distance * aspect;
+			tempCamera.right = distance * aspect;
+			tempCamera.top = distance;
+			tempCamera.bottom = -distance;
+		} else {
+			tempCamera.aspect = resolutionX / resolutionY;
+		}
 		tempCamera.updateProjectionMatrix();
 		this.renderer.setSize(resolutionX, resolutionY);
 		const frames = Math.floor(frameRate * duration);

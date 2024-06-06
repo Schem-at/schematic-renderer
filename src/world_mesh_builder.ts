@@ -1,7 +1,11 @@
 import * as THREE from "three";
 
 import { BlockMeshBuilder } from "./block_mesh_builder";
-import { INVISIBLE_BLOCKS, TRANSPARENT_BLOCKS } from "./utils";
+import {
+	INVISIBLE_BLOCKS,
+	TRANSPARENT_BLOCKS,
+	occludedFacesIntToList,
+} from "./utils";
 
 export class WorldMeshBuilder {
 	schematic: any;
@@ -82,7 +86,7 @@ export class WorldMeshBuilder {
 			);
 
 			for (const key in blockComponents) {
-				this.ressourceLoader.addBlockToMaterialGroup(
+				WorldMeshBuilder.addBlockToMaterialGroup(
 					materialGroups,
 					blockComponents[key],
 					occludedFaces,
@@ -94,6 +98,49 @@ export class WorldMeshBuilder {
 			}
 			count++;
 		}
+	}
+
+	public static addBlockToMaterialGroup(
+		materialGroups: any,
+		blockComponent: any,
+		occludedFacesInt: number,
+		x: number,
+		y: number,
+		z: number,
+		offset: { x: number; y: number; z: number }
+	) {
+		const { materialId, positions, normals, uvs, face } = blockComponent;
+		const occludedFaces = occludedFacesIntToList(occludedFacesInt);
+		if (occludedFaces[face]) {
+			return;
+		}
+		if (!materialGroups[materialId]) {
+			materialGroups[materialId] = {
+				positions: [],
+				normals: [],
+				uvs: [],
+				colors: [],
+				indices: [],
+				count: 0,
+			};
+		}
+		for (let i = 0; i < positions.length; i += 3) {
+			const positionX = positions[i] + x + offset.x;
+			const positionY = positions[i + 1] + y + offset.y;
+			const positionZ = positions[i + 2] + z + offset.z;
+			materialGroups[materialId].positions.push(
+				positionX,
+				positionY,
+				positionZ
+			);
+		}
+		materialGroups[materialId].normals.push(...normals);
+		materialGroups[materialId].uvs.push(...uvs);
+		const indexOffset = materialGroups[materialId].count;
+		for (let i = 0; i < positions.length / 3; i += 4) {
+			materialGroups[materialId].indices.push(indexOffset + i);
+		}
+		materialGroups[materialId].count += positions.length / 3;
 	}
 
 	public isSolid(x: number, y: number, z: number) {

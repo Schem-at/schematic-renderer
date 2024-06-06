@@ -35,7 +35,6 @@ export class SchematicRenderer {
 			this.options?.resourcePackBlobs,
 			this.materialMap
 		);
-		this.resourceLoader.initialize();
 		this.worldMeshBuilder = new WorldMeshBuilder(
 			this.resourceLoader,
 			this.materialMap,
@@ -60,10 +59,6 @@ export class SchematicRenderer {
 
 		this.loadedSchematic = loadSchematic(parsedNbt);
 		this.materialMap = new Map();
-		this.resourceLoader = new ResourceLoader(
-			this.options?.resourcePackBlobs,
-			this.materialMap
-		);
 
 		await this.resourceLoader.initialize();
 

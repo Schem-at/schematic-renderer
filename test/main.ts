@@ -89,8 +89,17 @@ async function getAllResourcePackBlobs() {
 	return resourcePackBlobs;
 }
 
-getAllResourcePackBlobs().then((resourcePackBlobs) => {
-	const renderer = new SchematicRenderer(canvas, diagonalCCA, {
-		resourcePackBlobs,
+// getAllResourcePackBlobs().then((resourcePackBlobs) => {
+// 	const renderer = new SchematicRenderer(canvas, diagonalCCA, {
+// 		resourcePackBlobs,
+// 	});
+// });
+//read the localfile mpu_base64.txt and then render the schematic
+async function readLocalFile() {
+	const file = await fetch("mpu_base64.txt");
+	const text = await file.text();
+	const renderer = new SchematicRenderer(canvas, text, {
+		resourcePackBlobs: await getAllResourcePackBlobs(),
 	});
-});
+}
+readLocalFile();
