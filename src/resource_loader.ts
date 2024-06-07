@@ -334,123 +334,22 @@ export class ResourceLoader {
 		group.count += positions.length / 3;
 	}
 
-	public static addBlockToMaterialGroup(
-		materialGroups: any,
-		blockComponent: any,
-		occludedFacesInt: number,
-		x: number,
-		y: number,
-		z: number,
-		offset: { x: number; y: number; z: number },
-		chunkTimes: any
-	) {
-		const { materialId, positions, normals, uvs, face } = blockComponent;
-
-		let start = performance.now();
-		const occludedFaces = occludedFacesIntToList(occludedFacesInt);
-		chunkTimes.material_group.occluded_faces += performance.now() - start;
-
-		if (occludedFaces[face]) {
-			return;
-		}
-
-		if (!materialGroups[materialId]) {
-			materialGroups[materialId] = {
-				positions: [],
-				normals: [],
-				uvs: [],
-				colors: [],
-				indices: [],
-				count: 0,
-			};
-		}
-
-		const group = materialGroups[materialId];
-		start = performance.now();
-
-		// Using a single loop to push positions
-		for (let i = 0; i < positions.length; i += 3) {
-			group.positions.push(
-				positions[i] + x + offset.x,
-				positions[i + 1] + y + offset.y,
-				positions[i + 2] + z + offset.z
-			);
-		}
-		chunkTimes.material_group.position_push += performance.now() - start;
-
-		start = performance.now();
-		group.normals.push(...normals);
-		chunkTimes.material_group.normal_push += performance.now() - start;
-
-		start = performance.now();
-		group.uvs.push(...uvs);
-		chunkTimes.material_group.uv_push += performance.now() - start;
-
-		const indexOffset = group.count;
-		for (let i = 0; i < positions.length / 3; i += 4) {
-			group.indices.push(indexOffset + i);
-		}
-		group.count += positions.length / 3;
-	}
-
-	public createMeshesFromMaterialGroups(materialGroups: any) {
-		const meshes: THREE.Mesh[] = [];
-		const materialGroupKeys = Object.keys(materialGroups);
-		for (const materialId of materialGroupKeys) {
-			const group = materialGroups[materialId];
-			const material = this.materialMap.get(materialId);
-			const geometry = new THREE.BufferGeometry();
-			geometry.setAttribute(
-				"position",
-				new THREE.Float32BufferAttribute(group.positions, 3)
-			);
-			geometry.setAttribute(
-				"normal",
-				new THREE.Float32BufferAttribute(group.normals, 3)
-			);
-			geometry.setAttribute(
-				"uv",
-				new THREE.Float32BufferAttribute(group.uvs, 2)
-			);
-			const recalculateIndices = group.indices.map((index: number) =>
-				this.recalculateIndex(index)
-			);
-
-			geometry.setIndex(recalculateIndices);
-
-			const mesh = new THREE.Mesh(geometry, material);
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			meshes.push(mesh);
-		}
-		return meshes;
-	}
 	public createMeshesFromBlocks(blocks: any): THREE.Mesh[] {
 		const meshes: THREE.Mesh[] = [];
 		for (const [materialId, blockList] of Object.entries(blocks)) {
 			const material = this.materialMap.get(materialId);
 			let totalVertices = 0;
+			let totalIndices = 0;
+
 			for (const block of blockList as any) {
 				totalVertices += block[0].positions.length / 3;
+				totalIndices += block[0].positions.length / 3;
 			}
 
 			const geometry = new THREE.BufferGeometry();
-			geometry.setAttribute(
-				"position",
-				new THREE.Float32BufferAttribute(totalVertices * 3, 3)
-			);
-			geometry.setAttribute(
-				"normal",
-				new THREE.Float32BufferAttribute(totalVertices * 3, 3)
-			);
-			geometry.setAttribute(
-				"uv",
-				new THREE.Float32BufferAttribute(totalVertices * 2, 2)
-			);
-
-			const positions = geometry.attributes.position.array;
-			const normals = geometry.attributes.normal.array;
-			const uvs = geometry.attributes.uv.array;
+			const positions = new Float32Array(totalVertices * 3);
+			const normals = new Float32Array(totalVertices * 3);
+			const uvs = new Float32Array(totalVertices * 2);
 			const indices: number[] = [];
 			let vertexOffset = 0;
 			let indexOffset = 0;
@@ -458,12 +357,14 @@ export class ResourceLoader {
 			for (const block of blockList as any) {
 				const blockComponent = block[0];
 				const worldPos = block[1];
-				let newPositions = blockComponent.positions;
+
+				const newPositions = blockComponent.positions.slice();
 				for (let i = 0; i < newPositions.length; i += 3) {
 					newPositions[i] += worldPos[0];
 					newPositions[i + 1] += worldPos[1];
 					newPositions[i + 2] += worldPos[2];
 				}
+
 				positions.set(newPositions, vertexOffset * 3);
 				normals.set(blockComponent.normals, vertexOffset * 3);
 				uvs.set(blockComponent.uvs, vertexOffset * 2);
@@ -471,9 +372,17 @@ export class ResourceLoader {
 				for (let i = 0; i < blockComponent.positions.length / 3; i += 4) {
 					indices.push(...this.recalculateIndex(indexOffset + i));
 				}
-				vertexOffset += blockComponent.positions.length / 3;
-				indexOffset += blockComponent.positions.length / 3;
+
+				vertexOffset += newPositions.length / 3;
+				indexOffset += newPositions.length / 3;
 			}
+
+			geometry.setAttribute(
+				"position",
+				new THREE.BufferAttribute(positions, 3)
+			);
+			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
 			geometry.setIndex(indices);
 
 			const mesh = new THREE.Mesh(geometry, material);

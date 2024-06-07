@@ -57,7 +57,7 @@ export class WorldMeshBuilder {
 
 	public async getChunkMesh(
 		chunk: any,
-		_offset: { x: number; y: number; z: number }
+		offset: { x: number; y: number; z: number }
 	) {
 		const maxBlocksAllowed = 1000000;
 
@@ -75,7 +75,7 @@ export class WorldMeshBuilder {
 		};
 		let start;
 
-		// const offsetValue = offset ?? { x: 0, y: 0, z: 0 };
+		const offsetValue = offset ?? { x: 0, y: 0, z: 0 };
 		const components = {} as any;
 		for (let i = 0; i < chunk.length; i++) {
 			if (count > maxBlocksAllowed) {
@@ -84,9 +84,9 @@ export class WorldMeshBuilder {
 
 			const pos = chunk[i];
 			let { x, y, z } = pos;
-			// x += offsetValue.x;
-			// y += offsetValue.y;
-			// z += offsetValue.z;
+			x += offsetValue.x;
+			y += offsetValue.y;
+			z += offsetValue.z;
 
 			const block = this.schematic.getBlock(pos);
 			if (INVISIBLE_BLOCKS.has(block.type)) {
@@ -125,65 +125,6 @@ export class WorldMeshBuilder {
 
 		console.log("Chunk times", chunkTimes);
 		return this.ressourceLoader.createMeshesFromBlocks(components);
-	}
-
-	public static addBlockToMaterialGroup(
-		materialGroups: any,
-		blockComponent: any,
-		occludedFacesInt: number,
-		x: number,
-		y: number,
-		z: number,
-		offset: { x: number; y: number; z: number },
-		chunkTimes: any
-	) {
-		const { materialId, positions, normals, uvs, face } = blockComponent;
-
-		let start = performance.now();
-		const occludedFaces = occludedFacesIntToList(occludedFacesInt);
-		chunkTimes.material_group.occluded_faces += performance.now() - start;
-
-		if (occludedFaces[face]) {
-			return;
-		}
-
-		if (!materialGroups[materialId]) {
-			materialGroups[materialId] = {
-				positions: [],
-				normals: [],
-				uvs: [],
-				colors: [],
-				indices: [],
-				count: 0,
-			};
-		}
-
-		const group = materialGroups[materialId];
-		start = performance.now();
-
-		// Using a single loop to push positions
-		for (let i = 0; i < positions.length; i += 3) {
-			group.positions.push(
-				positions[i] + x + offset.x,
-				positions[i + 1] + y + offset.y,
-				positions[i + 2] + z + offset.z
-			);
-		}
-		chunkTimes.material_group.position_push += performance.now() - start;
-
-		start = performance.now();
-		group.normals.push(...normals);
-		chunkTimes.material_group.normal_push += performance.now() - start;
-
-		start = performance.now();
-		group.uvs.push(...uvs);
-		chunkTimes.material_group.uv_push += performance.now() - start;
-
-		const indexOffset = group.count;
-		for (let i = 0; i < positions.length / 3; i += 4) {
-			group.indices.push(indexOffset + i);
-		}
-		group.count += positions.length / 3;
 	}
 
 	public isSolid(x: number, y: number, z: number) {
