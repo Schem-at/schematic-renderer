@@ -57,10 +57,9 @@ export class WorldMeshBuilder {
 
 	public async getChunkMesh(
 		chunk: any,
-		offset: { x: number; y: number; z: number }
+		_offset: { x: number; y: number; z: number }
 	) {
 		const maxBlocksAllowed = 1000000;
-		let materialGroups = {};
 
 		let count = 0;
 		let chunkTimes = {
@@ -75,26 +74,24 @@ export class WorldMeshBuilder {
 			},
 		};
 		let start;
+
+		// const offsetValue = offset ?? { x: 0, y: 0, z: 0 };
+		const components = {} as any;
 		for (let i = 0; i < chunk.length; i++) {
-			const pos = chunk[i];
 			if (count > maxBlocksAllowed) {
 				break;
 			}
 
-			const { x, y, z } = pos;
+			const pos = chunk[i];
+			let { x, y, z } = pos;
+			// x += offsetValue.x;
+			// y += offsetValue.y;
+			// z += offsetValue.z;
 
 			const block = this.schematic.getBlock(pos);
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
-			start = performance.now();
-			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
-				block,
-				pos
-			);
-
-			chunkTimes.mesh_creation += performance.now() - start;
-
 			start = performance.now();
 			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
 				block,
@@ -103,23 +100,31 @@ export class WorldMeshBuilder {
 			chunkTimes.occlusion += performance.now() - start;
 
 			start = performance.now();
+			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
+				block,
+				pos
+			);
+			chunkTimes.mesh_creation += performance.now() - start;
+
 			for (const key in blockComponents) {
-				WorldMeshBuilder.addBlockToMaterialGroup(
-					materialGroups,
-					blockComponents[key],
-					occludedFaces,
-					x,
-					y,
-					z,
-					offset ?? { x: 0, y: 0, z: 0 },
-					chunkTimes
-				);
+				const materialId = blockComponents[key].materialId;
+
+				const blockComponent = blockComponents[key];
+				if (occludedFacesIntToList(occludedFaces)[blockComponent.face]) {
+					continue;
+				}
+				if (!components[materialId]) {
+					components[materialId] = [];
+				}
+				components[materialId].push([blockComponents[key], [x, y, z]]);
 			}
+
 			chunkTimes.material_group.total_time += performance.now() - start;
 			count++;
 		}
+
 		console.log("Chunk times", chunkTimes);
-		return this.ressourceLoader.createMeshesFromMaterialGroups(materialGroups);
+		return this.ressourceLoader.createMeshesFromBlocks(components);
 	}
 
 	public static addBlockToMaterialGroup(
@@ -133,12 +138,15 @@ export class WorldMeshBuilder {
 		chunkTimes: any
 	) {
 		const { materialId, positions, normals, uvs, face } = blockComponent;
+
 		let start = performance.now();
 		const occludedFaces = occludedFacesIntToList(occludedFacesInt);
 		chunkTimes.material_group.occluded_faces += performance.now() - start;
+
 		if (occludedFaces[face]) {
 			return;
 		}
+
 		if (!materialGroups[materialId]) {
 			materialGroups[materialId] = {
 				positions: [],
@@ -149,29 +157,33 @@ export class WorldMeshBuilder {
 				count: 0,
 			};
 		}
+
+		const group = materialGroups[materialId];
 		start = performance.now();
+
+		// Using a single loop to push positions
 		for (let i = 0; i < positions.length; i += 3) {
-			const positionX = positions[i] + x + offset.x;
-			const positionY = positions[i + 1] + y + offset.y;
-			const positionZ = positions[i + 2] + z + offset.z;
-			materialGroups[materialId].positions.push(
-				positionX,
-				positionY,
-				positionZ
+			group.positions.push(
+				positions[i] + x + offset.x,
+				positions[i + 1] + y + offset.y,
+				positions[i + 2] + z + offset.z
 			);
 		}
 		chunkTimes.material_group.position_push += performance.now() - start;
+
 		start = performance.now();
-		materialGroups[materialId].normals.push(...normals);
+		group.normals.push(...normals);
 		chunkTimes.material_group.normal_push += performance.now() - start;
+
 		start = performance.now();
-		materialGroups[materialId].uvs.push(...uvs);
+		group.uvs.push(...uvs);
 		chunkTimes.material_group.uv_push += performance.now() - start;
-		const indexOffset = materialGroups[materialId].count;
+
+		const indexOffset = group.count;
 		for (let i = 0; i < positions.length / 3; i += 4) {
-			materialGroups[materialId].indices.push(indexOffset + i);
+			group.indices.push(indexOffset + i);
 		}
-		materialGroups[materialId].count += positions.length / 3;
+		group.count += positions.length / 3;
 	}
 
 	public isSolid(x: number, y: number, z: number) {
@@ -208,6 +220,7 @@ export class WorldMeshBuilder {
 				chunk,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
+			console.log(chunkMesh);
 			if (chunkMesh.length === 0) {
 				continue;
 			}
