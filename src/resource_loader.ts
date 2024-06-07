@@ -334,9 +334,12 @@ export class ResourceLoader {
 		group.count += positions.length / 3;
 	}
 
-	public createMeshesFromBlocks(blocks: any): THREE.Mesh[] {
+	public createMeshesFromBlocks(blocks: any, chunkTimes: any): THREE.Mesh[] {
 		const meshes: THREE.Mesh[] = [];
+		let start;
+
 		for (const [materialId, blockList] of Object.entries(blocks)) {
+			start = performance.now();
 			const material = this.materialMap.get(materialId);
 			let totalVertices = 0;
 			let totalIndices = 0;
@@ -345,38 +348,63 @@ export class ResourceLoader {
 				totalVertices += block[0].positions.length / 3;
 				totalIndices += block[0].positions.length / 3;
 			}
+			chunkTimes.chunkMeshCreation.materialRetrieval +=
+				performance.now() - start;
 
+			start = performance.now();
 			const geometry = new THREE.BufferGeometry();
 			const positions = new Float32Array(totalVertices * 3);
 			const normals = new Float32Array(totalVertices * 3);
 			const uvs = new Float32Array(totalVertices * 2);
+			chunkTimes.chunkMeshCreation.arrayCreation += performance.now() - start;
+
 			const indices: number[] = [];
-			let vertexOffset = 0;
 			let indexOffset = 0;
 
 			for (const block of blockList as any) {
+				start = performance.now();
 				const blockComponent = block[0];
 				const worldPos = block[1];
 
 				const newPositions = blockComponent.positions.slice();
+				chunkTimes.chunkMeshCreation.slicing += performance.now() - start;
+
+				start = performance.now();
 				for (let i = 0; i < newPositions.length; i += 3) {
 					newPositions[i] += worldPos[0];
 					newPositions[i + 1] += worldPos[1];
 					newPositions[i + 2] += worldPos[2];
 				}
+				chunkTimes.chunkMeshCreation.positionTranslation +=
+					performance.now() - start;
 
-				positions.set(newPositions, vertexOffset * 3);
-				normals.set(blockComponent.normals, vertexOffset * 3);
-				uvs.set(blockComponent.uvs, vertexOffset * 2);
+				start = performance.now();
+				positions.set(newPositions, indexOffset * 3);
+				normals.set(blockComponent.normals, indexOffset * 3);
+				uvs.set(blockComponent.uvs, indexOffset * 2);
+				chunkTimes.chunkMeshCreation.arrayAllocation +=
+					performance.now() - start;
 
-				for (let i = 0; i < blockComponent.positions.length / 3; i += 4) {
-					indices.push(...this.recalculateIndex(indexOffset + i));
+				start = performance.now();
+				for (let i = 0; i < newPositions.length / 3; i += 4) {
+					indices.push(
+						...[
+							indexOffset + i,
+							indexOffset + i + 1,
+							indexOffset + i + 2,
+							indexOffset + i + 2,
+							indexOffset + i + 1,
+							indexOffset + i + 3,
+						]
+					);
 				}
+				chunkTimes.chunkMeshCreation.indexCalculation +=
+					performance.now() - start;
 
-				vertexOffset += newPositions.length / 3;
 				indexOffset += newPositions.length / 3;
 			}
 
+			start = performance.now();
 			geometry.setAttribute(
 				"position",
 				new THREE.BufferAttribute(positions, 3)
@@ -384,7 +412,8 @@ export class ResourceLoader {
 			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
 			geometry.setIndex(indices);
-
+			chunkTimes.chunkMeshCreation.geometryCreation +=
+				performance.now() - start;
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;

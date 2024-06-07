@@ -63,18 +63,22 @@ export class WorldMeshBuilder {
 
 		let count = 0;
 		let chunkTimes = {
-			mesh_creation: 0,
+			blockMeshCreation: 0,
+			blockMeshRetrieval: 0,
 			occlusion: 0,
-			material_group: {
+			chunkMeshCreation: {
 				total_time: 0,
-				occluded_faces: 0,
-				position_push: 0,
-				normal_push: 0,
-				uv_push: 0,
+				arrayCreation: 0,
+				arrayAllocation: 0,
+				indexCalculation: 0,
+				vertexTranslation: 0,
+				geometryCreation: 0,
+				materialRetrieval: 0,
+				slicing: 0,
 			},
 		};
 		let start;
-
+		let startTotal = performance.now();
 		const offsetValue = offset ?? { x: 0, y: 0, z: 0 };
 		const components = {} as any;
 		for (let i = 0; i < chunk.length; i++) {
@@ -93,9 +97,8 @@ export class WorldMeshBuilder {
 				continue;
 			}
 			start = performance.now();
-			const occludedFaces = this.blockMeshBuilder.getOccludedFacesForBlock(
-				block,
-				pos
+			const occludedFaces = occludedFacesIntToList(
+				this.blockMeshBuilder.getOccludedFacesForBlock(block, pos)
 			);
 			chunkTimes.occlusion += performance.now() - start;
 
@@ -104,13 +107,13 @@ export class WorldMeshBuilder {
 				block,
 				pos
 			);
-			chunkTimes.mesh_creation += performance.now() - start;
+			chunkTimes.blockMeshRetrieval += performance.now() - start;
 
 			for (const key in blockComponents) {
 				const materialId = blockComponents[key].materialId;
 
 				const blockComponent = blockComponents[key];
-				if (occludedFacesIntToList(occludedFaces)[blockComponent.face]) {
+				if (occludedFaces[blockComponent.face]) {
 					continue;
 				}
 				if (!components[materialId]) {
@@ -119,12 +122,20 @@ export class WorldMeshBuilder {
 				components[materialId].push([blockComponents[key], [x, y, z]]);
 			}
 
-			chunkTimes.material_group.total_time += performance.now() - start;
+			chunkTimes.blockMeshCreation += performance.now() - start;
 			count++;
 		}
 
+		start = performance.now();
+		const meshes = this.ressourceLoader.createMeshesFromBlocks(
+			components,
+			chunkTimes
+		);
+		chunkTimes.chunkMeshCreation.total_time = performance.now() - start;
+		console.log("total time", performance.now() - startTotal);
+
 		console.log("Chunk times", chunkTimes);
-		return this.ressourceLoader.createMeshesFromBlocks(components);
+		return meshes;
 	}
 
 	public isSolid(x: number, y: number, z: number) {
@@ -161,13 +172,13 @@ export class WorldMeshBuilder {
 				chunk,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
-			console.log(chunkMesh);
 			if (chunkMesh.length === 0) {
 				continue;
 			}
 			this.renderer.scene.add(...chunkMesh);
 
 			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
+			break; // for debugging we will focus on only the first chunk
 		}
 	}
 }
