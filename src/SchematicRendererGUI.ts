@@ -13,7 +13,7 @@ export class SchematicRendererGUI {
 		const settings = {
 			rotationSpeed: 0.01,
 			zoom: 1,
-			showGrid: true,
+			showGrid: false,
 			backgroundColor: "#000000",
 			backgroundAlpha: 1,
 			exportUSDZ: () => {
@@ -25,19 +25,12 @@ export class SchematicRendererGUI {
 					1080
 				);
 			},
-			takeRotationGif: () => {
-				this.schematicRenderer.schematicMediaCapture.downloadRotationGif(
-					1920,
-					1080,
-					30,
-					10
-				);
-			},
-			takeRotationWebM: () => {
+
+			downloadRotationWebM: () => {
 				this.schematicRenderer.schematicMediaCapture.downloadRotationWebM(
 					1920,
 					1080,
-					30,
+					24,
 					1
 				);
 			},
@@ -83,7 +76,6 @@ export class SchematicRendererGUI {
 			});
 		gui.add(settings, "exportUSDZ").name("Export USDZ");
 		gui.add(settings, "takeScreenshot").name("Take Screenshot");
-		gui.add(settings, "takeRotationGif").name("Take Rotation GIF");
 		gui.add(settings, "takeRotationWebM").name("Take Rotation WebM");
 	}
 }

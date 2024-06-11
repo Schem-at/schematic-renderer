@@ -38,9 +38,7 @@ export class Renderer {
 		);
 		this.setupScene(options);
 
-		this.addGrid();
-
-		this.setBackgroundColor("#000000");
+		this.setBackgroundColor("#000000", 1);
 		// const axesHelper = new THREE.AxesHelper(50);
 		// this.scene.add(axesHelper);
 	}
@@ -122,8 +120,6 @@ export class Renderer {
 	}
 
 	setBackgroundColor(color: string, alpha: number = 1) {
-		//split the argument into RGB values and a alpha value
-
 		this.renderer.setClearColor(color, alpha);
 	}
 
@@ -223,71 +219,6 @@ export class Renderer {
 		return screenshot;
 	}
 
-	takeRotationGif(
-		resolutionX: number,
-		resolutionY: number,
-		centerPosition: THREE.Vector3,
-		distance: number,
-		elevation: number,
-		frameRate: number,
-		duration: number,
-		angle: number = 360
-	) {
-		const angleRad = (angle * Math.PI) / 180;
-		const oldCanvasWidth = this.canvas.clientWidth;
-		const oldCanvasHeight = this.canvas.clientHeight;
-		const tempCamera = this.camera.clone();
-		if (tempCamera instanceof THREE.OrthographicCamera) {
-			const aspect = resolutionX / resolutionY;
-			tempCamera.left = -distance * aspect;
-			tempCamera.right = distance * aspect;
-			tempCamera.top = distance;
-			tempCamera.bottom = -distance;
-		} else {
-			tempCamera.aspect = resolutionX / resolutionY;
-		}
-		tempCamera.updateProjectionMatrix();
-		this.renderer.setSize(resolutionX, resolutionY);
-		const gif = new GIF({
-			workers: 4,
-			quality: 10,
-			width: resolutionX,
-			height: resolutionY,
-			transparent: 0x000000,
-		});
-		const frames = Math.floor(frameRate * duration);
-		const step = angleRad / frames;
-		console.log("Rendering gif");
-		for (let i = 0; i < frames; i++) {
-			console.log((i / frames) * 100 + "%");
-			const currentAngle = step * i;
-			tempCamera.position.set(
-				centerPosition.x + distance * Math.cos(currentAngle),
-				centerPosition.y + distance * Math.sin(elevation),
-				centerPosition.z + distance * Math.sin(currentAngle)
-			);
-			tempCamera.lookAt(centerPosition);
-			this.composer.render();
-			gif.addFrame(this.renderer.domElement, {
-				copy: true,
-				delay: 1000 / frameRate,
-			});
-		}
-		this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
-		this.composer.render();
-		console.log("Rendering gif done");
-		return new Promise((resolve, _reject) => {
-			gif.on("finished", function (blob: any) {
-				const reader = new FileReader();
-				reader.onload = function () {
-					resolve(reader.result);
-				};
-				reader.readAsDataURL(blob);
-			});
-			gif.render();
-		});
-	}
-
 	takeRotationWebM(
 		resolutionX: number,
 		resolutionY: number,
@@ -297,22 +228,11 @@ export class Renderer {
 		frameRate: number,
 		duration: number,
 		angle: number = 360
-	) {
+	): Promise<Blob> {
 		const angleRad = (angle * Math.PI) / 180;
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
-		const tempCamera = this.camera.clone();
-		// if the camera is orthographic we need to set the aspect ratio manually
-		if (tempCamera instanceof THREE.OrthographicCamera) {
-			const aspect = resolutionX / resolutionY;
-			tempCamera.left = -distance * aspect;
-			tempCamera.right = distance * aspect;
-			tempCamera.top = distance;
-			tempCamera.bottom = -distance;
-		} else {
-			tempCamera.aspect = resolutionX / resolutionY;
-		}
-		tempCamera.updateProjectionMatrix();
+
 		this.renderer.setSize(resolutionX, resolutionY);
 		const frames = Math.floor(frameRate * duration);
 		const step = angleRad / frames;
@@ -321,38 +241,33 @@ export class Renderer {
 			quality: 1,
 			transparent: true,
 		});
-		const tempCanvas = document.createElement("canvas");
-		tempCanvas.width = resolutionX;
-		tempCanvas.height = resolutionY;
-		console.log(distance, elevation);
-		return new Promise((resolve, _reject) => {
+
+		return new Promise((resolve, reject) => {
 			const renderStep = (i: number) => {
 				requestAnimationFrame(() => {
-					console.log(distance, elevation);
 					const currentAngle = step * i;
-					tempCamera.position.set(
+					this.camera.position.set(
 						centerPosition.x + distance * Math.cos(currentAngle),
 						centerPosition.y + distance * Math.sin(elevation),
 						centerPosition.z + distance * Math.sin(currentAngle)
 					);
-					tempCamera.lookAt(centerPosition);
+					this.camera.lookAt(centerPosition);
 					this.composer.render();
-					const tempContext = tempCanvas.getContext("2d");
+					const tempContext = this.canvas.getContext("2d");
 					tempContext?.clearRect(0, 0, resolutionX, resolutionY);
 					tempContext?.drawImage(this.renderer.domElement, 0, 0);
-					videoWriter.addFrame(tempCanvas);
+					videoWriter.addFrame(this.canvas);
 					if (i < frames) {
 						renderStep(i + 1);
 					} else {
 						this.renderer.setSize(oldCanvasWidth, oldCanvasHeight);
 						this.composer.render();
-						videoWriter.complete().then((blob: any) => {
-							const reader = new FileReader();
-							reader.onload = function () {
-								resolve(reader.result);
-							};
-							reader.readAsDataURL(blob);
-						});
+						videoWriter
+							.complete()
+							.then((blob: Blob) => {
+								resolve(blob); // Resolve with the Blob directly
+							})
+							.catch(reject);
 					}
 				});
 			};

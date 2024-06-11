@@ -21,7 +21,7 @@ export class SchematicRenderer {
 	worldMeshBuilder: WorldMeshBuilder | undefined;
 	jarUrl: string | string[] | undefined;
 
-	schematicRendererGUI: SchematicRendererGUI;
+	schematicRendererGUI: SchematicRendererGUI | null = null;
 	schematicRendererCore: SchematicRendererCore;
 	schematicMediaCapture: SchematicMediaCapture;
 	schematicExporter: SchematicExporter;
@@ -40,13 +40,11 @@ export class SchematicRenderer {
 			this.materialMap,
 			this.renderer
 		);
-		this.schematicRendererGUI = new SchematicRendererGUI(this);
 		this.schematicRendererCore = new SchematicRendererCore(
 			this.renderer,
 			this.resourceLoader,
 			this.worldMeshBuilder
 		);
-
 		this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
 		this.schematicExporter = new SchematicExporter(this.renderer);
 
@@ -59,10 +57,15 @@ export class SchematicRenderer {
 
 		this.loadedSchematic = loadSchematic(parsedNbt);
 		this.materialMap = new Map();
+		this.renderer.schematic = this.loadedSchematic;
 
 		await this.resourceLoader.initialize();
 
 		await this.schematicRendererCore.render(this.loadedSchematic);
+
+		if (this.options?.debugGUI) {
+			this.schematicRendererGUI = new SchematicRendererGUI(this);
+		}
 	}
 
 	async updateSchematic(schematicData: string) {
@@ -70,45 +73,35 @@ export class SchematicRenderer {
 		await this.schematicRendererCore.updateSchematic(schematicData);
 	}
 
-	async takeScreenshot(resolutionX: number, resolutionY: number) {
-		return this.schematicMediaCapture.takeScreenshot(resolutionX, resolutionY);
-	}
-
-	async takeRotationGif(
-		resolutionX: number,
-		resolutionY: number,
-		frameRate: number,
-		duration: number,
-		angle: number = 360
-	) {
-		return this.schematicMediaCapture.takeRotationGif(
-			resolutionX,
-			resolutionY,
-			this.loadedSchematic,
-			frameRate,
-			duration,
-			angle
-		);
-	}
-
-	async takeRotationWebM(
-		resolutionX: number,
-		resolutionY: number,
-		frameRate: number,
-		duration: number,
-		angle: number = 360
-	) {
-		return this.schematicMediaCapture.takeRotationWebM(
-			resolutionX,
-			resolutionY,
-			this.loadedSchematic,
-			frameRate,
-			duration,
-			angle
-		);
-	}
 	async exportUsdz() {
 		return this.schematicExporter.exportUsdz();
+	}
+
+	async downloadScreenshot(resolutionX: number, resolutionY: number) {
+		return this.schematicMediaCapture.downloadScreenshot(
+			resolutionX,
+			resolutionY
+		);
+	}
+
+	async getScreenshot(resolutionX: number, resolutionY: number) {
+		return this.schematicMediaCapture.getScreenshot(resolutionX, resolutionY);
+	}
+
+	async getRotationWebM(
+		resolutionX: number,
+		resolutionY: number,
+		frameRate: number,
+		duration: number,
+		angle: number = 360
+	) {
+		return this.schematicMediaCapture.getRotationWebM(
+			resolutionX,
+			resolutionY,
+			frameRate,
+			duration,
+			angle
+		);
 	}
 
 	updateZoom(value: number) {

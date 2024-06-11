@@ -358,18 +358,16 @@ export class ResourceLoader {
 			const uvs = new Float32Array(totalVertices * 2);
 			chunkTimes.chunkMeshCreation.arrayCreation += performance.now() - start;
 
-			// const blockCount = (blockList as any).length;
-
-			const indices: Uint16Array = new Uint16Array(totalIndices);
+			// const indices: Uint16Array = new Uint16Array(totalIndices);
+			const indices: number[] = [];
 
 			let indexOffset = 0;
-			let offset = 0;
+			let iterationOffset = 0;
 			for (const block of blockList as any) {
-				start = performance.now();
 				const blockComponent = block[0];
 				const worldPos = block[1];
-
-				const newPositions = new Float32Array(blockComponent.positions);
+				start = performance.now();
+				const newPositions = blockComponent.positions.slice();
 				chunkTimes.chunkMeshCreation.slicing += performance.now() - start;
 
 				start = performance.now();
@@ -390,13 +388,22 @@ export class ResourceLoader {
 
 				start = performance.now();
 				for (let i = 0; i < newPositions.length / 3; i += 4) {
-					const recalculatedIndex = this.recalculateIndex(indexOffset + i);
-					indices.set(recalculatedIndex, offset);
-					offset += 6;
+					indices.push(
+						...[
+							indexOffset + i,
+							indexOffset + i + 1,
+							indexOffset + i + 2,
+							indexOffset + i + 2,
+							indexOffset + i + 1,
+							indexOffset + i + 3,
+						]
+					);
+					// indices.set(this.recalculateIndex(indexOffset + i), iterationOffset);
+					iterationOffset += 6;
 				}
 				chunkTimes.chunkMeshCreation.indexCalculation +=
 					performance.now() - start;
-				console.log(indexOffset);
+
 				indexOffset += newPositions.length / 3;
 			}
 
@@ -407,8 +414,8 @@ export class ResourceLoader {
 			);
 			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-			// geometry.setIndex(indices);
-			geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+			geometry.setIndex(indices);
+			// geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 			chunkTimes.chunkMeshCreation.geometryCreation +=
 				performance.now() - start;
 			const mesh = new THREE.Mesh(geometry, material);

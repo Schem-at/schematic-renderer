@@ -12,6 +12,7 @@ export class WorldMeshBuilder {
 	blockMeshBuilder: any;
 	ressourceLoader: any;
 	renderer: any;
+	worldMeshes: any[] = [];
 	constructor(
 		ressourceLoader: any,
 		materialMap: Map<string, THREE.Material>,
@@ -176,8 +177,9 @@ export class WorldMeshBuilder {
 				continue;
 			}
 			this.renderer.scene.add(...chunkMesh);
-
+			this.worldMeshes.push(chunkMesh);
 			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
 		}
+		return this.worldMeshes;
 	}
 }
