@@ -230,6 +230,11 @@ export class Renderer {
 		angle: number = 360
 	): Promise<Blob> {
 		const angleRad = (angle * Math.PI) / 180;
+		// compute the start angle based on the camera position
+		const startAngle = Math.atan2(
+			this.camera.position.z - centerPosition.z,
+			this.camera.position.x - centerPosition.x
+		);
 		const oldCanvasWidth = this.canvas.clientWidth;
 		const oldCanvasHeight = this.canvas.clientHeight;
 
@@ -247,9 +252,9 @@ export class Renderer {
 				requestAnimationFrame(() => {
 					const currentAngle = step * i;
 					this.camera.position.set(
-						centerPosition.x + distance * Math.cos(currentAngle),
+						centerPosition.x + distance * Math.cos(currentAngle + startAngle),
 						centerPosition.y + distance * Math.sin(elevation),
-						centerPosition.z + distance * Math.sin(currentAngle)
+						centerPosition.z + distance * Math.sin(currentAngle + startAngle)
 					);
 					this.camera.lookAt(centerPosition);
 					this.composer.render();

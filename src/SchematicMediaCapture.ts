@@ -12,13 +12,13 @@ export class SchematicMediaCapture {
 		return screenshot;
 	}
 
-	private calculateCameraParameters(_schematic: any) {
+	private calculateCameraParameters(schematic: any) {
 		// const centerPosition = new THREE.Vector3(
 		// 	schematic.width / 2,
 		// 	schematic.height / 2,
 		// 	schematic.length / 2
 		// );
-		const centerPosition = new THREE.Vector3(0, 0, 0);
+		const centerPosition = new THREE.Vector3(0, schematic.height / 2, 0);
 		const distance = this.renderer.camera.position.distanceTo(centerPosition);
 		const elevation = Math.asin(
 			(this.renderer.camera.position.y - centerPosition.y) / distance
