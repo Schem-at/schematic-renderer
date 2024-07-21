@@ -1,2 +1,1 @@
-import { SchematicRenderer } from "./SchematicRenderer";
-export default SchematicRenderer;
+export { SchematicRenderer } from "./SchematicRenderer";

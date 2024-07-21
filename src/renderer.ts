@@ -10,6 +10,36 @@ import * as POSTPROCESSING from "postprocessing";
 // @ts-ignore
 import { SSAOEffect } from "realism-effects";
 
+class GammaCorrectionEffect extends POSTPROCESSING.Effect {
+	constructor(gamma = 1.7) {
+		super(
+			"GammaCorrectionEffect",
+			`
+            uniform float gamma;
+
+            void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+                vec3 color = pow(inputColor.rgb, vec3(1.0 / gamma));
+                outputColor = vec4(color, inputColor.a);
+            }
+        `,
+			{
+				blendFunction: POSTPROCESSING.BlendFunction.NORMAL,
+				uniforms: new Map([["gamma", new THREE.Uniform(gamma)]]),
+			}
+		);
+	}
+
+	setGamma(value: number) {
+		this.uniforms.get("gamma")!.value = value;
+	}
+}
+
+interface Light {
+	id: string;
+	type: "ambient" | "directional" | "point" | "spot";
+	light: THREE.Light;
+}
+
 export class Renderer {
 	canvas: HTMLCanvasElement;
 	renderer: THREE.WebGLRenderer;
@@ -18,14 +48,18 @@ export class Renderer {
 	controls: OrbitControls;
 	composer: POSTPROCESSING.EffectComposer;
 	schematic: any;
+	gammaCorrectionEffect: GammaCorrectionEffect;
+	lights: Light[] = [];
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;
 		this.renderer = new THREE.WebGLRenderer({
+			// antialias: true,
 			depth: false,
 			canvas: this.canvas,
 			alpha: true,
 		});
+		this.gammaCorrectionEffect = new GammaCorrectionEffect(1.7);
 		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
@@ -161,31 +195,133 @@ export class Renderer {
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 		this.createLights();
 
-		// const hbaoEffect = new HBAOEffect(this.composer, this.camera, this.scene);
 		const ssaoEffect = new SSAOEffect(this.composer, this.camera, this.scene);
 		const smaaEffect = new POSTPROCESSING.SMAAEffect();
 		const effectPass = new POSTPROCESSING.EffectPass(
 			this.camera,
 			ssaoEffect,
-			smaaEffect
+			smaaEffect,
+			this.gammaCorrectionEffect
 		);
 
 		this.composer.addPass(effectPass);
 	}
 
-	createLights() {
-		const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-		ambientLight.intensity = 0.9;
-		this.scene.add(ambientLight);
-
-		const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-		directionalLight.position.set(20, 20, -20);
-		directionalLight.intensity = 1;
-		directionalLight.castShadow = true;
-		directionalLight.shadow.bias = -0.01;
-		this.scene.add(directionalLight);
+	updateGammaCorrection(value: number) {
+		this.gammaCorrectionEffect.setGamma(value);
 	}
 
+	createLights() {
+		// Create default ambient light
+		this.addLight("ambient", { color: 0xffffff, intensity: 0.5 });
+
+		// Create default directional light
+		this.addLight("directional", {
+			color: 0xffffff,
+			intensity: 1,
+			position: new THREE.Vector3(20, 20, -20),
+			castShadow: true,
+		});
+	}
+
+	addLight(
+		type: "ambient" | "directional" | "point" | "spot",
+		options: any
+	): string {
+		let light: THREE.Light;
+		const id = `light_${this.lights.length}`;
+
+		switch (type) {
+			case "ambient":
+				light = new THREE.AmbientLight(options.color, options.intensity);
+				break;
+			case "directional":
+				light = new THREE.DirectionalLight(options.color, options.intensity);
+				if (options.position)
+					(light as THREE.DirectionalLight).position.copy(options.position);
+				if (options.castShadow)
+					(light as THREE.DirectionalLight).castShadow = true;
+				break;
+			case "point":
+				light = new THREE.PointLight(
+					options.color,
+					options.intensity,
+					options.distance,
+					options.decay
+				);
+				if (options.position)
+					(light as THREE.PointLight).position.copy(options.position);
+				break;
+			case "spot":
+				light = new THREE.SpotLight(
+					options.color,
+					options.intensity,
+					options.distance,
+					options.angle,
+					options.penumbra,
+					options.decay
+				);
+				if (options.position)
+					(light as THREE.SpotLight).position.copy(options.position);
+				break;
+		}
+
+		this.scene.add(light);
+		this.lights.push({ id, type, light });
+		return id;
+	}
+
+	removeLight(id: string) {
+		const index = this.lights.findIndex((light) => light.id === id);
+		if (index !== -1) {
+			const { light } = this.lights[index];
+			this.scene.remove(light);
+			this.lights.splice(index, 1);
+		}
+	}
+
+	updateLight(id: string, options: any) {
+		const light = this.lights.find((light) => light.id === id);
+		if (light) {
+			if (options.color) light.light.color.set(options.color);
+			if (options.intensity !== undefined)
+				light.light.intensity = options.intensity;
+
+			if (
+				light.type === "directional" ||
+				light.type === "point" ||
+				light.type === "spot"
+			) {
+				if (options.position)
+					(
+						light.light as
+							| THREE.DirectionalLight
+							| THREE.PointLight
+							| THREE.SpotLight
+					).position.copy(options.position);
+			}
+
+			if (light.type === "point" || light.type === "spot") {
+				if (options.distance !== undefined)
+					(light.light as THREE.PointLight | THREE.SpotLight).distance =
+						options.distance;
+				if (options.decay !== undefined)
+					(light.light as THREE.PointLight | THREE.SpotLight).decay =
+						options.decay;
+			}
+
+			if (light.type === "spot") {
+				if (options.angle !== undefined)
+					(light.light as THREE.SpotLight).angle = options.angle;
+				if (options.penumbra !== undefined)
+					(light.light as THREE.SpotLight).penumbra = options.penumbra;
+			}
+		}
+	}
+
+	getLights(): Light[] {
+		return this.lights;
+	}
 	render() {
 		this.composer.render();
 	}

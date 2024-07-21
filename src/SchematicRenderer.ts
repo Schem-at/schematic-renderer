@@ -107,4 +107,27 @@ export class SchematicRenderer {
 	updateZoom(value: number) {
 		this.renderer.updateZoom(value);
 	}
+
+	updateGammaCorrection(value: number) {
+		this.renderer.updateGammaCorrection(value);
+	}
+
+	addLight(
+		type: "ambient" | "directional" | "point" | "spot",
+		options: any
+	): string {
+		return this.renderer.addLight(type, options);
+	}
+
+	removeLight(id: string) {
+		this.renderer.removeLight(id);
+	}
+
+	updateLight(id: string, options: any) {
+		this.renderer.updateLight(id, options);
+	}
+
+	getLights() {
+		return this.renderer.getLights();
+	}
 }

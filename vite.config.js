@@ -13,15 +13,16 @@ export default defineConfig({
     lib: {
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'SchematicRenderer',
-      fileName: 'schematic-renderer',
-      formats: ['umd'],
+      fileName: (format) => `schematic-renderer.${format}.js`,
+      formats: ['umd', 'es'],
     },
     sourcemap: true,
     rollupOptions: {
-      external: ['buffer'],
+      external: ['buffer', 'three'],
       output: {
         globals: {
           buffer: 'Buffer',
+          three: 'THREE',
         },
       },
     },
