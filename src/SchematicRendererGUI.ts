@@ -20,7 +20,7 @@ export class SchematicRendererGUI {
 			showGrid: false,
 			backgroundColor: "#000000",
 			backgroundAlpha: 1,
-			gammaCorrection: 1.7,
+			gammaCorrection: 0.65,
 			exportUSDZ: () => {
 				this.schematicRenderer.exportUsdz();
 			},

@@ -10,8 +10,10 @@ import * as POSTPROCESSING from "postprocessing";
 // @ts-ignore
 import { SSAOEffect } from "realism-effects";
 
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
+
 class GammaCorrectionEffect extends POSTPROCESSING.Effect {
-	constructor(gamma = 1.7) {
+	constructor(gamma = 0.65) {
 		super(
 			"GammaCorrectionEffect",
 			`
@@ -50,6 +52,7 @@ export class Renderer {
 	schematic: any;
 	gammaCorrectionEffect: GammaCorrectionEffect;
 	lights: Light[] = [];
+	pmremGenerator: THREE.PMREMGenerator;
 
 	constructor(canvas: HTMLCanvasElement, options: any) {
 		this.canvas = canvas;
@@ -59,7 +62,7 @@ export class Renderer {
 			canvas: this.canvas,
 			alpha: true,
 		});
-		this.gammaCorrectionEffect = new GammaCorrectionEffect(1.7);
+		this.gammaCorrectionEffect = new GammaCorrectionEffect(0.65);
 		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
@@ -70,6 +73,7 @@ export class Renderer {
 		this.composer.addPass(
 			new POSTPROCESSING.RenderPass(this.scene, this.camera)
 		);
+		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 		this.setupScene(options);
 
 		this.setBackgroundColor("#000000", 1);
@@ -190,10 +194,41 @@ export class Renderer {
 		}
 	}
 
+	setupHDRIBackground(hdriPath: string, backgroundOnly: boolean = true) {
+		const hdriLoader = new RGBELoader();
+		hdriLoader.load(
+			hdriPath,
+			(texture) => {
+				const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
+				texture.dispose();
+
+				if (backgroundOnly) {
+					// Use HDRI as background only
+					const backgroundTexture = new THREE.WebGLCubeRenderTarget(
+						1024
+					).fromEquirectangularTexture(this.renderer, texture);
+					this.scene.background = backgroundTexture.texture;
+				} else {
+					// Use HDRI for both background and environment lighting
+					this.scene.environment = envMap;
+					this.scene.background = envMap;
+				}
+
+				this.pmremGenerator.dispose();
+			},
+			undefined,
+			(error) => {
+				console.error("An error occurred while loading the HDRI:", error);
+			}
+		);
+	}
+
 	setupScene(_options: any) {
 		this.renderer.shadowMap.enabled = true;
 		this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 		this.createLights();
+
+		this.setupHDRIBackground("/hdr/minecraft_day.hdr");
 
 		const ssaoEffect = new SSAOEffect(this.composer, this.camera, this.scene);
 		const smaaEffect = new POSTPROCESSING.SMAAEffect();
@@ -213,7 +248,7 @@ export class Renderer {
 
 	createLights() {
 		// Create default ambient light
-		this.addLight("ambient", { color: 0xffffff, intensity: 0.5 });
+		this.addLight("ambient", { color: 0xffffff, intensity: 2 });
 
 		// Create default directional light
 		this.addLight("directional", {

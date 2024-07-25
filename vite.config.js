@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill'
+import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
+import inject from '@rollup/plugin-inject';
 import path from 'path';
 
 export default defineConfig({
@@ -18,30 +19,35 @@ export default defineConfig({
     },
     sourcemap: true,
     rollupOptions: {
-      external: ['buffer', 'three'],
+      external: ['three'],
       output: {
         globals: {
-          buffer: 'Buffer',
           three: 'THREE',
         },
       },
+      plugins: [
+        inject({
+          Buffer: ['buffer', 'Buffer'],
+        }),
+      ],
     },
   },
+  plugins: [
+    viteCommonjs(),
+  ],
   resolve: {
     alias: {
       buffer: 'buffer',
     },
+  },
+  define: {
+    'global': 'globalThis',
   },
   optimizeDeps: {
     esbuildOptions: {
       define: {
         global: 'globalThis'
       },
-      plugins: [
-        NodeGlobalsPolyfillPlugin({
-          buffer: true
-        })
-      ]
     }
   }
 });

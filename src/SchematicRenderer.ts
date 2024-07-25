@@ -9,7 +9,6 @@ import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
 import { SchematicExporter } from "./SchematicExporter";
-
 export class SchematicRenderer {
 	canvas: HTMLCanvasElement;
 	options: any;
@@ -62,7 +61,7 @@ export class SchematicRenderer {
 		await this.resourceLoader.initialize();
 
 		await this.schematicRendererCore.render(this.loadedSchematic);
-
+		console.log(this.options);
 		if (this.options?.debugGUI) {
 			this.schematicRendererGUI = new SchematicRendererGUI(this);
 		}
