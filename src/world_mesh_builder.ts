@@ -4,8 +4,12 @@ import { BlockMeshBuilder } from "./block_mesh_builder";
 import {
 	INVISIBLE_BLOCKS,
 	TRANSPARENT_BLOCKS,
+	facingvectorToFace,
+	getDegreeRotationMatrix,
 	occludedFacesIntToList,
+	rotateVectorMatrix,
 } from "./utils";
+import { Vector } from "./types";
 
 export class WorldMeshBuilder {
 	schematic: any;
@@ -112,11 +116,26 @@ export class WorldMeshBuilder {
 
 			for (const key in blockComponents) {
 				const materialId = blockComponents[key].materialId;
-
 				const blockComponent = blockComponents[key];
-				if (occludedFaces[blockComponent.face]) {
+
+				// Check for rotation with model holder
+				const holder = (await this.ressourceLoader.getBlockMeta(block)).modelOptions.holders[0];
+				const rotationMatrix = getDegreeRotationMatrix(holder.x ?? 0, holder.y ?? 0, holder.z ?? 0);
+				const newNormal = rotateVectorMatrix(blockComponent.normals.slice(3), rotationMatrix) as Vector;
+				const newFace = facingvectorToFace(newNormal);
+
+				// TEMP
+				console.log("Before:", blockComponent.face);
+				console.log("Rotation:", {x: holder.x ?? 0, y: holder.y ?? 0, z: holder.z ?? 0});
+				console.log("Matrix:", rotationMatrix);
+				console.log("Normal & face:", newNormal, newFace);
+				console.log("");
+				if (newFace == undefined) continue;
+
+				if (occludedFaces[newFace]) {
 					continue;
 				}
+
 				if (!components[materialId]) {
 					components[materialId] = [];
 				}

@@ -39,6 +39,23 @@ export function faceToFacingVector(face: Faces): Vector {
 	}
 }
 
+export function facingvectorToFace([x, y, z]: Vector) {
+	const x_ = Math.abs(x);
+	const y_ = Math.abs(y);
+	const z_ = Math.abs(z);
+
+	if (x_ > y_ && x_ > z_) {
+		return x > 0 ? "east" : "west";
+	}
+	if (y_ > x_ && y_ > z_) {
+		return y > 0 ? "up" : "down";
+	}
+	if (z_ > x_ && z_ > y_) {
+		return z > 0 ? "south" : "north";
+	}
+	// throw new Error(`Invalid normal vector ${[x, y, z]}`);
+}
+
 export const CORNER_DICTIONARY = {
 	east: {
 		normal: [1, 0, 0],
@@ -336,7 +353,7 @@ export function faceToRotation(face: string) {
 	}
 }
 
-const rotateVectorMatrix = (vector: number[], matrix: number[][]) => {
+export function rotateVectorMatrix(vector: number[], matrix: number[][]) {
 	const offsetVector = vector.map((v, _i) => v - 0.5);
 	const result = [0, 0, 0];
 	for (let i = 0; i < 3; i++) {
