@@ -379,6 +379,31 @@ export function rotateBlockComponents(
 	return blockComponents;
 }
 
+export function getDegreeRotationMatrix(x: number, y: number, z: number) {
+	x *= (Math.PI / 180);
+	y *= (Math.PI / 180);
+	z *= (Math.PI / 180);
+	const factor = 10 ** 6;
+	const round = (n: number) => Math.round(n * factor) / factor;
+	return [
+		[
+			round(Math.cos(y) * Math.cos(z)),
+			round(Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z)),
+			round(Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z)),
+		],
+		[
+			round(Math.cos(y) * Math.sin(z)),
+			round(Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z)),
+			round(Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z)),
+		],
+		[
+			round(-Math.sin(y)),
+			round(Math.sin(x) * Math.cos(y)),
+			round(Math.cos(x) * Math.cos(y)),
+		],
+	];
+}
+
 export function isExtendedPiston(block: Block) {
 	return (
 		(block.type === "sticky_piston" || block.type === "piston") &&
