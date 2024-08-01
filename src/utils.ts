@@ -39,6 +39,23 @@ export function faceToFacingVector(face: Faces): Vector {
 	}
 }
 
+export function facingvectorToFace([x, y, z]: Vector) {
+	const x_ = Math.abs(x);
+	const y_ = Math.abs(y);
+	const z_ = Math.abs(z);
+
+	if (x_ > y_ && x_ > z_) {
+		return x > 0 ? "east" : "west";
+	}
+	if (y_ > x_ && y_ > z_) {
+		return y > 0 ? "up" : "down";
+	}
+	if (z_ > x_ && z_ > y_) {
+		return z > 0 ? "south" : "north";
+	}
+	throw new Error(`Invalid normal vector ${[x, y, z]}`);
+}
+
 export const CORNER_DICTIONARY = {
 	east: {
 		normal: [1, 0, 0],
@@ -336,18 +353,21 @@ export function faceToRotation(face: string) {
 	}
 }
 
-const rotateVectorMatrix = (vector: number[], matrix: number[][]) => {
-	const offsetVector = vector.map((v, _i) => v - 0.5);
+export function rotateVectorMatrix(vector: number[], matrix: number[][]) {
 	const result = [0, 0, 0];
 	for (let i = 0; i < 3; i++) {
 		for (let j = 0; j < 3; j++) {
-			result[i] += matrix[i][j] * offsetVector[j];
+			result[i] += matrix[i][j] * vector[j];
 		}
 	}
-	result[0] += 0.5;
-	result[1] += 0.5;
-	result[2] += 0.5;
 	return result;
+};
+
+export function rotateVectorMatrixWithOffset(vector: number[], matrix: number[][], offset: number = 0.5) {
+	const offsetVector = vector.map((v, _i) => v - offset);
+	const result = rotateVectorMatrix(offsetVector, matrix);
+	const offsetResult = result.map((v, _i) => v + offset);
+	return offsetResult;
 };
 
 export function rotateBlockComponents(
@@ -365,9 +385,9 @@ export function rotateBlockComponents(
 			const position = positions.slice(i, i + 3);
 			const normal = normals.slice(i, i + 3);
 			const uv = uvs.slice((i / 3) * 2, (i / 3) * 2 + 2);
-			const rotatedPosition = rotateVectorMatrix(position, rotation);
-			const rotatedNormal = rotateVectorMatrix(normal, rotation);
-			const rotatedUV = rotateVectorMatrix(uv, rotation);
+			const rotatedPosition = rotateVectorMatrixWithOffset(position, rotation);
+			const rotatedNormal = rotateVectorMatrixWithOffset(normal, rotation);
+			const rotatedUV = rotateVectorMatrixWithOffset(uv, rotation);
 			rotatedPositions.push(...rotatedPosition);
 			rotatedNormals.push(...rotatedNormal);
 			rotatedUVs.push(...rotatedUV);
@@ -377,6 +397,31 @@ export function rotateBlockComponents(
 		blockComponent.normals = rotatedNormals;
 	}
 	return blockComponents;
+}
+
+export function getDegreeRotationMatrix(x: number, y: number, z: number) {
+	x *= (Math.PI / 180);
+	y *= (Math.PI / 180);
+	z *= (Math.PI / 180);
+	const factor = 10 ** 6;
+	const round = (n: number) => Math.round(n * factor) / factor;
+	return [
+		[
+			round(Math.cos(y) * Math.cos(z)),
+			round(Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z)),
+			round(Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z)),
+		],
+		[
+			round(Math.cos(y) * Math.sin(z)),
+			round(Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z)),
+			round(Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z)),
+		],
+		[
+			round(-Math.sin(y)),
+			round(Math.sin(x) * Math.cos(y)),
+			round(Math.cos(x) * Math.cos(y)),
+		],
+	];
 }
 
 export function isExtendedPiston(block: Block) {

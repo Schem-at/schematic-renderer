@@ -15,6 +15,7 @@ import {
 	hashBlockForMap,
 	POSSIBLE_FACES,
 	DEFAULT_UV,
+	getDegreeRotationMatrix,
 } from "./utils";
 
 import { ResourceLoader } from "./resource_loader";
@@ -264,9 +265,9 @@ export class BlockMeshBuilder {
 			modelIndex++;
 			if (modelHolder === undefined) continue;
 			let modelHolderRotation = {
-				x: (modelHolder.x ?? 0) * (Math.PI / 180),
-				y: (modelHolder.y ?? 0) * (Math.PI / 180),
-				z: (modelHolder.z ?? 0) * (Math.PI / 180),
+				x: modelHolder.x ?? 0,
+				y: modelHolder.y ?? 0,
+				z: modelHolder.z ?? 0,
 			};
 
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
@@ -371,19 +372,7 @@ export class BlockMeshBuilder {
 			position[2] - center[2],
 		];
 
-		const rotationMatrix = [
-			[
-				Math.cos(y) * Math.cos(z),
-				Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z),
-				Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z),
-			],
-			[
-				Math.cos(y) * Math.sin(z),
-				Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z),
-				Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z),
-			],
-			[-Math.sin(y), Math.sin(x) * Math.cos(y), Math.cos(x) * Math.cos(y)],
-		];
+		const rotationMatrix = getDegreeRotationMatrix(x, y, z);
 
 		const rotatedPosition = [0, 0, 0];
 
