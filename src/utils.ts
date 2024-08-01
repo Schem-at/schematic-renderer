@@ -53,7 +53,7 @@ export function facingvectorToFace([x, y, z]: Vector) {
 	if (z_ > x_ && z_ > y_) {
 		return z > 0 ? "south" : "north";
 	}
-	// throw new Error(`Invalid normal vector ${[x, y, z]}`);
+	throw new Error(`Invalid normal vector ${[x, y, z]}`);
 }
 
 export const CORNER_DICTIONARY = {
@@ -354,17 +354,20 @@ export function faceToRotation(face: string) {
 }
 
 export function rotateVectorMatrix(vector: number[], matrix: number[][]) {
-	const offsetVector = vector.map((v, _i) => v - 0.5);
 	const result = [0, 0, 0];
 	for (let i = 0; i < 3; i++) {
 		for (let j = 0; j < 3; j++) {
-			result[i] += matrix[i][j] * offsetVector[j];
+			result[i] += matrix[i][j] * vector[j];
 		}
 	}
-	result[0] += 0.5;
-	result[1] += 0.5;
-	result[2] += 0.5;
 	return result;
+};
+
+export function rotateVectorMatrixWithOffset(vector: number[], matrix: number[][], offset: number = 0.5) {
+	const offsetVector = vector.map((v, _i) => v - offset);
+	const result = rotateVectorMatrix(offsetVector, matrix);
+	const offsetResult = result.map((v, _i) => v + offset);
+	return offsetResult;
 };
 
 export function rotateBlockComponents(
@@ -382,9 +385,9 @@ export function rotateBlockComponents(
 			const position = positions.slice(i, i + 3);
 			const normal = normals.slice(i, i + 3);
 			const uv = uvs.slice((i / 3) * 2, (i / 3) * 2 + 2);
-			const rotatedPosition = rotateVectorMatrix(position, rotation);
-			const rotatedNormal = rotateVectorMatrix(normal, rotation);
-			const rotatedUV = rotateVectorMatrix(uv, rotation);
+			const rotatedPosition = rotateVectorMatrixWithOffset(position, rotation);
+			const rotatedNormal = rotateVectorMatrixWithOffset(normal, rotation);
+			const rotatedUV = rotateVectorMatrixWithOffset(uv, rotation);
 			rotatedPositions.push(...rotatedPosition);
 			rotatedNormals.push(...rotatedNormal);
 			rotatedUVs.push(...rotatedUV);

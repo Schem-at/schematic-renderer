@@ -121,16 +121,15 @@ export class WorldMeshBuilder {
 				// Check for rotation with model holder
 				const holder = (await this.ressourceLoader.getBlockMeta(block)).modelOptions.holders[0];
 				const rotationMatrix = getDegreeRotationMatrix(holder.x ?? 0, holder.y ?? 0, holder.z ?? 0);
-				const newNormal = rotateVectorMatrix(blockComponent.normals.slice(3), rotationMatrix) as Vector;
+				const newNormal = rotateVectorMatrix(blockComponent.normals.slice(0, 3), rotationMatrix) as Vector;
 				const newFace = facingvectorToFace(newNormal);
 
 				// TEMP
-				console.log("Before:", blockComponent.face);
+				console.log("Before:", blockComponent.face, blockComponent.normals.slice(0, 3));
 				console.log("Rotation:", {x: holder.x ?? 0, y: holder.y ?? 0, z: holder.z ?? 0});
 				console.log("Matrix:", rotationMatrix);
 				console.log("Normal & face:", newNormal, newFace);
 				console.log("");
-				if (newFace == undefined) continue;
 
 				if (occludedFaces[newFace]) {
 					continue;
