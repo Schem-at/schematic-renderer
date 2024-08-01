@@ -414,8 +414,8 @@ export class Renderer {
 		const step = angleRad / frames;
 		const videoWriter = new WebMWriter({
 			frameRate: frameRate,
-			quality: 1,
-			transparent: true,
+			quality: 0.9,
+			// transparent: true,
 		});
 
 		return new Promise((resolve, reject) => {
