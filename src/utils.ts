@@ -361,14 +361,18 @@ export function rotateVectorMatrix(vector: number[], matrix: number[][]) {
 		}
 	}
 	return result;
-};
+}
 
-export function rotateVectorMatrixWithOffset(vector: number[], matrix: number[][], offset: number = 0.5) {
+export function rotateVectorMatrixWithOffset(
+	vector: number[],
+	matrix: number[][],
+	offset: number = 0.5
+) {
 	const offsetVector = vector.map((v, _i) => v - offset);
 	const result = rotateVectorMatrix(offsetVector, matrix);
 	const offsetResult = result.map((v, _i) => v + offset);
 	return offsetResult;
-};
+}
 
 export function rotateBlockComponents(
 	blockComponents: any,
@@ -400,21 +404,29 @@ export function rotateBlockComponents(
 }
 
 export function getDegreeRotationMatrix(x: number, y: number, z: number) {
-	x *= (Math.PI / 180);
-	y *= (Math.PI / 180);
-	z *= (Math.PI / 180);
+	x *= Math.PI / 180;
+	y *= Math.PI / 180;
+	z *= Math.PI / 180;
 	const factor = 10 ** 6;
 	const round = (n: number) => Math.round(n * factor) / factor;
 	return [
 		[
 			round(Math.cos(y) * Math.cos(z)),
-			round(Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z)),
-			round(Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z)),
+			round(
+				Math.sin(x) * Math.sin(y) * Math.cos(z) - Math.cos(x) * Math.sin(z)
+			),
+			round(
+				Math.cos(x) * Math.sin(y) * Math.cos(z) + Math.sin(x) * Math.sin(z)
+			),
 		],
 		[
 			round(Math.cos(y) * Math.sin(z)),
-			round(Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z)),
-			round(Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z)),
+			round(
+				Math.sin(x) * Math.sin(y) * Math.sin(z) + Math.cos(x) * Math.cos(z)
+			),
+			round(
+				Math.cos(x) * Math.sin(y) * Math.sin(z) - Math.sin(x) * Math.cos(z)
+			),
 		],
 		[
 			round(-Math.sin(y)),

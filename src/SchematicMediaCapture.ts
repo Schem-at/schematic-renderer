@@ -12,18 +12,45 @@ export class SchematicMediaCapture {
 		return screenshot;
 	}
 
-	private calculateCameraParameters(schematic: any) {
+	private calculateCameraParameters(schematics: { [key: string]: any }) {
 		// const centerPosition = new THREE.Vector3(
 		// 	schematic.width / 2,
 		// 	schematic.height / 2,
 		// 	schematic.length / 2
 		// );
-		const centerPosition = new THREE.Vector3(0, schematic.height / 2, 0);
-		const distance = this.renderer.camera.position.distanceTo(centerPosition);
-		const elevation = Math.asin(
-			(this.renderer.camera.position.y - centerPosition.y) / distance
-		);
-		console.log("centerPosition", centerPosition);
+		// const centerPosition = new THREE.Vector3(0, schematic.height / 2, 0);
+		// const distance = this.renderer.camera.position.distanceTo(centerPosition);
+		// const elevation = Math.asin(
+		// 	(this.renderer.camera.position.y - centerPosition.y) / distance
+		// );
+		// console.log("centerPosition", centerPosition);
+		// return { centerPosition, distance, elevation };
+
+		let centerPosition = new THREE.Vector3(0, 0, 0);
+		let distance = 0;
+		let elevation = 0;
+		let count = 0;
+		for (const key in schematics) {
+			const schematic = schematics[key];
+			const schematicCenter = new THREE.Vector3(
+				schematic.width / 2,
+				schematic.height / 2,
+				schematic.length / 2
+			);
+			centerPosition.add(schematicCenter);
+			const schematicDistance =
+				this.renderer.camera.position.distanceTo(schematicCenter);
+			if (schematicDistance > distance) {
+				distance = schematicDistance;
+			}
+			if (schematicCenter.y > elevation) {
+				elevation = schematicCenter.y;
+			}
+			count++;
+		}
+
+		centerPosition.divideScalar(count);
+		elevation = this.renderer.camera.position.y - elevation;
 		return { centerPosition, distance, elevation };
 	}
 
@@ -44,7 +71,7 @@ export class SchematicMediaCapture {
 		angle: number = 360
 	) {
 		const { centerPosition, distance, elevation } =
-			this.calculateCameraParameters(this.renderer.schematic);
+			this.calculateCameraParameters(this.renderer.schematics);
 		const webmBlob = await this.renderer.takeRotationWebM(
 			resolutionX,
 			resolutionY,

@@ -49,7 +49,7 @@ export class Renderer {
 	camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
 	controls: OrbitControls;
 	composer: POSTPROCESSING.EffectComposer;
-	schematic: any;
+	schematics: { [key: string]: any } = {};
 	gammaCorrectionEffect: GammaCorrectionEffect;
 	lights: Light[] = [];
 	pmremGenerator: THREE.PMREMGenerator;

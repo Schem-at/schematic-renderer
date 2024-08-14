@@ -9,18 +9,19 @@ import {
 	occludedFacesIntToList,
 	rotateVectorMatrix,
 } from "./utils";
+import { Renderer } from "./renderer";
 import { Vector } from "./types";
 
 export class WorldMeshBuilder {
 	schematic: any;
-	blockMeshBuilder: any;
+	blockMeshBuilder: BlockMeshBuilder;
 	ressourceLoader: any;
-	renderer: any;
+	renderer: Renderer;
 	worldMeshes: any[] = [];
 	constructor(
 		ressourceLoader: any,
 		materialMap: Map<string, THREE.Material>,
-		renderer: any
+		renderer: Renderer
 	) {
 		this.ressourceLoader = ressourceLoader;
 		this.renderer = renderer;
@@ -32,20 +33,16 @@ export class WorldMeshBuilder {
 		);
 	}
 
-	public setSchematic(schematic: any) {
-		this.schematic = schematic;
-		this.blockMeshBuilder.setSchematic(schematic);
-	}
-
 	public splitSchemaIntoChunks(
+		schematic: any,
 		dimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
-	) {
+	): any[] {
 		const chunks: any[] = [];
 		const { chunkWidth, chunkHeight, chunkLength } = dimensions;
-		const { width, height } = this.schematic;
+		const { width, height } = schematic;
 		const chunkCountX = Math.ceil(width / chunkWidth);
 		const chunkCountY = Math.ceil(height / chunkHeight);
-		for (const pos of this.schematic) {
+		for (const pos of schematic) {
 			const { x, y, z } = pos;
 			const chunkX = Math.floor(x / chunkWidth);
 			const chunkY = Math.floor(y / chunkHeight);
@@ -61,6 +58,7 @@ export class WorldMeshBuilder {
 	}
 
 	public async getChunkMesh(
+		schematic: any,
 		chunk: any,
 		offset: { x: number; y: number; z: number }
 	) {
@@ -97,13 +95,14 @@ export class WorldMeshBuilder {
 			y += offsetValue.y;
 			z += offsetValue.z;
 
-			const block = this.schematic.getBlock(pos);
+			const block = schematic.getBlock(pos);
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
 			start = performance.now();
+			// TODO: Precompute occluded faces to avoid recomputing them for each block and sampling the block mesh
 			const occludedFaces = occludedFacesIntToList(
-				this.blockMeshBuilder.getOccludedFacesForBlock(block, pos)
+				this.blockMeshBuilder.getOccludedFacesForBlock(schematic, block, pos)
 			);
 			chunkTimes.occlusion += performance.now() - start;
 
@@ -119,9 +118,17 @@ export class WorldMeshBuilder {
 				const blockComponent = blockComponents[key];
 
 				// Check for rotation with model holder
-				const holder = (await this.ressourceLoader.getBlockMeta(block)).modelOptions.holders[0];
-				const rotationMatrix = getDegreeRotationMatrix(-(holder.x ?? 0), -(holder.y ?? 0), -(holder.z ?? 0));
-				const newNormal = rotateVectorMatrix(blockComponent.normals.slice(0, 3), rotationMatrix) as Vector;
+				const holder = (await this.ressourceLoader.getBlockMeta(block))
+					.modelOptions.holders[0];
+				const rotationMatrix = getDegreeRotationMatrix(
+					-(holder.x ?? 0),
+					-(holder.y ?? 0),
+					-(holder.z ?? 0)
+				);
+				const newNormal = rotateVectorMatrix(
+					blockComponent.normals.slice(0, 3),
+					rotationMatrix
+				) as Vector;
 				const newFace = facingvectorToFace(newNormal);
 
 				if (occludedFaces[newFace]) {
@@ -150,37 +157,29 @@ export class WorldMeshBuilder {
 		return meshes;
 	}
 
-	public isSolid(x: number, y: number, z: number) {
-		const block = this.schematic.getBlock(new THREE.Vector3(x, y, z));
+	public isSolid(schematic: any, x: number, y: number, z: number) {
+		const block = schematic.getBlock(new THREE.Vector3(x, y, z));
 		return block && !TRANSPARENT_BLOCKS.has(block.type);
 	}
 
-	public initializeMeshCreation() {
-		if (this.schematic === undefined) {
-			return { materialGroups: null };
-		}
-		const worldWidth = this.schematic.width;
-		const worldHeight = this.schematic.height;
-		const worldLength = this.schematic.length;
-		const offset = {
-			x: -worldWidth / 2,
-			y: 0,
-			z: -worldLength / 2,
-		};
-		return { worldWidth, worldHeight, worldLength, offset };
-	}
-
 	public async getSchematicMeshes(
+		schematic: any,
 		chunkDimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
-	) {
-		const { offset } = this.initializeMeshCreation();
-		const chunks = await this.splitSchemaIntoChunks(chunkDimensions);
+	): Promise<THREE.Mesh[]> {
+		const offset = {
+			x: -schematic.width / 2,
+			y: 0,
+			z: -schematic.length / 2,
+		};
+		const chunks = await this.splitSchemaIntoChunks(schematic, chunkDimensions);
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
+		const schematicMeshes: THREE.Mesh[] = [];
 
 		for (const chunk of chunks) {
 			currentChunk++;
 			const chunkMesh = await this.getChunkMesh(
+				schematic,
 				chunk,
 				offset ?? { x: 0, y: 0, z: 0 }
 			);
@@ -188,9 +187,9 @@ export class WorldMeshBuilder {
 				continue;
 			}
 			this.renderer.scene.add(...chunkMesh);
-			this.worldMeshes.push(chunkMesh);
+			schematicMeshes.push(...chunkMesh);
 			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
 		}
-		return this.worldMeshes;
+		return schematicMeshes;
 	}
 }

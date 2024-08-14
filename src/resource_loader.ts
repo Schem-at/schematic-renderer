@@ -55,12 +55,8 @@ export class ResourceLoader {
 		this.base64MaterialMap = new Map();
 		this.resourcePackBlobs = resourcePackBlobs;
 		this.textureLoader = new THREE.TextureLoader();
-		this.schematic = undefined;
 	}
 
-	public setSchematic(schematic: any) {
-		this.schematic = schematic;
-	}
 	async initialize() {
 		//this.zip = await this.loadZip(this.resourcePackBlob);
 		this.zips = await Promise.all(

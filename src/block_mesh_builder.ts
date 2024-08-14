@@ -42,10 +42,6 @@ export class BlockMeshBuilder {
 		this.faceDataCache = new Map();
 	}
 
-	public setSchematic(schematic: any) {
-		this.schematic = schematic;
-	}
-
 	public getMaterialId(model: BlockModel, faceData: any, color: THREE.Color) {
 		const textureName = this.ressourceLoader.resolveTextureName(
 			faceData.texture,
@@ -454,7 +450,11 @@ export class BlockMeshBuilder {
 		return result;
 	}
 
-	public getOccludedFacesForBlock(block: any, pos: THREE.Vector3): number {
+	public getOccludedFacesForBlock(
+		schematic: any,
+		block: any,
+		pos: THREE.Vector3
+	): number {
 		const blockType = block.type;
 		const { x, y, z } = pos;
 		const directionVectors = {
@@ -473,6 +473,20 @@ export class BlockMeshBuilder {
 			south: false,
 			north: false,
 		} as { [key: string]: boolean };
+		if (blockType.includes("glass")) {
+			for (const face of POSSIBLE_FACES) {
+				const directionVector = directionVectors[face];
+				const adjacentBlock = schematic.getBlock(
+					new THREE.Vector3(x, y, z).add(directionVector)
+				);
+				if (adjacentBlock === undefined) {
+					continue;
+				}
+				if (adjacentBlock.type.includes("glass")) {
+					occludedFaces[face] = true;
+				}
+			}
+		}
 		if (
 			NON_OCCLUDING_BLOCKS.has(blockType) ||
 			TRANSPARENT_BLOCKS.has(blockType)
@@ -488,7 +502,7 @@ export class BlockMeshBuilder {
 		}
 		for (const face of POSSIBLE_FACES) {
 			const directionVector = directionVectors[face];
-			const adjacentBlock = this.schematic.getBlock(
+			const adjacentBlock = schematic.getBlock(
 				new THREE.Vector3(x, y, z).add(directionVector)
 			);
 			if (adjacentBlock === undefined) {

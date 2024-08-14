@@ -4,7 +4,7 @@ import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromBase64 } from "./utils";
-import { loadSchematic } from "@enginehub/schematicjs";
+import { loadSchematic, Schematic } from "@enginehub/schematicjs";
 import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
@@ -13,8 +13,6 @@ export class SchematicRenderer {
 	canvas: HTMLCanvasElement;
 	options: any;
 	renderer: Renderer;
-	schematicData: string;
-	loadedSchematic: any;
 	resourceLoader: any;
 	materialMap: Map<string, THREE.Material> = new Map();
 	worldMeshBuilder: WorldMeshBuilder | undefined;
@@ -25,9 +23,12 @@ export class SchematicRenderer {
 	schematicMediaCapture: SchematicMediaCapture;
 	schematicExporter: SchematicExporter;
 
-	constructor(canvas: HTMLCanvasElement, schematicData: string, options: any) {
+	constructor(
+		canvas: HTMLCanvasElement,
+		schematicData: { [key: string]: string },
+		options: any
+	) {
 		this.canvas = canvas;
-		this.schematicData = schematicData;
 		this.options = options;
 		this.renderer = new Renderer(canvas, options);
 		this.resourceLoader = new ResourceLoader(
@@ -41,35 +42,44 @@ export class SchematicRenderer {
 		);
 		this.schematicRendererCore = new SchematicRendererCore(
 			this.renderer,
-			this.resourceLoader,
 			this.worldMeshBuilder
 		);
 		this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
 		this.schematicExporter = new SchematicExporter(this.renderer);
 
-		this.initialize();
+		this.initialize(schematicData);
 	}
 
-	async initialize() {
+	async initialize(schematicData: { [key: string]: string }) {
 		let parsedNbt: TagMap;
-		parsedNbt = parseNbtFromBase64(this.schematicData);
+		const loadedSchematics = {} as { [key: string]: Schematic };
 
-		this.loadedSchematic = loadSchematic(parsedNbt);
+		// Iterate over the object's keys
+		for (const key in schematicData) {
+			if (schematicData.hasOwnProperty(key)) {
+				const value = schematicData[key];
+				parsedNbt = parseNbtFromBase64(value);
+				loadedSchematics[key] = loadSchematic(parsedNbt);
+			}
+		}
+
 		this.materialMap = new Map();
-		this.renderer.schematic = this.loadedSchematic;
+		this.renderer.schematics = loadedSchematics;
 
 		await this.resourceLoader.initialize();
 
-		await this.schematicRendererCore.render(this.loadedSchematic);
-		console.log(this.options);
+		await this.schematicRendererCore.render();
+
 		if (this.options?.debugGUI) {
 			this.schematicRendererGUI = new SchematicRendererGUI(this);
 		}
 	}
 
-	async updateSchematic(schematicData: string) {
-		this.schematicData = schematicData;
-		await this.schematicRendererCore.updateSchematic(schematicData);
+	async updateSchematic(key: string, schematicData: string) {
+		this.renderer.schematics[key] = loadSchematic(
+			parseNbtFromBase64(schematicData)
+		);
+		await this.schematicRendererCore.renderSchematic(key);
 	}
 
 	async exportUsdz() {
