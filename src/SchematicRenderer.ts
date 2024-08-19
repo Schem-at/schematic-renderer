@@ -9,134 +9,155 @@ import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
 import { SchematicExporter } from "./SchematicExporter";
+import {
+  ResourcePackManager,
+  DefaultPackCallback,
+} from "./ResourcePackManager";
+
+interface SchematicRendererOptions {
+  debugGUI?: boolean;
+  // Add other option properties here
+}
+
+interface SchematicData {
+  [key: string]: string;
+}
+
+function relayMethods(target: any, sourceKey: string) {
+  const source = target[sourceKey];
+  Object.getOwnPropertyNames(Object.getPrototypeOf(source)).forEach(
+    (method) => {
+      if (method !== "constructor" && typeof source[method] === "function") {
+        target[method] = function (...args: any[]) {
+          return source[method].apply(source, args);
+        };
+      }
+    }
+  );
+}
+
 export class SchematicRenderer {
-	canvas: HTMLCanvasElement;
-	options: any;
-	renderer: Renderer;
-	resourceLoader: any;
-	materialMap: Map<string, THREE.Material> = new Map();
-	worldMeshBuilder: WorldMeshBuilder | undefined;
-	jarUrl: string | string[] | undefined;
+  canvas: HTMLCanvasElement;
+  options: SchematicRendererOptions;
 
-	schematicRendererGUI: SchematicRendererGUI | null = null;
-	schematicRendererCore: SchematicRendererCore;
-	schematicMediaCapture: SchematicMediaCapture;
-	schematicExporter: SchematicExporter;
+  renderer: Renderer;
+  resourceLoader: ResourceLoader;
+  materialMap: Map<string, THREE.Material | THREE.Material[]> = new Map();
+  worldMeshBuilder: WorldMeshBuilder | undefined;
 
-	constructor(
-		canvas: HTMLCanvasElement,
-		schematicData: { [key: string]: string },
-		options: any
-	) {
-		this.canvas = canvas;
-		this.options = options;
-		this.renderer = new Renderer(canvas, options);
-		this.resourceLoader = new ResourceLoader(
-			this.options?.resourcePackBlobs,
-			this.materialMap
-		);
-		this.worldMeshBuilder = new WorldMeshBuilder(
-			this.resourceLoader,
-			this.materialMap,
-			this.renderer
-		);
-		this.schematicRendererCore = new SchematicRendererCore(
-			this.renderer,
-			this.worldMeshBuilder
-		);
-		this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
-		this.schematicExporter = new SchematicExporter(this.renderer);
+  schematicRendererGUI: SchematicRendererGUI | null = null;
 
-		this.initialize(schematicData);
-	}
+  private schematicRendererCore: SchematicRendererCore;
+  private schematicMediaCapture: SchematicMediaCapture;
+  private schematicExporter: SchematicExporter;
+  private resourcePackManager: ResourcePackManager;
 
-	async initialize(schematicData: { [key: string]: string }) {
-		let parsedNbt: TagMap;
-		const loadedSchematics = {} as { [key: string]: Schematic };
+  constructor(
+    canvas: HTMLCanvasElement,
+    schematicData: SchematicData,
+    options: SchematicRendererOptions,
+    defaultResourcePacks?: Record<string, DefaultPackCallback>
+  ) {
+    this.canvas = canvas;
+    this.options = options;
+    this.renderer = new Renderer(canvas, options);
+    this.resourcePackManager = new ResourcePackManager();
 
-		// Iterate over the object's keys
-		for (const key in schematicData) {
-			if (schematicData.hasOwnProperty(key)) {
-				const value = schematicData[key];
-				parsedNbt = parseNbtFromBase64(value);
-				loadedSchematics[key] = loadSchematic(parsedNbt);
-			}
-		}
+    (async () => {
+      await this.initializeResourcePacks(defaultResourcePacks);
+      this.setupRelayedMethods();
+      await this.initialize(schematicData);
+    })().catch(error => console.error("Initialization error:", error));
+  }
 
-		this.materialMap = new Map();
-		this.renderer.schematics = loadedSchematics;
+  private setupRelayedMethods() {
+    relayMethods(this, "renderer");
+    relayMethods(this, "schematicMediaCapture");
+    relayMethods(this, "schematicExporter");
+  }
 
-		await this.resourceLoader.initialize();
+  private async initializeResourcePacks(
+    defaultResourcePacks?: Record<string, DefaultPackCallback>
+  ) {
+    this.options.resourcePackBlobs = await this.resourcePackManager.getResourcePackBlobs(
+      defaultResourcePacks || {}
+    );
+    this.initializeComponents();
+  }
 
-		await this.schematicRendererCore.render();
+  private initializeComponents() {
+    this.resourceLoader = new ResourceLoader(
+      this.options.resourcePackBlobs,
+      this.materialMap
+    );
+    this.worldMeshBuilder = new WorldMeshBuilder(
+      this.resourceLoader,
+      this.materialMap,
+      this.renderer
+    );
+    this.schematicRendererCore = new SchematicRendererCore(
+      this.renderer,
+      this.worldMeshBuilder
+    );
+    this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
+    this.schematicExporter = new SchematicExporter(this.renderer);
+  }
 
-		if (this.options?.debugGUI) {
-			this.schematicRendererGUI = new SchematicRendererGUI(this);
-		}
-	}
+  private async initialize(schematicData: SchematicData) {
+    let parsedNbt: TagMap;
+    const loadedSchematics = {} as { [key: string]: Schematic };
 
-	async updateSchematic(key: string, schematicData: string) {
-		this.renderer.schematics[key] = loadSchematic(
-			parseNbtFromBase64(schematicData)
-		);
-		await this.schematicRendererCore.renderSchematic(key);
-	}
+    for (const key in schematicData) {
+      if (schematicData.hasOwnProperty(key)) {
+        const value = schematicData[key];
+        parsedNbt = parseNbtFromBase64(value);
+        loadedSchematics[key] = loadSchematic(parsedNbt);
+      }
+    }
 
-	async exportUsdz() {
-		return this.schematicExporter.exportUsdz();
-	}
+    this.materialMap = new Map();
+    this.renderer.schematics = loadedSchematics;
 
-	async downloadScreenshot(resolutionX: number, resolutionY: number) {
-		return this.schematicMediaCapture.downloadScreenshot(
-			resolutionX,
-			resolutionY
-		);
-	}
+    await this.resourceLoader.initialize();
+    await this.schematicRendererCore.render();
 
-	async getScreenshot(resolutionX: number, resolutionY: number) {
-		return this.schematicMediaCapture.getScreenshot(resolutionX, resolutionY);
-	}
+    if (this.options?.debugGUI) {
+      this.schematicRendererGUI = new SchematicRendererGUI(this);
+    }
+  }
 
-	async getRotationWebM(
-		resolutionX: number,
-		resolutionY: number,
-		frameRate: number,
-		duration: number,
-		angle: number = 360
-	) {
-		return this.schematicMediaCapture.getRotationWebM(
-			resolutionX,
-			resolutionY,
-			frameRate,
-			duration,
-			angle
-		);
-	}
+  async updateSchematic(key: string, schematicData: string) {
+    this.renderer.schematics[key] = loadSchematic(
+      parseNbtFromBase64(schematicData)
+    );
+    await this.schematicRendererCore.renderSchematic(key);
+  }
 
-	updateZoom(value: number) {
-		this.renderer.updateZoom(value);
-	}
+  async manageResourcePack(action: 'upload' | 'clear' | 'toggle' | 'reorder', params?: any) {
+    switch (action) {
+      case 'upload':
+        await this.resourcePackManager.uploadPack(params as File);
+        break;
+      case 'clear':
+        await this.resourcePackManager.clearPacks();
+        break;
+      case 'toggle':
+        await this.resourcePackManager.togglePackEnabled(params.name, params.enabled);
+        break;
+      case 'reorder':
+        await this.resourcePackManager.reorderPack(params.name, params.newOrder);
+        break;
+    }
+    await this.reloadResourcePacks();
+  }
 
-	updateGammaCorrection(value: number) {
-		this.renderer.updateGammaCorrection(value);
-	}
+  async listResourcePacks(): Promise<{ name: string; enabled: boolean; order: number }[]> {
+    return this.resourcePackManager.listPacks();
+  }
 
-	addLight(
-		type: "ambient" | "directional" | "point" | "spot",
-		options: any
-	): string {
-		return this.renderer.addLight(type, options);
-	}
-
-	removeLight(id: string) {
-		this.renderer.removeLight(id);
-	}
-
-	updateLight(id: string, options: any) {
-		this.renderer.updateLight(id, options);
-	}
-
-	getLights() {
-		return this.renderer.getLights();
-	}
+  private async reloadResourcePacks() {
+    await this.initializeResourcePacks();
+    await this.resourceLoader.initialize();
+    await this.schematicRendererCore.render();
+  }
 }
