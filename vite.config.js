@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
-import inject from '@rollup/plugin-inject';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import path from 'path';
 
 export default defineConfig({
@@ -25,22 +25,23 @@ export default defineConfig({
           three: 'THREE',
         },
       },
-      plugins: [
-        inject({
-          Buffer: ['buffer', 'Buffer'],
-        }),
-      ],
     },
   },
   plugins: [
     viteCommonjs(),
+    nodePolyfills({
+      // Whether to polyfill `node:` protocol imports.
+      protocolImports: true,
+    }),
   ],
   resolve: {
     alias: {
-      buffer: 'buffer',
+      // This is usually not necessary, but include it if you still have issues
+      buffer: 'vite-plugin-node-polyfills/polyfills/buffer',
     },
   },
   define: {
+    'process.env': {},
     'global': 'globalThis',
   },
   optimizeDeps: {

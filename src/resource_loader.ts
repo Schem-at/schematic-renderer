@@ -41,7 +41,8 @@ export class ResourceLoader {
 	DEG2RAD = Math.PI / 180;
 
 	DEBUG = true;
-	CUSTOM_MODELS = {
+	CUSTOM_MODELS: { [key: string]: any }
+		= {
 		"block/chest": chestModel,
 		"block/shulker_box": shulkerBoxModel,
 	};
@@ -559,7 +560,6 @@ export class ResourceLoader {
 		let model = JSON.parse(
 			(await this.getResourceString(`models/${modelRef}.json`)) ?? "{}"
 		) as BlockModel;
-		console.log("loadModel", modelRef, model);
 
 		if (model.parent) {
 			const parent = await this.loadModel(model.parent);

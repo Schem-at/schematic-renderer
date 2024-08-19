@@ -125,7 +125,8 @@ export class BlockMeshBuilder {
 			}
 			// this.showTextureOverlay(
 			// 	this.base64MaterialMap.get(materialId) ?? "",
-			// 	faceData.uv
+			// 	faceData.uv,
+			// 	faceData.texture
 			// );
 
 			subMaterials[face] = materialId;
@@ -254,15 +255,7 @@ export class BlockMeshBuilder {
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-		const loggedBlockNames = ["chest", "shulker"];
-		const shouldBeLogged = loggedBlockNames.reduce(
-			(acc, name) => acc || block.type.includes(name),
-			false
-		);
-		if (shouldBeLogged) {
-			console.log("Block", block);
-			console.log("Model options", modelOptions);
-		}
+		
 		let modelIndex = 0;
 		let start = performance.now();
 		for (const modelHolder of modelOptions.holders) {
@@ -277,11 +270,7 @@ export class BlockMeshBuilder {
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
 
 			const elements = model?.elements;
-			if (shouldBeLogged) {
-				console.log("Model", model);
-				console.log("Model holder", modelHolder);
-				console.log("Elements", elements);
-			}
+			
 			if (!elements) continue;
 			let elementIndex = 0;
 			for (const element of elements) {
@@ -300,10 +289,7 @@ export class BlockMeshBuilder {
 					}
 					this.faceDataCache.set(faceDataCacheKey, faceData);
 				}
-				if (shouldBeLogged) {
-					console.log("Element", element);
-					console.log("Face data", faceData);
-				}
+
 				const from = element.from;
 				const to = element.to;
 				const elementRotation = element.rotation || null;
@@ -346,10 +332,10 @@ export class BlockMeshBuilder {
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
 						blockComponents[uniqueKey].positions.push(...cornerPos);
-						if (block.type === "redstone_wire") {
+						if (block.type === "redstone_wire" || block.type === "chest") {
 							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
 						} else {
-							blockComponents[uniqueKey].uvs.push(1 - uv[0], 1 - uv[1]);
+							blockComponents[uniqueKey].uvs.push( uv[0], 1 - uv[1]);
 						}
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}

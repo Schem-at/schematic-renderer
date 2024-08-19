@@ -11,7 +11,6 @@ import {
 } from "./utils";
 import { Renderer } from "./renderer";
 import { Vector } from "./types";
-import { length } from "three/examples/jsm/nodes/Nodes.js";
 
 export class WorldMeshBuilder {
 	schematic: any;
@@ -103,6 +102,7 @@ export class WorldMeshBuilder {
 			if (INVISIBLE_BLOCKS.has(block.type)) {
 				continue;
 			}
+			
 			start = performance.now();
 			// TODO: Precompute occluded faces to avoid recomputing them for each block and sampling the block mesh
 
@@ -116,11 +116,8 @@ export class WorldMeshBuilder {
 				block,
 				pos
 			);
-			//if blockComponents is a empty object, it means that the block is not visible
-			if (Object.keys(blockComponents).length === 0) {
-				console.log("Block", block);
-				console.log("Block components", blockComponents);
-			}
+
+			
 			chunkTimes.blockMeshRetrieval += performance.now() - start;
 
 			for (const key in blockComponents) {

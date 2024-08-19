@@ -39,73 +39,173 @@ const rubiks = {
 	control:
 		"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",
 };
-async function getVanillaTweaksResourcePackLinks() {
-	return fetch(
-		"http://localhost:8079/https://vanillatweaks.net/assets/server/zipresourcepacks.php",
-		{
-			method: "POST",
-			headers: {
-				"content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-			},
-			body: "packs=%7B%22aesthetic.more-zombies%22%3A%5B%22MZSteve%22%2C%22MZAlex%22%2C%22MZAri%22%2C%22MZEfe%22%2C%22MZKai%22%2C%22MZMakena%22%2C%22MZNoor%22%2C%22MZSunny%22%2C%22MZZuri%22%5D%2C%22aesthetic%22%3A%5B%22AlternateBlockDestruction%22%2C%22BlackNetherBricks%22%2C%22CherryPicking%22%2C%22UnbundledHayBales%22%2C%22UnbundledDriedKelp%22%2C%22SolidHoney%22%2C%22SolidSlime%22%2C%22WarmGlow%22%2C%22LessPurplePurpur%22%2C%22DarkOakSaturation%22%2C%22HorizontalNuggets%22%2C%22SidewaysNuggets%22%2C%22SofterWool%22%2C%22BrownLeather%22%2C%22RedIronGolemFlowers%22%2C%22StemToLog%22%2C%22BetterParticles%22%2C%22HDShieldBanners%22%2C%22EndlessEndRods%22%2C%22PinkEndRods%22%2C%22UniqueDyes%22%2C%22AnimatedCampfireItem%22%2C%22AshlessCampfires%22%2C%22GlassDoors%22%2C%22GlassTrapdoors%22%2C%22FlintTippedArrows%22%2C%22SplashXpBottle%22%2C%222DSpyglass%22%2C%22AccurateSpyglass%22%2C%22AccurateScaffolding%22%2C%22FencierFences%22%2C%22MossCarpetOverhang%22%2C%22SmootherWarpedPlanks%22%2C%22ConsistentBambooPlanks%22%2C%22AlternateCutCopper%22%2C%22PolishedStonesToBricks%22%2C%22SingularGlazedTerracotta%22%2C%22HorizontalWorldBorder%22%2C%22PlainLeatherArmor%22%2C%22GoldenCrown%22%2C%22ClassicNetheriteArmor%22%2C%22AllayElytra%22%2C%22PhantomElytra%22%2C%22ConcorpWings%22%2C%22EnderDragonElytra%22%5D%2C%22terrain.lower-and-sides%22%3A%5B%22LowerGrass%22%2C%22GrassSides%22%2C%22LowerMycelium%22%2C%22MyceliumSides%22%2C%22LowerPaths%22%2C%22PathSides%22%2C%22LowerPodzol%22%2C%22PodzolSides%22%2C%22LowerSnow%22%2C%22SnowSides%22%2C%22LowerCrimsonNylium%22%2C%22CrimsonNyliumSides%22%2C%22LowerWarpedNylium%22%2C%22WarpedNyliumSides%22%5D%2C%22terrain%22%3A%5B%22BushyLeaves%22%2C%22WavyLeaves%22%2C%22WavyPlants%22%2C%22WavyWater%22%2C%22DarkerDarkOakLeaves%22%2C%22GoldenSavanna%22%2C%22UniversalLushGrass%22%2C%22BetterBedrock%22%2C%22CircularSunandMoon%22%2C%22TwinklingStars%22%2C%22CircleLogTops%22%2C%22SmootherOakLog%22%2C%22SmootherStones%22%2C%22SmoothDirt%22%2C%22SmoothCoarseDirt%22%2C%22BrighterNether%22%2C%22ClearerWater%22%2C%22UniformOres%22%2C%22FancySunflowers%22%2C%22TallerSunflowers%22%2C%22ShorterGrass%22%2C%22ShorterTallGrass%22%2C%22WhiterSnow%22%5D%2C%22variation%22%3A%5B%22VariatedDirt%22%2C%22RandomCoarseDirtRotation%22%2C%22VariatedGrass%22%2C%22VariatedCobblestone%22%2C%22RandomMossRotation%22%2C%22VariatedBricks%22%2C%22VariatedLogs%22%2C%22VariatedMushroomBlocks%22%2C%22VariatedEndStone%22%2C%22VariatedGravel%22%2C%22VariatedMycelium%22%2C%22VariatedPlanks%22%2C%22VariatedStone%22%2C%22VariatedTerracotta%22%2C%22VariatedUnpolishedStones%22%2C%22VariatedBookshelves%22%2C%22RandomSunflowerRotation%22%2C%22VariatedVillagers%22%5D%2C%22connected-textures%22%3A%5B%22ConnectedBookshelves%22%2C%22ConnectedPolishedStones%22%2C%22ConnectedIronBlocks%22%2C%22ConnectedLapisBlocks%22%5D%2C%22utility%22%3A%5B%22DiminishingTools%22%2C%22MobSpawnIndicator%22%2C%22OreBorders%22%2C%22SuspiciousSandGravelBorders%22%2C%22BuddingAmethystBorders%22%2C%22VisualInfestedStoneItems%22%2C%22VisualWaxedCopperItems%22%2C%22Fullbright%22%2C%22FullAgeCropMarker%22%2C%22FullAgeAmethystMarker%22%2C%22DifferentStems%22%2C%22Age25Kelp%22%2C%22MineProgressBar%22%2C%22ClearBannerPatterns%22%2C%22HungerPreview%22%2C%22MusicDiscRedstonePreview%22%2C%22StickyPistonSides%22%2C%22DirectionalHoppers%22%2C%22DirectionalDispensersDroppers%22%2C%22BetterObservers%22%2C%22CleanRedstoneDust%22%2C%22RedstonePowerLevels%22%2C%22UnlitRedstoneOre%22%2C%22GroovyLevers%22%2C%22VisibleTripwires%22%2C%22CompassLodestone%22%2C%22BrewingGuide%22%2C%22VisualHoney%22%2C%22VisualCauldronStages%22%2C%22VisualComposterStages%22%2C%22VisualSaplingGrowth%22%2C%22NoteblockBanners%22%2C%22ArabicNumerals%22%5D%2C%22unobtrusive%22%3A%5B%22UnobtrusiveRain%22%2C%22UnobtrusiveSnow%22%2C%22UnobtrusiveParticles%22%2C%22NoCherryLeavesParticles%22%2C%22BorderlessGlass%22%2C%22BorderlessStainedGlass%22%2C%22BorderlessTintedGlass%22%2C%22CleanGlass%22%2C%22CleanStainedGlass%22%2C%22CleanTintedGlass%22%2C%22UnobtrusiveScaffolding%22%2C%22AlternateEnchantGlint%22%2C%22LowerFire%22%2C%22LowerShield%22%2C%22NoFog%22%2C%22TransparentPumpkin%22%2C%22NoPumpkinOverlay%22%2C%22TransparentSpyglassOverlay%22%2C%22NoSpyglassOverlay%22%2C%22NoVignette%22%2C%22NoBeaconBeam%22%2C%22CleanerWorldBorder%22%2C%22InvisibleTotem%22%2C%22SmallerUtilities%22%2C%22ShortSwords%22%5D%2C%223d%22%3A%5B%223DBookshelves%22%2C%223DChiseledBookshelves%22%2C%223DChains%22%2C%223DPointedDripstone%22%2C%223DAmethyst%22%2C%223DRedstoneWire%22%2C%223DTiles%22%2C%223DLadders%22%2C%223DRails%22%2C%223DSugarcane%22%2C%223DIronBars%22%2C%223DLilyPads%22%2C%223DDoors%22%2C%223DTrapdoors%22%2C%223DMushrooms%22%2C%223DVines%22%2C%223DGlowLichen%22%2C%223DSculkVein%22%2C%223DStonecutters%22%2C%223DSunMoon%22%5D%2C%22fixes-and-consistency%22%3A%5B%22ItemStitchingFix%22%2C%22JappaObserver%22%2C%22JappaToasts%22%2C%22JappaStatsIcons%22%2C%22JappaSpecIcons%22%2C%22RedstoneWireFix%22%2C%22DripleafFixBig%22%2C%22DripleafFixSmall%22%2C%22ConsistentUIFix%22%2C%22ConsistentDecorPot%22%2C%22ConsistentBucketFix%22%2C%22ConsistentTadpoleBucket%22%2C%22CactusBottomFix%22%2C%22ConsistentHelmets%22%2C%22BrighterRibTrim%22%2C%22HangingSignLogs%22%2C%22PixelConsistentBat%22%2C%22PixelConsistentGhast%22%2C%22PixelConsistentElderGuardian%22%2C%22PixelConsistentWither%22%2C%22TripwireHookFix%22%2C%22PixelConsistentSigns%22%2C%22PixelConsistentXPOrbs%22%2C%22PixelConsistentBeaconBeam%22%2C%22PixelConsistentSonicBoom%22%2C%22PixelConsistentGuardianBeam%22%2C%22SoulSoilSoulCampfire%22%2C%22BlazeFix%22%2C%22SlimeParticleFix%22%2C%22NicerFastLeaves%22%2C%22ProperBreakParticles%22%2C%22NoBowlParticles%22%2C%22IronBarsFix%22%2C%22ConsistentSmoothStone%22%2C%22DoubleSlabFix%22%2C%22ItemHoldFix%22%2C%22HoeFix%22%2C%22CloudFogFix%22%5D%7D&version=1.20",
+
+interface StoredResourcePack {
+	name: string;
+	data: Blob;
+  }
+  
+  class ResourcePackManager {
+	private overlay: HTMLDivElement;
+	private db: IDBDatabase | null = null;
+  
+	constructor(private canvas: HTMLCanvasElement) {
+	  this.createOverlay();
+	  this.initDB();
+	}
+  
+	private createOverlay() {
+	  this.overlay = document.createElement('div');
+	  this.overlay.style.position = 'absolute';
+	  this.overlay.style.top = '10px';
+	  this.overlay.style.left = '10px';
+	  this.overlay.style.zIndex = '1000';
+	  
+	  const uploadButton = this.createButton('Upload Pack', () => this.uploadPack());
+	  const clearButton = this.createButton('Clear Packs', () => this.clearPacks());
+	  const listButton = this.createButton('List Packs', () => this.listPacks());
+  
+	  this.overlay.appendChild(uploadButton);
+	  this.overlay.appendChild(clearButton);
+	  this.overlay.appendChild(listButton);
+  
+	  canvas.parentElement?.appendChild(this.overlay);
+	}
+  
+	private createButton(text: string, onClick: () => void): HTMLButtonElement {
+	  const button = document.createElement('button');
+	  button.textContent = text;
+	  button.style.marginRight = '10px';
+	  button.addEventListener('click', onClick);
+	  return button;
+	}
+  
+	private initDB(): Promise<void> {
+	  return new Promise((resolve, reject) => {
+		const request = indexedDB.open('ResourcePacksDB', 1);
+  
+		request.onerror = () => reject("Error opening database");
+  
+		request.onsuccess = (event) => {
+		  this.db = (event.target as IDBOpenDBRequest).result;
+		  resolve();
+		};
+  
+		request.onupgradeneeded = (event) => {
+		  const db = (event.target as IDBOpenDBRequest).result;
+		  db.createObjectStore('packs', { keyPath: 'name' });
+		};
+	  });
+	}
+  
+	private async uploadPack() {
+	  const fileInput = document.createElement('input');
+	  fileInput.type = 'file';
+	  fileInput.accept = '.zip';
+	  fileInput.multiple = true;
+	  fileInput.onchange = async (event) => {
+		const files = (event.target as HTMLInputElement).files;
+		if (files) {
+		  for (let i = 0; i < files.length; i++) {
+			const pack = await this.readFileToPack(files[i]);
+			await this.savePack(pack);
+		  }
+		  console.log('Resource packs uploaded and saved');
+		  initializeRenderer();
 		}
-	)
-		.then((response) => response.json())
-		.then(
-			(data) => "http://localhost:8079/https://vanillatweaks.net" + data.link
-		);
-}
-
-//cached 30 minute vanilla tweaks resource pack link
-async function getCachedVanillaTweaksResourcePackLink() {
-	const cachedLink = localStorage.getItem("vanillaTweaksResourcePackLink");
-	const cachedTime = localStorage.getItem("vanillaTweaksResourcePackLinkTime");
-	const isCacheTimeValid = (cachedTime) => {
-		const currentTime = new Date().getTime();
-		const timeDifference = currentTime - cachedTime;
-		const timeDifferenceInMinutes = timeDifference / 1000 / 60;
-		return timeDifferenceInMinutes < 30;
-	};
-	if (cachedLink && isCacheTimeValid(cachedTime)) {
-		return cachedLink;
-	} else {
-		const vanillaTweaksResourcePackLink =
-			await getVanillaTweaksResourcePackLinks();
-		localStorage.setItem(
-			"vanillaTweaksResourcePackLink",
-			vanillaTweaksResourcePackLink
-		);
-		localStorage.setItem(
-			"vanillaTweaksResourcePackLinkTime",
-			String(new Date().getTime())
-		);
-		return vanillaTweaksResourcePackLink;
+	  };
+	  fileInput.click();
 	}
-}
-
-async function getRessourcePackLinks() {
-	const vanillaTweaksResourcePackLink =
-		await getCachedVanillaTweaksResourcePackLink();
-	const vanillaPack =
-		"http://localhost:8079/https://www.curseforge.com/api/v1/mods/457153/files/5008188/download";
-	const packs = [];
-	// packs.push(vanillaTweaksResourcePackLink);
-	packs.push(vanillaPack);
-	return packs;
-}
-
-async function getAllResourcePackBlobs() {
-	const resourcePackBlobs = [];
-	const ressourcePackLinks = await getRessourcePackLinks();
-	for (const resourcePackLink of ressourcePackLinks) {
-		const response = await fetch(resourcePackLink);
-		const resourcePackBlob = await response.blob();
-		resourcePackBlobs.push(resourcePackBlob);
+  
+	private async readFileToPack(file: File): Promise<StoredResourcePack> {
+	  const name = prompt("Enter a name for this resource pack:", file.name) || file.name;
+	  return { name, data: file };
 	}
-	return resourcePackBlobs;
-}
+  
+	private savePack(pack: StoredResourcePack): Promise<void> {
+	  return new Promise((resolve, reject) => {
+		if (!this.db) {
+		  reject("Database not initialized");
+		  return;
+		}
+  
+		const transaction = this.db.transaction(['packs'], 'readwrite');
+		const store = transaction.objectStore('packs');
+		const request = store.put(pack);
+  
+		request.onerror = () => reject("Error saving pack");
+		request.onsuccess = () => resolve();
+	  });
+	}
+  
+	private clearPacks(): Promise<void> {
+	  return new Promise((resolve, reject) => {
+		if (!this.db) {
+		  reject("Database not initialized");
+		  return;
+		}
+  
+		const transaction = this.db.transaction(['packs'], 'readwrite');
+		const store = transaction.objectStore('packs');
+		const request = store.clear();
+  
+		request.onerror = () => reject("Error clearing packs");
+		request.onsuccess = () => {
+		  console.log('Stored resource packs cleared');
+		  initializeRenderer();
+		  resolve();
+		};
+	  });
+	}
+  
+	private listPacks(): Promise<void> {
+	  return new Promise((resolve, reject) => {
+		if (!this.db) {
+		  reject("Database not initialized");
+		  return;
+		}
+  
+		const transaction = this.db.transaction(['packs'], 'readonly');
+		const store = transaction.objectStore('packs');
+		const request = store.getAllKeys();
+  
+		request.onerror = () => reject("Error listing packs");
+		request.onsuccess = () => {
+		  const packNames = request.result as string[];
+		  if (packNames.length === 0) {
+			alert('No resource packs stored.');
+		  } else {
+			alert('Stored resource packs:\n' + packNames.join('\n'));
+		  }
+		  resolve();
+		};
+	  });
+	}
+  
+	async getResourcePackBlobs(): Promise<Blob[]> {
+	  return new Promise((resolve, reject) => {
+		if (!this.db) {
+		  reject("Database not initialized");
+		  return;
+		}
+  
+		const transaction = this.db.transaction(['packs'], 'readonly');
+		const store = transaction.objectStore('packs');
+		const request = store.getAll();
+  
+		request.onerror = () => reject("Error getting packs");
+		request.onsuccess = () => {
+		  const packs = request.result as StoredResourcePack[];
+		  resolve(packs.map(pack => pack.data));
+		};
+	  });
+	}
+  }
+  
+const resourcePackManager = new ResourcePackManager(canvas);
 let renderer: SchematicRenderer;
-getAllResourcePackBlobs().then((resourcePackBlobs) => {
+async function initializeRenderer() {
+	const resourcePackBlobs = await resourcePackManager.getResourcePackBlobs();
 	renderer = new SchematicRenderer(
 		canvas,
 		{
@@ -144,7 +244,14 @@ getAllResourcePackBlobs().then((resourcePackBlobs) => {
 	// 	.scheduleScaling("red", 1, 1, 1, 2000, 4000)
 	// 	.scheduleRotation("red", 0, 0, 0, 2000, 0)
 	// 	.scheduleMovement("red", -10, -20, 10, 2000, 0);
-});
+}
+
+resourcePackManager.initDB().then(() => {
+	initializeRenderer();
+  }).catch(error => {
+	console.error("Failed to initialize database:", error);
+  });
+
 //read the localfile mpu_base64.txt and then render the schematic
 // async function readLocalFile() {
 // 	const file = await fetch("mpu_base64.txt");
