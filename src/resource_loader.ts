@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import deepmerge from "deepmerge";
 import type { Block } from "@enginehub/schematicjs";
+import chestModel from "./custom_models/chest.json";
+import shulkerBoxModel from "./custom_models/shulker_box.json";
 import {
 	hashBlockForMap,
 	occludedFacesIntToList,
@@ -39,6 +41,10 @@ export class ResourceLoader {
 	DEG2RAD = Math.PI / 180;
 
 	DEBUG = true;
+	CUSTOM_MODELS = {
+		"block/chest": chestModel,
+		"block/shulker_box": shulkerBoxModel,
+	};
 	constructor(
 		resourcePackBlobs: any,
 		materialMap?: Map<string, THREE.Material>
@@ -542,9 +548,18 @@ export class ResourceLoader {
 		if (modelRef.startsWith("minecraft:")) {
 			modelRef = modelRef.substring("minecraft:".length);
 		}
+		//if it's block/chest we need to load the custom model; from custom_models/chest.json
+		//if it's block.purple_shulker_box we need to load the custom model; from custom_models/shulker_box.json
+		if (modelRef.includes("shulker_box")) {
+			modelRef = "block/shulker_box";
+		}
+		if (this.CUSTOM_MODELS[modelRef]) {
+			return this.CUSTOM_MODELS[modelRef];
+		}
 		let model = JSON.parse(
 			(await this.getResourceString(`models/${modelRef}.json`)) ?? "{}"
 		) as BlockModel;
+		console.log("loadModel", modelRef, model);
 
 		if (model.parent) {
 			const parent = await this.loadModel(model.parent);

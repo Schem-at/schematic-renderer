@@ -254,7 +254,15 @@ export class BlockMeshBuilder {
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-
+		const loggedBlockNames = ["chest", "shulker"];
+		const shouldBeLogged = loggedBlockNames.reduce(
+			(acc, name) => acc || block.type.includes(name),
+			false
+		);
+		if (shouldBeLogged) {
+			console.log("Block", block);
+			console.log("Model options", modelOptions);
+		}
 		let modelIndex = 0;
 		let start = performance.now();
 		for (const modelHolder of modelOptions.holders) {
@@ -269,6 +277,11 @@ export class BlockMeshBuilder {
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
 
 			const elements = model?.elements;
+			if (shouldBeLogged) {
+				console.log("Model", model);
+				console.log("Model holder", modelHolder);
+				console.log("Elements", elements);
+			}
 			if (!elements) continue;
 			let elementIndex = 0;
 			for (const element of elements) {
@@ -286,6 +299,10 @@ export class BlockMeshBuilder {
 						continue;
 					}
 					this.faceDataCache.set(faceDataCacheKey, faceData);
+				}
+				if (shouldBeLogged) {
+					console.log("Element", element);
+					console.log("Face data", faceData);
 				}
 				const from = element.from;
 				const to = element.to;

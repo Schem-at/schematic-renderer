@@ -23,7 +23,8 @@ const complexTest =
 	"H4sIAAAAAAAA/41Tf2/TMBC9xOuPpCvbH8CHQP0DCYFgUiU0mMQkJiaBGFChymsujTU3zuwr2fgIfGk4J02zllVgKXJ8znv37t4lhujjLMOFJDUTEJ9LjUR4Jm8AYBhDbxUQ8HKhcpxZmdJRoRyZfJqhTCapnKl8Pl4WI5cZS+NUaocjui1w7Jjy6vY7E/UEPGnhmSkKtBPM5aXGZEx2iaMVTWLK3AMGAp62gJpoWqed4A1hnmwBl4WHdQU8bmHXS2np5/RSm9kVX4KAV+0l1+yoUY/SUa3ZqnlGo1ISWm3mc85SFeTJ9wU8bPFlpginpTGar/YEPGuvNP7g8pgax6XUupFYcsJRYUq0K+2eVAg4bpFkVVEqi9PMmKuJJJIscyWhoXFmSdmaZ62us+HQjuo0pjuKiwU8b+HM7FvN9bH+KRk7yxqynE3ORlpRiw0FDFusVJZjgYBHdwzUaoFrI/oCjnZIrXpUDw8fNd4vNmIre5/ROmVynz+E7nvM55SBiKF/hiQTSVJAdHHyIU0d0pfa/vX5629ed87f/BmY5h16//0cDd4yxTrHA+pBdOz1+zCTvYBmBWEg9oKgE/jVDVar17z0gyDiLQ4G+7xFMKxYTnJSpNDFfngGIM6NqxQynY/4oiLonBIuXJWkD+FpAgdbXYMNZOinAKr2/Bu58Y2Aw09W5i5F+4YH2v+ELfRw+8f9S26n2u/VEvyPlhA6Fyrx7g2gWxviadiSX7wf8PMa/gAtf+TdpwQAAA==";
 const redstoneTest =
 	"H4sIAAAAAAAA/6WQTU/DMAyG3WRbaachTvwGDj1wRuoFMZgQE0hIjA+hKbTeGrGlI3E1xJnfTXHWscEBLkSKEr+OH79ODNF1VuBckc4kxFdqhkQ4VK8A0I4hXAsSzufaYGbVhI4s5o5Kg+OltviAylHqdI6JKS0VqeFMsiiXaNPDxJXVl7TE9btHRgsJvS1QactaIGF/q71UytLb+GlWZs+cBAmDfzioFj/7Swmnf+K4oIGtuL+NUy08rMXmwhu0TpfGzyagc4FmSgWIGHaGSCpXpCREo/7lZOKQbuu6/vgW3zUDbuJ7/xvAmAHqaUHQktA9YcSmxy6FEB37r/Eyvz7wBAj8EkIKEQRNwIvtrW8iEBBBb1XXN6RJo4t9nYD2SOfst92FTmPBG2KX73zu8T6DT5nRNOMpAgAA";
-
+const chestBase64 =
+	"H4sIAAAAAAAA/2VS227TQBCdeBPHdlRaKpD4Ax5II6QKSAt5qYhEJQoRSJSLULS2J7bltdfa3ZDyK/wM4o94QTzC2E5ip1lZ1p6zc87Mzo4H7vsgxoybJGDQ/4BKJzIHAIvB4CU3fMvcMR44V2h4SCwD93r6drHQaD7+o9XCn0gMLfyZYMcjLJUIp2FinCZN79nodPTEgcOST/JoJrhZSJXBEeZRkmO89M/9ZZomZgB2bVealxmhXqXzRqW9fZ0D3Tc8Qzi8qOAJmSRBwkWriOOqiEdPx+PHJ2Ofn4bjs9LZgt51EpoYmAX2K0yi2FTb15SCWOtWRX//UFG/aP+DgTfjAo3BK35DhOtBf00wuJ9ReYHiC3NeLFUhcL6SUtQte9Cc+YIH6TyQeaDQYHlPBvdax0qu8o2SXurhnquOlyJFNfflzZcFD6i3k2XxtUzD4EUTLTAwqPJNSC6ViYcx16ST6WTBhcZhIVeoMKxRadFl8LyxoOnRZtfAfC9wogkLHK44JRAyitoOPQYHjQNPFHE2g6PWDZEH1Rz2d3qmRZLh3BcySOmMHhHcixKUk0rEMXQs+li3R3/btvu248JBFTHNDY0Y0ozQBRywLsMd36ZdA2AzqasHWY9Y9a8ld/datxPe2Ya70Ls0mOmW9vBWz3aU1lZpw2DGC1SjdzyP8OfvughWDt43FLrx2+vWXuVr0/8kU5Gq5AMAAA==";
 const rubiks = {
 	green:
 		"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",
@@ -108,39 +109,41 @@ getAllResourcePackBlobs().then((resourcePackBlobs) => {
 	renderer = new SchematicRenderer(
 		canvas,
 		{
-			green: rubiks.green,
-			yellow: rubiks.yellow,
-			red: rubiks.red,
-			blue: rubiks.blue,
-			white: rubiks.white,
-			orange: rubiks.orange,
+			// grass_test: schematicBase64,
+			chest_test: chestBase64,
+			// green: rubiks.green,
+			// yellow: rubiks.yellow,
+			// red: rubiks.red,
+			// blue: rubiks.blue,
+			// white: rubiks.white,
+			// orange: rubiks.orange,
 		},
 		{
 			resourcePackBlobs,
 		}
 	);
-	setTimeout(() => {
-		renderer.updateSchematic("control", rubiks.control);
-	}, 4000);
-	renderer.schematicRendererCore
-		.scheduleMovement("green", -16, 13, -25, 2000, 2000)
-		.scheduleMovement("yellow", -16, 13, -5, 2000, 0)
-		.scheduleMovement("red", -16, 13, 15, 2000, 0)
-		.scheduleMovement("blue", 13, 13, 15, 2000, 0)
-		.scheduleMovement("white", 13, 13, -5, 2000, 0)
-		.scheduleMovement("orange", 13, 13, -25, 2000, 0)
-		.scheduleTransparencyChange("green", 0.3, 1000, 3000)
-		.scheduleTransparencyChange("yellow", 0.3, 1000, 0)
-		.scheduleTransparencyChange("blue", 0.3, 1000, 0)
-		.scheduleTransparencyChange("white", 0.3, 1000, 0)
-		.scheduleTransparencyChange("orange", 0.3, 1000, 0)
-		.scheduleTransparencyChange("control", 0.3, 1000, 0)
-		.scheduleMovement("red", 10, 20, -10, 2000, 0)
-		.scheduleRotation("red", 0, 90, 0, 2000, 0)
-		.scheduleScaling("red", 1.5, 1.5, 1.5, 2000, 0)
-		.scheduleScaling("red", 1, 1, 1, 2000, 4000)
-		.scheduleRotation("red", 0, 0, 0, 2000, 0)
-		.scheduleMovement("red", -10, -20, 10, 2000, 0);
+	// setTimeout(() => {
+	// 	renderer.updateSchematic("control", rubiks.control);
+	// }, 4000);
+	// renderer.schematicRendererCore
+	// 	.scheduleMovement("green", -16, 13, -25, 2000, 2000)
+	// 	.scheduleMovement("yellow", -16, 13, -5, 2000, 0)
+	// 	.scheduleMovement("red", -16, 13, 15, 2000, 0)
+	// 	.scheduleMovement("blue", 13, 13, 15, 2000, 0)
+	// 	.scheduleMovement("white", 13, 13, -5, 2000, 0)
+	// 	.scheduleMovement("orange", 13, 13, -25, 2000, 0)
+	// 	.scheduleTransparencyChange("green", 0.3, 1000, 3000)
+	// 	.scheduleTransparencyChange("yellow", 0.3, 1000, 0)
+	// 	.scheduleTransparencyChange("blue", 0.3, 1000, 0)
+	// 	.scheduleTransparencyChange("white", 0.3, 1000, 0)
+	// 	.scheduleTransparencyChange("orange", 0.3, 1000, 0)
+	// 	.scheduleTransparencyChange("control", 0.3, 1000, 0)
+	// 	.scheduleMovement("red", 10, 20, -10, 2000, 0)
+	// 	.scheduleRotation("red", 0, 90, 0, 2000, 0)
+	// 	.scheduleScaling("red", 1.5, 1.5, 1.5, 2000, 0)
+	// 	.scheduleScaling("red", 1, 1, 1, 2000, 4000)
+	// 	.scheduleRotation("red", 0, 0, 0, 2000, 0)
+	// 	.scheduleMovement("red", -10, -20, 10, 2000, 0);
 });
 //read the localfile mpu_base64.txt and then render the schematic
 // async function readLocalFile() {
