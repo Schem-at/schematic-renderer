@@ -50,8 +50,8 @@ export class SchematicRenderer {
 	constructor(
 		canvas: HTMLCanvasElement,
 		schematicData: { [key: string]: string },
-		options: any,
-		defaultResourcePacks?: Record<string, DefaultPackCallback>
+		defaultResourcePacks: Record<string, DefaultPackCallback> = {},
+		options: any = {}
 	) {
 		this.canvas = canvas;
 		this.options = options;

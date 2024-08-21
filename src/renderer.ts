@@ -13,7 +13,7 @@ import { SSAOEffect } from "realism-effects";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 class GammaCorrectionEffect extends POSTPROCESSING.Effect {
-	constructor(gamma = 0.65) {
+	constructor(gamma = 0.6) {
 		super(
 			"GammaCorrectionEffect",
 			`
@@ -62,7 +62,7 @@ export class Renderer {
 			canvas: this.canvas,
 			alpha: true,
 		});
-		this.gammaCorrectionEffect = new GammaCorrectionEffect(0.65);
+		this.gammaCorrectionEffect = new GammaCorrectionEffect(0.6);
 		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
 		this.scene = new THREE.Scene();
 		this.camera = this.createCamera();
