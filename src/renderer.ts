@@ -20,6 +20,10 @@ class GammaCorrectionEffect extends POSTPROCESSING.Effect {
             uniform float gamma;
 
             void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+				if (gamma == 0.0) {
+					outputColor = inputColor;
+					return;
+				}
                 vec3 color = pow(inputColor.rgb, vec3(1.0 / gamma));
                 outputColor = vec4(color, inputColor.a);
             }

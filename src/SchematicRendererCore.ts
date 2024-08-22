@@ -273,10 +273,19 @@ export class SchematicRendererCore {
 				}
 			});
 
-			const startOpacity =
-				this.schematicMeshes[schematicKey][0].material instanceof THREE.Material
-					? this.schematicMeshes[schematicKey][0].material.opacity
-					: this.schematicMeshes[schematicKey][0].material[0].opacity;
+			const getMaterialOpacity = (
+				material: THREE.Material | THREE.Material[]
+			): number => {
+				if (Array.isArray(material)) {
+					return material[0]?.opacity ?? 1;
+				} else {
+					return material.opacity ?? 1;
+				}
+			};
+
+			const startOpacity = getMaterialOpacity(
+				this.schematicMeshes[schematicKey][0].material
+			);
 
 			this.animate(duration, easing, (progress) => {
 				const currentOpacity =

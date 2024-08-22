@@ -50,7 +50,14 @@ const renderer = new SchematicRenderer(canvas, {
 	// blue: rubiks.blue,
 	// white: rubiks.white,
 	// orange: rubiks.orange,
-});
+},
+	{
+		"default_resource_pack": (resolve) => {
+			fetch("https://cdn.jsdelivr.net/gh/EngineHub/SchematicRenderer/assets/default_resource_pack.zip")
+				.then((response) => response.blob())
+				.then((blob) => resolve(blob));
+		}
+	}
 // setTimeout(() => {
 // 	renderer.updateSchematic("control", rubiks.control);
 // }, 4000);

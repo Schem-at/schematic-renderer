@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
 	"module": "dist/schematic-renderer.es.js",
@@ -35,7 +35,7 @@
 		"deepmerge": "^4.3.1",
 		"gif.js.optimized": "^1.0.1",
 		"gzip-js": "^0.3.2",
-		"http-proxy-middleware": "^2.0.0",
+		"http-proxy-middleware": "^0.2.0",
 		"jszip": "^3.10.1",
 		"lil-gui": "^0.19.2",
 		"pako": "^2.1.0",

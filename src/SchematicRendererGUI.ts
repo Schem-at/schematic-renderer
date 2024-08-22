@@ -25,19 +25,11 @@ export class SchematicRendererGUI {
 				this.schematicRenderer.exportUsdz();
 			},
 			takeScreenshot: () => {
-				this.schematicRenderer.schematicMediaCapture.downloadScreenshot(
-					1920,
-					1080
-				);
+				this.schematicRenderer.downloadScreenshot(1920, 1080);
 			},
 
 			downloadRotationWebM: () => {
-				this.schematicRenderer.schematicMediaCapture.downloadRotationWebM(
-					1920,
-					1080,
-					24,
-					1
-				);
+				this.schematicRenderer.downloadRotationWebM(1920, 1080, 24, 1);
 			},
 		};
 

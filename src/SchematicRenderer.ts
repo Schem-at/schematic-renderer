@@ -28,6 +28,7 @@ function relayMethods(target: any, sourceKey: string) {
 }
 
 export class SchematicRenderer {
+	[x: string]: any;
 	canvas: HTMLCanvasElement;
 	options: any;
 
@@ -39,13 +40,10 @@ export class SchematicRenderer {
 
 	schematicRendererGUI: SchematicRendererGUI | null = null;
 
-	private schematicRendererCore: SchematicRendererCore;
-
-	private schematicMediaCapture: SchematicMediaCapture;
-
-	private schematicExporter: SchematicExporter;
-
-	private resourcePackManager: ResourcePackManager;
+	schematicRendererCore: SchematicRendererCore | undefined;
+	schematicMediaCapture: SchematicMediaCapture | undefined;
+	schematicExporter: SchematicExporter | undefined;
+	resourcePackManager: ResourcePackManager;
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -127,8 +125,9 @@ export class SchematicRenderer {
 
 		await this.resourceLoader.initialize();
 
-		await this.schematicRendererCore.render();
-
+		if (this.schematicRendererCore) {
+			await this.schematicRendererCore.render();
+		}
 		if (this.options?.debugGUI) {
 			this.schematicRendererGUI = new SchematicRendererGUI(this);
 		}
@@ -138,22 +137,22 @@ export class SchematicRenderer {
 		this.renderer.schematics[key] = loadSchematic(
 			parseNbtFromBase64(schematicData)
 		);
-		await this.schematicRendererCore.renderSchematic(key);
+		await this.renderSchematic(key);
 	}
 
-	async exportUsdz() {
-		return this.schematicExporter.exportUsdz();
+	async exportUsdz(): Promise<any> {
+		return this.exportUsdz();
 	}
 
-	async downloadScreenshot(resolutionX: number, resolutionY: number) {
-		return this.schematicMediaCapture.downloadScreenshot(
-			resolutionX,
-			resolutionY
-		);
+	async downloadScreenshot(
+		resolutionX: number,
+		resolutionY: number
+	): Promise<any> {
+		return this.downloadScreenshot(resolutionX, resolutionY);
 	}
 
-	async getScreenshot(resolutionX: number, resolutionY: number) {
-		return this.schematicMediaCapture.getScreenshot(resolutionX, resolutionY);
+	async getScreenshot(resolutionX: number, resolutionY: number): Promise<any> {
+		return this.getScreenshot(resolutionX, resolutionY);
 	}
 
 	async getRotationWebM(
@@ -162,8 +161,8 @@ export class SchematicRenderer {
 		frameRate: number,
 		duration: number,
 		angle: number = 360
-	) {
-		return this.schematicMediaCapture.getRotationWebM(
+	): Promise<any> {
+		return this.getRotationWebM(
 			resolutionX,
 			resolutionY,
 			frameRate,
@@ -232,6 +231,8 @@ export class SchematicRenderer {
 	private async reloadResourcePacks() {
 		await this.initializeResourcePacks();
 		await this.resourceLoader.initialize();
-		await this.schematicRendererCore.render();
+		if (this.schematicRendererCore) {
+			await this.schematicRendererCore.render();
+		}
 	}
 }
