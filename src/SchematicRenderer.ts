@@ -3,7 +3,7 @@ import { TagMap } from "@enginehub/nbt-ts";
 import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
-import { parseNbtFromBase64 } from "./utils";
+import { parseNbtFromArrayBuffer, parseNbtFromBase64 } from "./utils";
 import { loadSchematic, Schematic } from "@enginehub/schematicjs";
 import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
@@ -13,6 +13,9 @@ import {
 	ResourcePackManager,
 	DefaultPackCallback,
 } from "./ResourcePackManager";
+
+// Import the WASM module
+import init, { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
 
 function relayMethods(target: any, sourceKey: string) {
 	const source = target[sourceKey];
@@ -45,9 +48,13 @@ export class SchematicRenderer {
 	schematicExporter: SchematicExporter | undefined;
 	resourcePackManager: ResourcePackManager;
 
+	// Add WASM-related properties
+	private wasmModule: Awaited<ReturnType<typeof init>> | null = null;
+	private schematicWrapper: SchematicWrapper | null = null;
+
 	constructor(
 		canvas: HTMLCanvasElement,
-		schematicData: { [key: string]: string },
+		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
 		defaultResourcePacks: Record<string, DefaultPackCallback> = {},
 		options: any = {}
 	) {
@@ -55,27 +62,40 @@ export class SchematicRenderer {
 		this.options = options;
 		this.renderer = new Renderer(canvas, options);
 		this.resourcePackManager = new ResourcePackManager();
+		this.initWasm().then(() => {
+			this.initializeResourcePacks(defaultResourcePacks).then(() => {
+				this.resourceLoader = new ResourceLoader(
+					this.options.resourcePackBlobs,
+					this.materialMap
+				);
+				this.worldMeshBuilder = new WorldMeshBuilder(
+					this.resourceLoader,
+					this.materialMap,
+					this.renderer
+				);
+				this.schematicRendererCore = new SchematicRendererCore(
+					this.renderer,
+					this.worldMeshBuilder
+				);
+				this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
+				this.schematicExporter = new SchematicExporter(this.renderer);
 
-		this.initializeResourcePacks(defaultResourcePacks).then(() => {
-			this.resourceLoader = new ResourceLoader(
-				this.options.resourcePackBlobs,
-				this.materialMap
-			);
-			this.worldMeshBuilder = new WorldMeshBuilder(
-				this.resourceLoader,
-				this.materialMap,
-				this.renderer
-			);
-			this.schematicRendererCore = new SchematicRendererCore(
-				this.renderer,
-				this.worldMeshBuilder
-			);
-			this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
-			this.schematicExporter = new SchematicExporter(this.renderer);
-
-			this.setupRelayedMethods();
-			this.initialize(schematicData);
+				this.setupRelayedMethods();
+				this.initialize(schematicData);
+			});
 		});
+	}
+
+	private async initWasm() {
+		try {
+			console.log("Starting WASM initialization...");
+			this.wasmModule = await init();
+			console.log("WASM module initialized");
+			this.schematicWrapper = new SchematicWrapper();
+			console.log("SchematicWrapper created");
+		} catch (error) {
+			console.error("Failed to initialize WASM module:", error);
+		}
 	}
 
 	private setupRelayedMethods() {
@@ -107,15 +127,15 @@ export class SchematicRenderer {
 		);
 	}
 
-	async initialize(schematicData: { [key: string]: string }) {
-		let parsedNbt: TagMap;
+	async initialize(schematicData: {
+		[key: string]: () => Promise<ArrayBuffer>;
+	}) {
 		const loadedSchematics = {} as { [key: string]: Schematic };
 
-		// Iterate over the object's keys
 		for (const key in schematicData) {
 			if (schematicData.hasOwnProperty(key)) {
-				const value = schematicData[key];
-				parsedNbt = parseNbtFromBase64(value);
+				const arrayBuffer = await schematicData[key]();
+				const parsedNbt = parseNbtFromArrayBuffer(arrayBuffer);
 				loadedSchematics[key] = loadSchematic(parsedNbt);
 			}
 		}
@@ -133,10 +153,13 @@ export class SchematicRenderer {
 		}
 	}
 
-	async updateSchematic(key: string, schematicData: string) {
-		this.renderer.schematics[key] = loadSchematic(
-			parseNbtFromBase64(schematicData)
-		);
+	async updateSchematic(
+		key: string,
+		schematicDataCallback: () => Promise<ArrayBuffer>
+	) {
+		const arrayBuffer = await schematicDataCallback();
+		const parsedNbt = parseNbtFromArrayBuffer(arrayBuffer);
+		this.renderer.schematics[key] = loadSchematic(parsedNbt);
 		await this.renderSchematic(key);
 	}
 

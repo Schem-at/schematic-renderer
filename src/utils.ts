@@ -462,30 +462,31 @@ export const NON_OCCLUDING_BLOCKS = new Set([
 	...NonOccludingBlocks,
 ]);
 
-//export function parseNbt(nbt: string): TagMap {
-//	const buff = Buffer.from(nbt, "base64");
-//	const deflated = Buffer.from(unzip(buff));
-//	const data = decode(deflated, {
-//		unnamed: false,
-//		useMaps: true,
-//	});
-//	return data.value as TagMap;
-//}
+export function parseNbt(nbt: ArrayBuffer | Buffer): TagMap {
+	let bufferData: Buffer;
+	if (nbt instanceof ArrayBuffer) {
+		bufferData = Buffer.from(nbt);
+	} else {
+		bufferData = nbt;
+	}
 
-export function parseNbt(nbt: Buffer): TagMap {
 	let uncompressed;
 	try {
-		uncompressed = unzip(nbt);
+		uncompressed = unzip(bufferData);
 	} catch (e) {
-		uncompressed = nbt;
+		uncompressed = bufferData;
 	}
 	const deflated = Buffer.from(uncompressed as Buffer);
 
-	const data = decode(<import("buffer").Buffer>(<unknown>deflated), {
+	const data = decode(deflated, {
 		unnamed: false,
 		useMaps: true,
 	});
 	return data.value as TagMap;
+}
+
+export function parseNbtFromArrayBuffer(nbt: ArrayBuffer): TagMap {
+	return parseNbt(nbt);
 }
 
 export function parseNbtFromBase64(nbt: string): TagMap {
