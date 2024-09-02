@@ -6,8 +6,10 @@ import TransparentBlocks from "./transparent.json";
 import { Buffer } from "buffer/";
 
 import * as THREE from "three";
-import { Block } from "@enginehub/schematicjs";
-
+interface Block {
+	name: string;
+	properties: Record<string, string>;
+}
 export const POSSIBLE_FACES = [
 	"south",
 	"north",
@@ -438,7 +440,7 @@ export function getDegreeRotationMatrix(x: number, y: number, z: number) {
 
 export function isExtendedPiston(block: Block) {
 	return (
-		(block.type === "sticky_piston" || block.type === "piston") &&
+		(block.name === "sticky_piston" || block.name === "piston") &&
 		block.properties?.["extended"] === "true"
 	);
 }
@@ -496,7 +498,7 @@ export function parseNbtFromBase64(nbt: string): TagMap {
 
 export function hashBlockForMap(block: Block) {
 	// make the md5 hash of the block
-	let hash = block.type;
+	let hash = block.name;
 	if (block.properties) {
 		for (const key in block.properties) {
 			hash += block.properties[key];

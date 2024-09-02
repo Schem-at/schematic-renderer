@@ -12,6 +12,29 @@ import {
 import { Renderer } from "./renderer";
 import { Vector } from "./types";
 
+import { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
+
+interface ChunkDimensions {
+	chunkWidth: number;
+	chunkHeight: number;
+	chunkLength: number;
+}
+
+interface Block {
+	name: string;
+	properties: Record<string, string>;
+}
+
+interface BlockPosition {
+	x: number;
+	y: number;
+	z: number;
+}
+
+interface BlockData extends BlockPosition {
+	name: string;
+	properties: Record<string, string>;
+}
 export class WorldMeshBuilder {
 	schematic: any;
 	blockMeshBuilder: BlockMeshBuilder;
@@ -33,35 +56,11 @@ export class WorldMeshBuilder {
 		);
 	}
 
-	public splitSchemaIntoChunks(
-		schematic: any,
-		dimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
-	): any[] {
-		const chunks: any[] = [];
-		const { chunkWidth, chunkHeight, chunkLength } = dimensions;
-		const { width, height } = schematic;
-		const chunkCountX = Math.ceil(width / chunkWidth);
-		const chunkCountY = Math.ceil(height / chunkHeight);
-		for (const pos of schematic) {
-			const { x, y, z } = pos;
-			const chunkX = Math.floor(x / chunkWidth);
-			const chunkY = Math.floor(y / chunkHeight);
-			const chunkZ = Math.floor(z / chunkLength);
-			const chunkIndex =
-				chunkX + chunkY * chunkCountX + chunkZ * chunkCountX * chunkCountY;
-			if (!chunks[chunkIndex]) {
-				chunks[chunkIndex] = [];
-			}
-			chunks[chunkIndex].push(pos);
-		}
-		return chunks;
-	}
-
 	public async getChunkMesh(
-		schematic: any,
-		chunk: any,
-		offset: { x: number; y: number; z: number }
-	) {
+		chunk: BlockData[],
+		offset: { x: number; y: number; z: number },
+		schematic: SchematicWrapper
+	): Promise<THREE.Mesh[]> {
 		const maxBlocksAllowed = 1000000;
 
 		let count = 0;
@@ -82,42 +81,35 @@ export class WorldMeshBuilder {
 		};
 		let start;
 		let startTotal = performance.now();
-		const offsetValue = offset ?? { x: 0, y: 0, z: 0 };
-		const components = {} as any;
-		for (let i = 0; i < chunk.length; i++) {
+		const components: Record<string, any[]> = {};
+
+		for (const blockData of chunk) {
 			if (count > maxBlocksAllowed) {
 				break;
 			}
 
-			const pos = chunk[i];
-			let { x, y, z } = pos;
-			x += offsetValue.x;
-			y += offsetValue.y;
-			z += offsetValue.z;
+			let { x, y, z, name, properties } = blockData;
+			x += offset.x;
+			y += offset.y;
+			z += offset.z;
+			if (INVISIBLE_BLOCKS.has(name)) {
+				continue;
+			}
 
-			const block = schematic.getBlock(pos);
-			if (!block) {
-				continue;
-			}
-			if (INVISIBLE_BLOCKS.has(block.type)) {
-				continue;
-			}
-			
 			start = performance.now();
-			// TODO: Precompute occluded faces to avoid recomputing them for each block and sampling the block mesh
-
 			const occludedFaces = occludedFacesIntToList(
-				this.blockMeshBuilder.getOccludedFacesForBlock(schematic, block, pos)
+				this.blockMeshBuilder.getOccludedFacesForBlock(
+					schematic,
+					blockData,
+					new THREE.Vector3(x, y, z)
+				)
 			);
 			chunkTimes.occlusion += performance.now() - start;
-
 			start = performance.now();
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
-				block,
-				pos
+				{ name, properties },
+				{ x, y, z }
 			);
-
-			
 			chunkTimes.blockMeshRetrieval += performance.now() - start;
 
 			for (const key in blockComponents) {
@@ -125,8 +117,9 @@ export class WorldMeshBuilder {
 				const blockComponent = blockComponents[key];
 
 				// Check for rotation with model holder
-				const holder = (await this.ressourceLoader.getBlockMeta(block))
-					.modelOptions.holders[0];
+				const holder = (
+					await this.ressourceLoader.getBlockMeta({ name, properties })
+				).modelOptions.holders[0];
 				const rotationMatrix = getDegreeRotationMatrix(
 					-(holder.x ?? 0),
 					-(holder.y ?? 0),
@@ -158,27 +151,34 @@ export class WorldMeshBuilder {
 			chunkTimes
 		);
 		chunkTimes.chunkMeshCreation.total_time = performance.now() - start;
-		console.log("total time", performance.now() - startTotal);
-
-		console.log("Chunk times", chunkTimes);
 		return meshes;
 	}
 
 	public isSolid(schematic: any, x: number, y: number, z: number) {
 		const block = schematic.getBlock(new THREE.Vector3(x, y, z));
-		return block && !TRANSPARENT_BLOCKS.has(block.type);
+		return block && !TRANSPARENT_BLOCKS.has(block.name);
 	}
 
 	public async getSchematicMeshes(
-		schematic: any,
-		chunkDimensions = { chunkWidth: 64, chunkHeight: 64, chunkLength: 64 }
+		schematic: SchematicWrapper,
+		chunkDimensions: ChunkDimensions = {
+			chunkWidth: 64,
+			chunkHeight: 64,
+			chunkLength: 64,
+		}
 	): Promise<THREE.Mesh[]> {
+		const schematicDimensions = schematic.get_dimensions();
 		const offset = {
-			x: -schematic.width / 2,
+			x: -schematicDimensions[0] / 2,
 			y: 0,
-			z: -schematic.length / 2,
+			z: -schematicDimensions[2] / 2,
 		};
-		const chunks = await this.splitSchemaIntoChunks(schematic, chunkDimensions);
+
+		const chunks = schematic.chunks(
+			chunkDimensions.chunkWidth,
+			chunkDimensions.chunkHeight,
+			chunkDimensions.chunkLength
+		);
 		const totalChunks = chunks.length;
 		let currentChunk = 0;
 		const schematicMeshes: THREE.Mesh[] = [];
@@ -186,11 +186,12 @@ export class WorldMeshBuilder {
 		for (const chunk of chunks) {
 			currentChunk++;
 			const chunkMesh = await this.getChunkMesh(
-				schematic,
-				chunk,
-				offset ?? { x: 0, y: 0, z: 0 }
+				chunk as BlockData[],
+				offset,
+				schematic
 			);
 			if (chunkMesh.length === 0) {
+				console.log("Chunk", currentChunk, "of", totalChunks, "is empty");
 				continue;
 			}
 			this.renderer.scene.add(...chunkMesh);

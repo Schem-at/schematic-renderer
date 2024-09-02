@@ -16,7 +16,6 @@ class AnimationScheduler {
 	}
 
 	private runNext() {
-		console.log("runNext", this.queue.length);
 		if (this.queue.length === 0) {
 			this.isRunning = false;
 			return;

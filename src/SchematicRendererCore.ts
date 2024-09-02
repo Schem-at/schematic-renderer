@@ -203,7 +203,6 @@ export class SchematicRendererCore {
 		duration: number = 1000,
 		easing: EasingFunction = EasingFunctions.easeInOutQuad
 	) {
-		console.log("rotateSchematicSmooth");
 		if (this.schematicMeshes[schematicKey]) {
 			const startRotation = new THREE.Quaternion().setFromEuler(
 				this.schematicMeshes[schematicKey][0].rotation
@@ -260,7 +259,6 @@ export class SchematicRendererCore {
 		duration: number = 1000,
 		easing: EasingFunction = EasingFunctions.easeInOutQuad
 	) {
-		console.log("Changing transparency for schematic:", schematicKey);
 		if (this.schematicMeshes[schematicKey]) {
 			// TODO: This might be inneficient we might want to clone the materials before hand
 			this.schematicMeshes[schematicKey].forEach((mesh) => {

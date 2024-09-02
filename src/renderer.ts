@@ -12,6 +12,8 @@ import { SSAOEffect } from "realism-effects";
 
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
+import { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
+
 class GammaCorrectionEffect extends POSTPROCESSING.Effect {
 	constructor(gamma = 0.6) {
 		super(
@@ -53,7 +55,7 @@ export class Renderer {
 	camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
 	controls: OrbitControls;
 	composer: POSTPROCESSING.EffectComposer;
-	schematics: { [key: string]: any } = {};
+	schematics: { [key: string]: SchematicWrapper } = {};
 	gammaCorrectionEffect: GammaCorrectionEffect;
 	lights: Light[] = [];
 	pmremGenerator: THREE.PMREMGenerator;

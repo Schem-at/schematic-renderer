@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import deepmerge from "deepmerge";
-import type { Block } from "@enginehub/schematicjs";
+import { BlockStateWrapper } from "@wasm/minecraft_schematic_utils";
+
 import chestModel from "./custom_models/chest.json";
 import shulkerBoxModel from "./custom_models/shulker_box.json";
 import {
@@ -16,6 +17,11 @@ import type {
 	BlockStateDefinitionVariant,
 	BlockStateModelHolder,
 } from "./types";
+
+interface Block {
+	name: string;
+	properties: Record<string, string>;
+}
 export class ResourceLoader {
 	schematic: any;
 	textureCache: Map<string, THREE.Texture>;
@@ -41,8 +47,7 @@ export class ResourceLoader {
 	DEG2RAD = Math.PI / 180;
 
 	DEBUG = true;
-	CUSTOM_MODELS: { [key: string]: any }
-		= {
+	CUSTOM_MODELS: { [key: string]: any } = {
 		"block/chest": chestModel,
 		"block/shulker_box": shulkerBoxModel,
 	};
@@ -226,7 +231,7 @@ export class ResourceLoader {
 	public getColorForElement(
 		faceData: any,
 		tex: string,
-		block: Block | undefined
+		block: BlockStateWrapper | undefined
 	) {
 		if (faceData.tintindex !== undefined) {
 			if (tex.startsWith("block/water_")) {
@@ -268,12 +273,14 @@ export class ResourceLoader {
 		return blockStateDefinition;
 	}
 
-	public async getBlockMeta(block: any) {
+	public async getBlockMeta(block: Block) {
+		// remove the minecraft: prefix
+		block.name = block.name.replace("minecraft:", "");
 		if (this.blockMetaCache.has(hashBlockForMap(block))) {
 			return this.blockMetaCache.get(hashBlockForMap(block));
 		}
 		const blockStateDefinition = await this.loadBlockStateDefinition(
-			block.type
+			block.name
 		);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
@@ -532,7 +539,7 @@ export class ResourceLoader {
 		}
 
 		const name =
-			variantName.length > 0 ? `${block.type}[${variantName}]` : block.type;
+			variantName.length > 0 ? `${block.name}[${variantName}]` : block.name;
 
 		return { models, name };
 	}

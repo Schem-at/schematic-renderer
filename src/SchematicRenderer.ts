@@ -4,7 +4,6 @@ import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
 import { parseNbtFromArrayBuffer, parseNbtFromBase64 } from "./utils";
-import { loadSchematic, Schematic } from "@enginehub/schematicjs";
 import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
@@ -50,7 +49,7 @@ export class SchematicRenderer {
 
 	// Add WASM-related properties
 	private wasmModule: Awaited<ReturnType<typeof init>> | null = null;
-	private schematicWrapper: SchematicWrapper | null = null;
+	// private schematicWrapper: SchematicWrapper | null = null;
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -88,11 +87,7 @@ export class SchematicRenderer {
 
 	private async initWasm() {
 		try {
-			console.log("Starting WASM initialization...");
 			this.wasmModule = await init();
-			console.log("WASM module initialized");
-			this.schematicWrapper = new SchematicWrapper();
-			console.log("SchematicWrapper created");
 		} catch (error) {
 			console.error("Failed to initialize WASM module:", error);
 		}
@@ -130,13 +125,14 @@ export class SchematicRenderer {
 	async initialize(schematicData: {
 		[key: string]: () => Promise<ArrayBuffer>;
 	}) {
-		const loadedSchematics = {} as { [key: string]: Schematic };
+		const loadedSchematics = {} as { [key: string]: SchematicWrapper };
 
 		for (const key in schematicData) {
 			if (schematicData.hasOwnProperty(key)) {
 				const arrayBuffer = await schematicData[key]();
-				const parsedNbt = parseNbtFromArrayBuffer(arrayBuffer);
-				loadedSchematics[key] = loadSchematic(parsedNbt);
+				const schematicWrapper = new SchematicWrapper();
+				schematicWrapper?.from_schematic(new Uint8Array(arrayBuffer));
+				loadedSchematics[key] = schematicWrapper;
 			}
 		}
 
@@ -158,8 +154,9 @@ export class SchematicRenderer {
 		schematicDataCallback: () => Promise<ArrayBuffer>
 	) {
 		const arrayBuffer = await schematicDataCallback();
-		const parsedNbt = parseNbtFromArrayBuffer(arrayBuffer);
-		this.renderer.schematics[key] = loadSchematic(parsedNbt);
+		const schematicWrapper = new SchematicWrapper();
+		schematicWrapper?.from_schematic(new Uint8Array(arrayBuffer));
+		this.renderer.schematics[key] = schematicWrapper;
 		await this.renderSchematic(key);
 	}
 

@@ -1,7 +1,5 @@
 import * as THREE from "three";
 
-import type { loadSchematic } from "@enginehub/schematicjs";
-
 import type { BlockModel, BlockModelData, Vector } from "./types";
 
 import {
@@ -19,7 +17,11 @@ import {
 } from "./utils";
 
 import { ResourceLoader } from "./resource_loader";
-
+import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
+interface Block {
+	name: string;
+	properties: Record<string, string>;
+}
 export class BlockMeshBuilder {
 	public blockMeshCache: Map<any, any>;
 	materialMap: Map<string, THREE.Material>;
@@ -108,7 +110,7 @@ export class BlockMeshBuilder {
 				const material = await this.ressourceLoader.getTextureMaterial(
 					model,
 					faceData,
-					TRANSPARENT_BLOCKS.has(block.type) ||
+					TRANSPARENT_BLOCKS.has(block.name) ||
 						faceData.texture.includes("overlay"),
 					materialColor
 				);
@@ -255,7 +257,6 @@ export class BlockMeshBuilder {
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-		
 		let modelIndex = 0;
 		let start = performance.now();
 		for (const modelHolder of modelOptions.holders) {
@@ -270,7 +271,7 @@ export class BlockMeshBuilder {
 			const model = await this.ressourceLoader.loadModel(modelHolder.model);
 
 			const elements = model?.elements;
-			
+
 			if (!elements) continue;
 			let elementIndex = 0;
 			for (const element of elements) {
@@ -332,10 +333,10 @@ export class BlockMeshBuilder {
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
 						blockComponents[uniqueKey].positions.push(...cornerPos);
-						if (block.type === "redstone_wire" || block.type === "chest") {
+						if (block.name === "redstone_wire" || block.name === "chest") {
 							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
 						} else {
-							blockComponents[uniqueKey].uvs.push( uv[0], 1 - uv[1]);
+							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
 						}
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
@@ -454,11 +455,11 @@ export class BlockMeshBuilder {
 	}
 
 	public getOccludedFacesForBlock(
-		schematic: any,
-		block: any,
+		schematic: SchematicWrapper,
+		block: Block,
 		pos: THREE.Vector3
 	): number {
-		const blockType = block.type;
+		const blockType = block.name;
 		const { x, y, z } = pos;
 		const directionVectors = {
 			east: new THREE.Vector3(1, 0, 0),
@@ -476,10 +477,11 @@ export class BlockMeshBuilder {
 			south: false,
 			north: false,
 		} as { [key: string]: boolean };
+		return this.occludedFacesListToInt(occludedFaces);
 		if (blockType.includes("glass")) {
 			for (const face of POSSIBLE_FACES) {
 				const directionVector = directionVectors[face];
-				const adjacentBlock = schematic.getBlock(
+				const adjacentBlock = schematic.get_block(
 					new THREE.Vector3(x, y, z).add(directionVector)
 				);
 				if (adjacentBlock === undefined) {
@@ -505,7 +507,7 @@ export class BlockMeshBuilder {
 		}
 		for (const face of POSSIBLE_FACES) {
 			const directionVector = directionVectors[face];
-			const adjacentBlock = schematic.getBlock(
+			const adjacentBlock = schematic.get_block(
 				new THREE.Vector3(x, y, z).add(directionVector)
 			);
 			if (adjacentBlock === undefined) {
@@ -520,37 +522,6 @@ export class BlockMeshBuilder {
 			occludedFaces[face] = true;
 		}
 		return this.occludedFacesListToInt(occludedFaces);
-	}
-
-	public async updateBlockModelLookup(
-		blockModelLookup: Map<string, BlockModelData>,
-		loadedSchematic: ReturnType<typeof loadSchematic>
-	): Promise<Map<string, BlockModelData>> {
-		for (const block of loadedSchematic.blockTypes) {
-			if (INVISIBLE_BLOCKS.has(block.type)) {
-				continue;
-			}
-
-			if (blockModelLookup.get(hashBlockForMap(block))) {
-				continue;
-			}
-			const blockState = await this.ressourceLoader.getBlockStateDefinition(
-				block.type
-			);
-			if (!blockState) {
-				continue;
-			}
-			const blockModelData = this.ressourceLoader.getBlockModelData(
-				block,
-				blockState
-			);
-			if (!blockModelData.models.length) {
-				continue;
-			}
-
-			blockModelLookup.set(hashBlockForMap(block), blockModelData);
-		}
-		return blockModelLookup;
 	}
 
 	public async getBlockMeshFromCache(block: any, pos?: any) {
