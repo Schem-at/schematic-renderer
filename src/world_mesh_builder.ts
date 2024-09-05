@@ -11,18 +11,13 @@ import {
 } from "./utils";
 import { Renderer } from "./renderer";
 import { Vector } from "./types";
-
-import { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
+// @ts-ignore
+import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 
 interface ChunkDimensions {
 	chunkWidth: number;
 	chunkHeight: number;
 	chunkLength: number;
-}
-
-interface Block {
-	name: string;
-	properties: Record<string, string>;
 }
 
 interface BlockPosition {
@@ -80,7 +75,6 @@ export class WorldMeshBuilder {
 			},
 		};
 		let start;
-		let startTotal = performance.now();
 		const components: Record<string, any[]> = {};
 
 		for (const blockData of chunk) {

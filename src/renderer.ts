@@ -11,8 +11,7 @@ import * as POSTPROCESSING from "postprocessing";
 import { SSAOEffect } from "realism-effects";
 
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
-
-import { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
+import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 
 class GammaCorrectionEffect extends POSTPROCESSING.Effect {
 	constructor(gamma = 0.6) {

@@ -1,11 +1,10 @@
 import * as THREE from "three";
 
-import type { BlockModel, BlockModelData, Vector } from "./types";
+import type { BlockModel, Vector } from "./types";
 
 import {
 	isExtendedPiston,
 	getOppositeFace,
-	INVISIBLE_BLOCKS,
 	NON_OCCLUDING_BLOCKS,
 	normalize,
 	TRANSPARENT_BLOCKS,
@@ -459,7 +458,9 @@ export class BlockMeshBuilder {
 		block: Block,
 		pos: THREE.Vector3
 	): number {
-		const blockType = block.name;
+		// const blockType = block.name;
+		// remove the minecraft: prefix
+		const blockType = block.name.split(":")[1];
 		const { x, y, z } = pos;
 		const directionVectors = {
 			east: new THREE.Vector3(1, 0, 0),
@@ -477,17 +478,18 @@ export class BlockMeshBuilder {
 			south: false,
 			north: false,
 		} as { [key: string]: boolean };
-		return this.occludedFacesListToInt(occludedFaces);
 		if (blockType.includes("glass")) {
 			for (const face of POSSIBLE_FACES) {
 				const directionVector = directionVectors[face];
+				// @ts-ignore
 				const adjacentBlock = schematic.get_block(
 					new THREE.Vector3(x, y, z).add(directionVector)
 				);
 				if (adjacentBlock === undefined) {
 					continue;
 				}
-				if (adjacentBlock.type.includes("glass")) {
+				// @ts-ignore
+				if (adjacentBlock.name.includes("glass")) {
 					occludedFaces[face] = true;
 				}
 			}
@@ -507,16 +509,19 @@ export class BlockMeshBuilder {
 		}
 		for (const face of POSSIBLE_FACES) {
 			const directionVector = directionVectors[face];
+			// @ts-ignore
 			const adjacentBlock = schematic.get_block(
 				new THREE.Vector3(x, y, z).add(directionVector)
 			);
-			if (adjacentBlock === undefined) {
+			// @ts-ignore
+			const adjacentBlockName = adjacentBlock?.name?.split(":")[1];
+			if (adjacentBlockName === undefined) {
 				continue;
 			}
-			if (NON_OCCLUDING_BLOCKS.has(adjacentBlock.type)) {
+			if (NON_OCCLUDING_BLOCKS.has(adjacentBlockName)) {
 				continue;
 			}
-			if (TRANSPARENT_BLOCKS.has(adjacentBlock.type)) {
+			if (TRANSPARENT_BLOCKS.has(adjacentBlockName)) {
 				continue;
 			}
 			occludedFaces[face] = true;

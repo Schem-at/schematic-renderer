@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import deepmerge from "deepmerge";
-import { BlockStateWrapper } from "@wasm/minecraft_schematic_utils";
+import { BlockStateWrapper } from "./wasm/minecraft_schematic_utils";
 
 import chestModel from "./custom_models/chest.json";
 import shulkerBoxModel from "./custom_models/shulker_box.json";
@@ -242,6 +242,7 @@ export class ResourceLoader {
 				tex.startsWith("block/redstone_dust_") ||
 				tex.startsWith("block/redstone_power")
 			) {
+				// @ts-ignore
 				const power = block?.properties?.["power"] ?? 0;
 				return REDSTONE_COLORS[power as number];
 			} else if (faceData.tintindex !== undefined) {

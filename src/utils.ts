@@ -1,9 +1,6 @@
-import { unzip } from "gzip-js";
-import { decode, TagMap } from "@enginehub/nbt-ts";
 import type { Faces, Vector } from "./types";
 import NonOccludingBlocks from "./nonOccluding.json";
 import TransparentBlocks from "./transparent.json";
-import { Buffer } from "buffer/";
 
 import * as THREE from "three";
 interface Block {
@@ -440,7 +437,8 @@ export function getDegreeRotationMatrix(x: number, y: number, z: number) {
 
 export function isExtendedPiston(block: Block) {
 	return (
-		(block.name === "sticky_piston" || block.name === "piston") &&
+		(block.name === "minecraft:sticky_piston" ||
+			block.name === "minecraft:piston") &&
 		block.properties?.["extended"] === "true"
 	);
 }
@@ -463,38 +461,6 @@ export const NON_OCCLUDING_BLOCKS = new Set([
 	...INVISIBLE_BLOCKS,
 	...NonOccludingBlocks,
 ]);
-
-export function parseNbt(nbt: ArrayBuffer | Buffer): TagMap {
-	let bufferData: Buffer;
-	if (nbt instanceof ArrayBuffer) {
-		bufferData = Buffer.from(nbt);
-	} else {
-		bufferData = nbt;
-	}
-
-	let uncompressed;
-	try {
-		uncompressed = unzip(bufferData);
-	} catch (e) {
-		uncompressed = bufferData;
-	}
-	const deflated = Buffer.from(uncompressed as Buffer);
-
-	const data = decode(deflated, {
-		unnamed: false,
-		useMaps: true,
-	});
-	return data.value as TagMap;
-}
-
-export function parseNbtFromArrayBuffer(nbt: ArrayBuffer): TagMap {
-	return parseNbt(nbt);
-}
-
-export function parseNbtFromBase64(nbt: string): TagMap {
-	const buff = Buffer.from(nbt, "base64");
-	return parseNbt(buff);
-}
 
 export function hashBlockForMap(block: Block) {
 	// make the md5 hash of the block

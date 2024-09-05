@@ -1,9 +1,7 @@
 import * as THREE from "three";
-import { TagMap } from "@enginehub/nbt-ts";
 import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
 import { WorldMeshBuilder } from "./world_mesh_builder";
-import { parseNbtFromArrayBuffer, parseNbtFromBase64 } from "./utils";
 import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
@@ -13,8 +11,8 @@ import {
 	DefaultPackCallback,
 } from "./ResourcePackManager";
 
-// Import the WASM module
-import init, { SchematicWrapper } from "@wasm/minecraft_schematic_utils";
+// @ts-ignore
+import init, { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 
 function relayMethods(target: any, sourceKey: string) {
 	const source = target[sourceKey];
@@ -46,10 +44,6 @@ export class SchematicRenderer {
 	schematicMediaCapture: SchematicMediaCapture | undefined;
 	schematicExporter: SchematicExporter | undefined;
 	resourcePackManager: ResourcePackManager;
-
-	// Add WASM-related properties
-	private wasmModule: Awaited<ReturnType<typeof init>> | null = null;
-	// private schematicWrapper: SchematicWrapper | null = null;
 
 	constructor(
 		canvas: HTMLCanvasElement,

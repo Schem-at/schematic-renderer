@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import path from 'path';
@@ -31,28 +30,17 @@ export default defineConfig({
   },
   plugins: [
     viteCommonjs(),
-    nodePolyfills({
-      protocolImports: true,
-    }),
+
     wasm(),
     topLevelAwait()
   ],
-  resolve: {
-    alias: {
-      buffer: 'vite-plugin-node-polyfills/polyfills/buffer',
-      '@wasm': path.resolve(__dirname, 'src/wasm')
-    },
-  },
+
   define: {
     'process.env': {},
     'global': 'globalThis',
   },
   optimizeDeps: {
-    esbuildOptions: {
-      define: {
-        global: 'globalThis'
-      },
-    },
+
     exclude: ['@wasm/minecraft_schematic_utils']
   }
 });
