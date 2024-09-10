@@ -158,13 +158,6 @@ export class SchematicRenderer {
 		return this.exportUsdz();
 	}
 
-	async downloadScreenshot(
-		resolutionX: number,
-		resolutionY: number
-	): Promise<any> {
-		return this.downloadScreenshot(resolutionX, resolutionY);
-	}
-
 	async getScreenshot(resolutionX: number, resolutionY: number): Promise<any> {
 		return this.getScreenshot(resolutionX, resolutionY);
 	}

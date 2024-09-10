@@ -32,12 +32,14 @@ export class SchematicMediaCapture {
 		let count = 0;
 		for (const key in schematics) {
 			const schematic = schematics[key];
+			const schematic_dimensions = schematic.get_dimensions();
 			const schematicCenter = new THREE.Vector3(
-				schematic.width / 2,
-				schematic.height / 2,
-				schematic.length / 2
+				schematic_dimensions[0] / 2,
+				schematic_dimensions[1] / 2,
+				schematic_dimensions[2] / 2
 			);
-			centerPosition.add(schematicCenter);
+
+			// centerPosition.add(schematicCenter);
 			const schematicDistance =
 				this.renderer.camera.position.distanceTo(schematicCenter);
 			if (schematicDistance > distance) {
@@ -49,9 +51,16 @@ export class SchematicMediaCapture {
 			count++;
 		}
 
-		centerPosition.divideScalar(count);
-		elevation = this.renderer.camera.position.y - elevation;
-		return { centerPosition, distance, elevation };
+		// centerPosition.divideScalar(count);
+		elevation = this.renderer.camera.position.y;
+		const cameraDistanceToCenter =
+			this.renderer.camera.position.distanceTo(centerPosition);
+		const elevationAngle = Math.asin(
+			this.renderer.camera.position.y / cameraDistanceToCenter
+		);
+		distance = cameraDistanceToCenter;
+		centerPosition.y = elevation;
+		return { centerPosition, distance, elevationAngle };
 	}
 
 	async downloadScreenshot(resolutionX: number, resolutionY: number) {
@@ -70,14 +79,22 @@ export class SchematicMediaCapture {
 		duration: number,
 		angle: number = 360
 	) {
-		const { centerPosition, distance, elevation } =
+		const { centerPosition, distance, elevationAngle } =
 			this.calculateCameraParameters(this.renderer.schematics);
+		console.log(
+			"centerPosition",
+			centerPosition,
+			"distance",
+			distance,
+			"elevationAngle",
+			elevationAngle
+		);
 		const webmBlob = await this.renderer.takeRotationWebM(
 			resolutionX,
 			resolutionY,
 			centerPosition,
 			distance,
-			elevation,
+			elevationAngle,
 			frameRate,
 			duration,
 			angle

@@ -50,15 +50,30 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 	return bytes.buffer;
 }
 
-const renderer = new SchematicRenderer(canvas, {
-	chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
-	diagonalCCA: () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
-	// mpu: () => {
-	// 	return fetch("mpu_base64.txt")
-	// 		.then((response) => response.text())
-	// 		.then((base64) => base64ToArrayBuffer(base64));
-	// },
-});
+const renderer = new SchematicRenderer(
+	canvas,
+	{
+		chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+		// adder: () =>
+		// 	Promise.resolve(base64ToArrayBuffer(adderSchematicBase64String)),
+		// diagonalCCA: () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
+		// mpu: () => {
+		// 	return fetch("mpu_base64.txt")
+		// 		.then((response) => response.text())
+		// 		.then((base64) => base64ToArrayBuffer(base64));
+		// },
+	},
+	{},
+	{
+		debugGUI: true,
+	}
+);
+
+// setTimeout(() => {
+// 	renderer.updateSchematic("diagonalCCA", () =>
+// 		Promise.resolve(base64ToArrayBuffer(diagonalCCA))
+// 	);
+// }, 4000);
 // setTimeout(() => {
 // 	renderer.updateSchematic("control", rubiks.control);
 // }, 4000);

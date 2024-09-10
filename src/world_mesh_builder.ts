@@ -168,6 +168,9 @@ export class WorldMeshBuilder {
 			z: -schematicDimensions[2] / 2,
 		};
 
+		console.log("Schematic dimensions", schematicDimensions);
+		console.log("Offset", offset);
+
 		const chunks = schematic.chunks(
 			chunkDimensions.chunkWidth,
 			chunkDimensions.chunkHeight,

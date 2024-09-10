@@ -5,8 +5,10 @@ export class SchematicRendererGUI {
 	private gui: GUI;
 	private lightingFolder: GUI;
 	private lightControllers: Map<string, GUI>;
+	private schematicRenderer: SchematicRenderer;
 
 	constructor(private schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
 		this.gui = new GUI();
 		this.lightingFolder = this.gui.addFolder("Lighting");
 		this.lightControllers = new Map();
@@ -25,11 +27,19 @@ export class SchematicRendererGUI {
 				this.schematicRenderer.exportUsdz();
 			},
 			takeScreenshot: () => {
-				this.schematicRenderer.downloadScreenshot(1920, 1080);
+				this.schematicRenderer.downloadScreenshot(
+					this.schematicRenderer.canvas.width,
+					this.schematicRenderer.canvas.height
+				);
 			},
 
 			downloadRotationWebM: () => {
-				this.schematicRenderer.downloadRotationWebM(1920, 1080, 24, 1);
+				this.schematicRenderer.downloadRotationWebM(
+					this.schematicRenderer.canvas.width,
+					this.schematicRenderer.canvas.height,
+					24,
+					1
+				);
 			},
 		};
 
@@ -80,7 +90,7 @@ export class SchematicRendererGUI {
 			});
 		this.gui.add(settings, "exportUSDZ").name("Export USDZ");
 		this.gui.add(settings, "takeScreenshot").name("Take Screenshot");
-		// this.gui.add(settings, "takeRotationWebM").name("Take Rotation WebM");
+		this.gui.add(settings, "downloadRotationWebM").name("Take Rotation WebM");
 
 		this.createLightingControls();
 
