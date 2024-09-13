@@ -18,6 +18,12 @@ export function debug_json_schematic(schematic: SchematicWrapper): string;
 export class BlockPosition {
   free(): void;
 /**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+*/
+  constructor(x: number, y: number, z: number);
+/**
 */
   x: number;
 /**
@@ -59,6 +65,10 @@ export class SchematicWrapper {
 /**
 * @param {Uint8Array} data
 */
+  from_data(data: Uint8Array): void;
+/**
+* @param {Uint8Array} data
+*/
   from_litematic(data: Uint8Array): void;
 /**
 * @returns {Uint8Array}
@@ -86,6 +96,24 @@ export class SchematicWrapper {
 * @returns {string | undefined}
 */
   get_block(x: number, y: number, z: number): string | undefined;
+/**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+* @returns {BlockStateWrapper | undefined}
+*/
+  get_block_with_properties(x: number, y: number, z: number): BlockStateWrapper | undefined;
+/**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+* @returns {any}
+*/
+  get_block_entity(x: number, y: number, z: number): any;
+/**
+* @returns {any}
+*/
+  get_all_block_entities(): any;
 /**
 * @returns {string}
 */
@@ -121,13 +149,22 @@ export class SchematicWrapper {
 * @returns {Array<any>}
 */
   chunks(chunk_width: number, chunk_height: number, chunk_length: number): Array<any>;
+/**
+* @param {number} offset_x
+* @param {number} offset_y
+* @param {number} offset_z
+* @param {number} width
+* @param {number} height
+* @param {number} length
+* @returns {Array<any>}
+*/
+  get_chunk_blocks(offset_x: number, offset_y: number, offset_z: number, width: number, height: number, length: number): Array<any>;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_blockposition_free: (a: number, b: number) => void;
   readonly __wbg_get_blockposition_x: (a: number) => number;
   readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
@@ -135,13 +172,19 @@ export interface InitOutput {
   readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
   readonly __wbg_get_blockposition_z: (a: number) => number;
   readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
+  readonly blockposition_new: (a: number, b: number, c: number) => number;
+  readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly schematicwrapper_new: () => number;
+  readonly schematicwrapper_from_data: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_from_litematic: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_to_litematic: (a: number, b: number) => void;
   readonly schematicwrapper_from_schematic: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_to_schematic: (a: number, b: number) => void;
   readonly schematicwrapper_set_block: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
   readonly schematicwrapper_get_block: (a: number, b: number, c: number, d: number, e: number) => void;
+  readonly schematicwrapper_get_block_with_properties: (a: number, b: number, c: number, d: number) => number;
+  readonly schematicwrapper_get_block_entity: (a: number, b: number, c: number, d: number) => number;
+  readonly schematicwrapper_get_all_block_entities: (a: number) => number;
   readonly schematicwrapper_print_schematic: (a: number, b: number) => void;
   readonly schematicwrapper_debug_info: (a: number, b: number) => void;
   readonly schematicwrapper_get_dimensions: (a: number, b: number) => void;
@@ -150,6 +193,7 @@ export interface InitOutput {
   readonly schematicwrapper_get_region_names: (a: number, b: number) => void;
   readonly schematicwrapper_blocks: (a: number) => number;
   readonly schematicwrapper_chunks: (a: number, b: number, c: number, d: number) => number;
+  readonly schematicwrapper_get_chunk_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
   readonly __wbg_blockstatewrapper_free: (a: number, b: number) => void;
   readonly blockstatewrapper_new: (a: number, b: number) => number;
   readonly blockstatewrapper_with_property: (a: number, b: number, c: number, d: number, e: number) => void;

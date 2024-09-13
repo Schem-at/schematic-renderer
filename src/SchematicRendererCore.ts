@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Renderer } from "./renderer";
-import { WorldMeshBuilder } from "./world_mesh_builder";
+import { WorldMeshBuilder } from "./WorldMeshBuilder";
 
 import { AnimationScheduler } from "./AnimationSchedueler";
 import { EasingFunction, EasingFunctions } from "./EasingFunctions";

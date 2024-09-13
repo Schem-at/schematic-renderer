@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Renderer } from "./renderer";
 import { ResourceLoader } from "./resource_loader";
-import { WorldMeshBuilder } from "./world_mesh_builder";
+import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { SchematicRendererGUI } from "./SchematicRendererGUI";
 import { SchematicRendererCore } from "./SchematicRendererCore";
 import { SchematicMediaCapture } from "./SchematicMediaCapture";
@@ -37,7 +37,7 @@ export class SchematicRenderer {
 	materialMap: Map<string, THREE.Material> = new Map();
 	worldMeshBuilder: WorldMeshBuilder | undefined;
 	jarUrl: string | string[] | undefined;
-
+	schematics: { [key: string]: SchematicWrapper } = {};
 	schematicRendererGUI: SchematicRendererGUI | null = null;
 
 	schematicRendererCore: SchematicRendererCore | undefined;
@@ -53,7 +53,7 @@ export class SchematicRenderer {
 	) {
 		this.canvas = canvas;
 		this.options = options;
-		this.renderer = new Renderer(canvas, options);
+		this.renderer = new Renderer(this, canvas, options);
 		this.resourcePackManager = new ResourcePackManager();
 		this.initWasm().then(() => {
 			this.initializeResourcePacks(defaultResourcePacks).then(() => {
@@ -125,13 +125,14 @@ export class SchematicRenderer {
 			if (schematicData.hasOwnProperty(key)) {
 				const arrayBuffer = await schematicData[key]();
 				const schematicWrapper = new SchematicWrapper();
-				schematicWrapper?.from_schematic(new Uint8Array(arrayBuffer));
+				schematicWrapper?.from_data(new Uint8Array(arrayBuffer));
 				loadedSchematics[key] = schematicWrapper;
 			}
 		}
 
 		this.materialMap = new Map();
 		this.renderer.schematics = loadedSchematics;
+		this.schematics = loadedSchematics;
 
 		await this.resourceLoader.initialize();
 

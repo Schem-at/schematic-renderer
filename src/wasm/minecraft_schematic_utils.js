@@ -333,6 +333,17 @@ export class BlockPosition {
     set z(arg0) {
         wasm.__wbg_set_blockposition_z(this.__wbg_ptr, arg0);
     }
+    /**
+    * @param {number} x
+    * @param {number} y
+    * @param {number} z
+    */
+    constructor(x, y, z) {
+        const ret = wasm.blockposition_new(x, y, z);
+        this.__wbg_ptr = ret >>> 0;
+        BlockPositionFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
 }
 
 const BlockStateWrapperFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -341,6 +352,14 @@ const BlockStateWrapperFinalization = (typeof FinalizationRegistry === 'undefine
 /**
 */
 export class BlockStateWrapper {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(BlockStateWrapper.prototype);
+        obj.__wbg_ptr = ptr;
+        BlockStateWrapperFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
 
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -428,6 +447,24 @@ export class SchematicWrapper {
         this.__wbg_ptr = ret >>> 0;
         SchematicWrapperFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+    * @param {Uint8Array} data
+    */
+    from_data(data) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.schematicwrapper_from_data(retptr, this.__wbg_ptr, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
     * @param {Uint8Array} data
@@ -541,6 +578,33 @@ export class SchematicWrapper {
         }
     }
     /**
+    * @param {number} x
+    * @param {number} y
+    * @param {number} z
+    * @returns {BlockStateWrapper | undefined}
+    */
+    get_block_with_properties(x, y, z) {
+        const ret = wasm.schematicwrapper_get_block_with_properties(this.__wbg_ptr, x, y, z);
+        return ret === 0 ? undefined : BlockStateWrapper.__wrap(ret);
+    }
+    /**
+    * @param {number} x
+    * @param {number} y
+    * @param {number} z
+    * @returns {any}
+    */
+    get_block_entity(x, y, z) {
+        const ret = wasm.schematicwrapper_get_block_entity(this.__wbg_ptr, x, y, z);
+        return takeObject(ret);
+    }
+    /**
+    * @returns {any}
+    */
+    get_all_block_entities() {
+        const ret = wasm.schematicwrapper_get_all_block_entities(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
     * @returns {string}
     */
     print_schematic() {
@@ -639,6 +703,19 @@ export class SchematicWrapper {
     */
     chunks(chunk_width, chunk_height, chunk_length) {
         const ret = wasm.schematicwrapper_chunks(this.__wbg_ptr, chunk_width, chunk_height, chunk_length);
+        return takeObject(ret);
+    }
+    /**
+    * @param {number} offset_x
+    * @param {number} offset_y
+    * @param {number} offset_z
+    * @param {number} width
+    * @param {number} height
+    * @param {number} length
+    * @returns {Array<any>}
+    */
+    get_chunk_blocks(offset_x, offset_y, offset_z, width, height, length) {
+        const ret = wasm.schematicwrapper_get_chunk_blocks(this.__wbg_ptr, offset_x, offset_y, offset_z, width, height, length);
         return takeObject(ret);
     }
 }

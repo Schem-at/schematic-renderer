@@ -489,7 +489,7 @@ export class BlockMeshBuilder {
 					continue;
 				}
 				// @ts-ignore
-				if (adjacentBlock.name.includes("glass")) {
+				if (adjacentBlock.includes("glass")) {
 					occludedFaces[face] = true;
 				}
 			}

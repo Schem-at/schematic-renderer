@@ -12,7 +12,7 @@ import { SSAOEffect } from "realism-effects";
 
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
-
+import { HighlightManager } from "./highlight/HighlightManager";
 class GammaCorrectionEffect extends POSTPROCESSING.Effect {
 	constructor(gamma = 0.6) {
 		super(
@@ -55,15 +55,20 @@ export class Renderer {
 	controls: OrbitControls | FlyControls;
 	composer: POSTPROCESSING.EffectComposer;
 	schematics: { [key: string]: SchematicWrapper } = {};
+	schematicRenderer: any;
 	gammaCorrectionEffect: GammaCorrectionEffect;
 	lights: Light[] = [];
 	pmremGenerator: THREE.PMREMGenerator;
 	annotations: { [key: string]: { mesh: THREE.Mesh; label: THREE.Sprite } } =
 		{};
-	annotationInput: HTMLDivElement;
+
 	hoverHighlight: THREE.Mesh | null = null;
 
-	constructor(canvas: HTMLCanvasElement, options: any) {
+	private highlightManager: HighlightManager;
+	private clock: THREE.Clock;
+
+	constructor(schematicRenderer: any, canvas: HTMLCanvasElement, options: any) {
+		this.schematicRenderer = schematicRenderer;
 		this.canvas = canvas;
 		this.renderer = new THREE.WebGLRenderer({
 			// antialias: true,
@@ -86,11 +91,14 @@ export class Renderer {
 		this.setupScene(options);
 
 		this.setBackgroundColor("#000000", 1);
-		// const axesHelper = new THREE.AxesHelper(50);
-		// this.scene.add(axesHelper);
-		this.addMouseHighlight();
-		this.addKeyPressAnnotation();
-		this.createAnnotationInput();
+
+		this.clock = new THREE.Clock();
+		this.highlightManager = new HighlightManager(
+			this.schematicRenderer,
+			this.scene,
+			this.camera,
+			this.renderer
+		);
 	}
 
 	addDebugCuboide(position: THREE.Vector3, size: THREE.Vector3, color: number) {
@@ -101,239 +109,7 @@ export class Renderer {
 		this.scene.add(cube);
 	}
 
-	createAnnotationInput() {
-		this.annotationInput = document.createElement("div");
-		this.annotationInput.style.position = "absolute";
-		this.annotationInput.style.display = "none";
-		this.annotationInput.innerHTML = `
-		  <input type="text" id="annotation-text" style="width: 200px;">
-		  <button id="submit-annotation">Add</button>
-		  <button id="cancel-annotation">Cancel</button>
-		`;
-		document.body.appendChild(this.annotationInput);
-
-		const submitButton =
-			this.annotationInput.querySelector("#submit-annotation");
-		const cancelButton =
-			this.annotationInput.querySelector("#cancel-annotation");
-		const inputField = this.annotationInput.querySelector(
-			"#annotation-text"
-		) as HTMLInputElement;
-
-		submitButton?.addEventListener("click", () => this.submitAnnotation());
-		cancelButton?.addEventListener("click", () => this.hideAnnotationInput());
-		inputField?.addEventListener("keypress", (e) => {
-			if (e.key === "Enter") this.submitAnnotation();
-		});
-	}
-
-	showAnnotationInput(x: number, y: number, position: THREE.Vector3) {
-		this.annotationInput.style.display = "block";
-		this.annotationInput.style.left = `${x}px`;
-		this.annotationInput.style.top = `${y}px`;
-		(
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).focus();
-		console.log("Attempting to show annotation input at", position);
-		this.annotationInput.dataset.position = JSON.stringify(position.toArray());
-	}
-
-	hideAnnotationInput() {
-		this.annotationInput.style.display = "none";
-		(
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).value = "";
-	}
-
-	submitAnnotation() {
-		const text = (
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).value;
-		const positionArray = JSON.parse(
-			this.annotationInput.dataset.position || "[]"
-		);
-		const position = new THREE.Vector3().fromArray(positionArray);
-		console.log("Adding annotation at", position, "with text", text);
-		if (text) {
-			this.addAnnotation(position, text);
-		}
-
-		this.hideAnnotationInput();
-	}
-
-	addMouseHighlight() {
-		const handlePointerMove = (event: PointerEvent) => {
-			// Remove previous hover highlight
-			if (this.hoverHighlight) {
-				this.scene.remove(this.hoverHighlight);
-				this.hoverHighlight = null;
-			}
-
-			const raycaster = new THREE.Raycaster();
-			const mouse = new THREE.Vector2();
-			mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-			mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-			raycaster.setFromCamera(mouse, this.camera);
-			const intersects = raycaster.intersectObjects(this.scene.children);
-
-			if (
-				intersects.length > 0 &&
-				intersects[0].object.userData.isHighlight !== true
-			) {
-				const intersect = intersects[0];
-				const raw_position = intersect.point;
-				const position = new THREE.Vector3(
-					Math.round(raw_position.x),
-					Math.round(raw_position.y) + 0.5,
-					Math.round(raw_position.z) + 0.5
-				);
-
-				const geometry = new THREE.BoxGeometry(1.1, 1.1, 1.1);
-				const material = new THREE.MeshBasicMaterial({
-					color: 0x00ff00,
-					opacity: 0.2,
-					transparent: true,
-				});
-				this.hoverHighlight = new THREE.Mesh(geometry, material);
-				this.hoverHighlight.position.copy(position);
-				this.hoverHighlight.userData.isHighlight = true;
-				this.scene.add(this.hoverHighlight);
-			}
-		};
-
-		document.addEventListener("pointermove", handlePointerMove);
-	}
-
-	addKeyPressAnnotation() {
-		const handleKeyPress = (event: KeyboardEvent) => {
-			if (event.key === "a") {
-				const position = this.hoverHighlight.position.clone();
-
-				//if position is null just return
-				if (position === null) return;
-				this.showAnnotationInput(event.clientX, event.clientY, position);
-			}
-		};
-
-		document.addEventListener("keypress", handleKeyPress);
-	}
-
-	addAnnotation(
-		position: THREE.Vector3,
-		text: string,
-		color: number = 0x00aaff
-	) {
-		const key = `${position.x},${position.y},${position.z}`;
-
-		// Remove existing annotation at this position if it exists
-		this.removeAnnotation(position);
-
-		// Create highlight cube
-		const geometry = new THREE.BoxGeometry(1.05, 1.05, 1.05);
-		const material = new THREE.MeshBasicMaterial({
-			color: color,
-			opacity: 0.3,
-			transparent: true,
-		});
-		const highlightCube = new THREE.Mesh(geometry, material);
-		highlightCube.position.copy(position);
-		highlightCube.userData.isHighlight = true;
-
-		// Create text sprite
-		const canvas = document.createElement("canvas");
-		const context = canvas.getContext("2d");
-		canvas.width = 512;
-		canvas.height = 128;
-
-		if (context) {
-			context.fillStyle = "rgba(0, 0, 0, 0.8)";
-			context.fillRect(0, 0, canvas.width, canvas.height);
-
-			// Draw a border
-			context.strokeStyle = `rgb(${(color >> 16) & 255}, ${
-				(color >> 8) & 255
-			}, ${color & 255})`;
-			context.lineWidth = 4;
-			context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-
-			context.font = "Bold 40px Arial";
-			context.textAlign = "center";
-			context.textBaseline = "middle";
-			context.fillStyle = "white";
-
-			// Wrap text if it's too long
-			const maxWidth = canvas.width - 20;
-			const words = text.split(" ");
-			let line = "";
-			let lines = [];
-			for (let n = 0; n < words.length; n++) {
-				const testLine = line + words[n] + " ";
-				const metrics = context.measureText(testLine);
-				const testWidth = metrics.width;
-				if (testWidth > maxWidth && n > 0) {
-					lines.push(line);
-					line = words[n] + " ";
-				} else {
-					line = testLine;
-				}
-			}
-			lines.push(line);
-
-			// Draw the text
-			let yPos = canvas.height / 2 - (lines.length - 1) * 20;
-			lines.forEach((line) => {
-				context.fillText(line.trim(), canvas.width / 2, yPos);
-				yPos += 40;
-			});
-		}
-
-		const texture = new THREE.CanvasTexture(canvas);
-		texture.needsUpdate = true;
-		const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-		const sprite = new THREE.Sprite(spriteMaterial);
-
-		// Position the sprite above the highlight cube
-		sprite.position.copy(position).add(new THREE.Vector3(0, 0.75, 0));
-
-		// Scale the sprite to maintain aspect ratio
-		const aspectRatio = canvas.width / canvas.height;
-		sprite.scale.set(aspectRatio * 0.5, 0.5, 1);
-
-		this.scene.add(highlightCube);
-		this.scene.add(sprite);
-
-		this.annotations[key] = { mesh: highlightCube, label: sprite };
-	}
-	a;
-
-	removeAnnotation(position: THREE.Vector3) {
-		const key = `${position.x},${position.y},${position.z}`;
-		if (this.annotations[key]) {
-			this.scene.remove(this.annotations[key].mesh);
-			this.scene.remove(this.annotations[key].label);
-			delete this.annotations[key];
-		}
-	}
-
-	clearAllAnnotations() {
-		for (const key in this.annotations) {
-			this.scene.remove(this.annotations[key].mesh);
-			this.scene.remove(this.annotations[key].label);
-		}
-		this.annotations = {};
-	}
-
-	updateAnnotationVisibility() {
-		const cameraPosition = this.camera.position;
-		for (const key in this.annotations) {
-			const annotation = this.annotations[key];
-			const distance = cameraPosition.distanceTo(annotation.mesh.position);
-
-			// Adjust visibility based on distance
-			annotation.label.material.opacity = Math.min(1, 10 / distance);
-			annotation.label.visible = distance < 20; // Hide if too far
-		}
-	}
+	// Helper function to wrap text
 
 	addDebugBoundingBox(
 		position: THREE.Vector3,
@@ -605,12 +381,12 @@ export class Renderer {
 	}
 	render() {
 		this.composer.render();
-		this.updateAnnotationVisibility();
 	}
-
 	animate() {
 		requestAnimationFrame(() => this.animate());
+		const deltaTime = this.clock.getDelta();
 		this.controls.update();
+		this.highlightManager.update(deltaTime);
 		this.render();
 	}
 
