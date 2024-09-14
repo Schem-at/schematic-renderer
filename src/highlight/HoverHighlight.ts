@@ -79,12 +79,6 @@ export class HoverHighlight implements Highlight {
 			intersects[0].object.userData.isHighlight !== true
 		) {
 			const intersect = intersects[0];
-			const rawPosition = intersect.point;
-			const position = new THREE.Vector3(
-				Math.floor(rawPosition.x) + 0.5,
-				Math.floor(rawPosition.y) + 0.5,
-				Math.floor(rawPosition.z) + 0.5
-			);
 
 			// Get face normal
 			const faceNormal = intersect.face?.normal.clone();
@@ -92,25 +86,37 @@ export class HoverHighlight implements Highlight {
 				// Transform normal to world space
 				faceNormal.transformDirection(intersect.object.matrixWorld);
 
+				// Adjust the intersection point based on the face normal
+				const position = intersect.point.clone();
+				position.addScaledVector(faceNormal, -0.5);
+
+				// Floor the position to get the block coordinates
+				position.set(
+					Math.floor(position.x),
+					Math.floor(position.y),
+					Math.floor(position.z)
+				);
+
 				// Emit an event with the position and face normal
 				this.eventEmitter.emit("hover", {
 					position,
 					faceNormal,
 				});
+
+				// Create the hover mesh and center it within the block
+				const geometry = new THREE.BoxGeometry(1.1, 1.1, 1.1);
+				const material = new THREE.MeshBasicMaterial({
+					color: 0x00ff00,
+					opacity: 0.2,
+					transparent: true,
+				});
+				this.hoverMesh = new THREE.Mesh(geometry, material);
+				this.hoverMesh.position.copy(position).addScalar(0.5); // Center the mesh
+				this.hoverMesh.userData.isHighlight = true;
+				this.scene.add(this.hoverMesh);
 			} else {
 				this.eventEmitter.emit("hover", null);
 			}
-
-			const geometry = new THREE.BoxGeometry(1.1, 1.1, 1.1);
-			const material = new THREE.MeshBasicMaterial({
-				color: 0x00ff00,
-				opacity: 0.2,
-				transparent: true,
-			});
-			this.hoverMesh = new THREE.Mesh(geometry, material);
-			this.hoverMesh.position.copy(position);
-			this.hoverMesh.userData.isHighlight = true;
-			this.scene.add(this.hoverMesh);
 		} else {
 			this.eventEmitter.emit("hover", null);
 		}

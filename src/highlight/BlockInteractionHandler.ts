@@ -1,10 +1,10 @@
-// BlockPlacementHandler.ts
+// BlockInteractionHandler.ts
 import * as THREE from "three";
 import { EventEmitter } from "./EventEmitter";
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 
-export class BlockPlacementHandler {
+export class BlockInteractionHandler {
 	private eventEmitter: EventEmitter;
 	private schematicRenderer: any;
 	private renderer: THREE.WebGLRenderer;
@@ -26,31 +26,74 @@ export class BlockPlacementHandler {
 		this.renderer = renderer;
 		this.scene = scene;
 
-		this.eventEmitter.on("placeBlock", this.onPlaceBlock);
+		this.eventEmitter.on("interactBlock", this.onInteractBlock);
 	}
 
-	private onPlaceBlock = async (data: {
-		position: THREE.Vector3;
-		faceNormal: THREE.Vector3;
-	}) => {
-		const { position, faceNormal } = data;
+	private onInteractBlock = async (data: { position: THREE.Vector3 }) => {
+		const { position } = data;
 
-		// Calculate the position where the new block should be placed
-		const placementPosition = position.clone().add(faceNormal);
+		// Get the schematic
 		const schematic = this.schematicRenderer.schematics[
 			Object.keys(this.schematicRenderer.schematics)[0]
 		] as SchematicWrapper;
-		// Place the block in the schematic
-		schematic.set_block(
-			placementPosition.x,
-			placementPosition.y,
-			placementPosition.z,
-			"minecraft:stone" // Replace with desired block type
+
+		// Get the block at the position
+		const block = schematic.get_block_with_properties(
+			position.x,
+			position.y,
+			position.z
 		);
 
-		// Rebuild the chunk mesh
-		await this.rebuildChunkMeshContainingBlock(placementPosition);
+		if (!block) {
+			console.warn("No block found at the interacted position.");
+			return;
+		}
+
+		const blockName = block.name();
+
+		// Check if the block is a lever
+		if (blockName === "minecraft:lever") {
+			await this.toggleLever(schematic, block, position);
+			// Rebuild the chunk mesh
+			await this.rebuildChunkMeshContainingBlock(position);
+		} else {
+			console.log("Interacted block is not a lever.");
+		}
 	};
+
+	private async toggleLever(
+		schematic: SchematicWrapper,
+		block: any,
+		position: THREE.Vector3
+	) {
+		// Get the current 'powered' state of the lever
+		const properties = block.properties();
+		const isPowered = properties.powered === "true";
+
+		// Toggle the 'powered' state
+		const newPoweredState = !isPowered;
+
+		// Update the block's properties
+		const newProperties = {
+			...properties,
+			powered: newPoweredState.toString(),
+		};
+
+		// Update the block in the schematic
+		schematic.set_block_with_properties(
+			position.x,
+			position.y,
+			position.z,
+			block.name(),
+			newProperties
+		);
+
+		console.log(
+			`Lever at ${position.x}, ${position.y}, ${position.z} toggled to ${
+				newPoweredState ? "ON" : "OFF"
+			}`
+		);
+	}
 
 	private async rebuildChunkMeshContainingBlock(blockPosition: THREE.Vector3) {
 		// Determine which chunk contains the block
@@ -84,15 +127,19 @@ export class BlockPlacementHandler {
 			this.chunkDimensions.chunkLength
 		);
 
-		let worldMeshBuilder = this.schematicRenderer.worldMeshBuilder;
+		const worldMeshBuilder = this.schematicRenderer.worldMeshBuilder;
 
 		// Remove old chunk meshes from the scene
 		const chunkMeshes = worldMeshBuilder.getChunkMeshAt(chunkX, chunkY, chunkZ);
 		if (chunkMeshes) {
-			chunkMeshes.forEach((mesh) => {
+			chunkMeshes.forEach((mesh: THREE.Mesh) => {
 				this.scene.remove(mesh);
-				mesh.geometry.dispose(); // Optional but recommended
-				mesh.material.dispose(); // Optional but recommended
+				mesh.geometry.dispose(); // Dispose of geometry
+				if (Array.isArray(mesh.material)) {
+					mesh.material.forEach((material) => material.dispose());
+				} else {
+					mesh.material.dispose();
+				}
 			});
 		}
 
@@ -113,6 +160,6 @@ export class BlockPlacementHandler {
 	}
 
 	dispose() {
-		this.eventEmitter.off("placeBlock", this.onPlaceBlock);
+		this.eventEmitter.off("interactBlock", this.onInteractBlock);
 	}
 }

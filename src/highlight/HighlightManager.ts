@@ -7,6 +7,7 @@ import { EventEmitter } from "./EventEmitter";
 import { InteractionManager } from "./InteractionManager";
 import { BlockEntityHighlight } from "./BlockEntityHighlight";
 import { BlockPlacementHandler } from "./BlockPlacementHandler";
+import { BlockInteractionHandler } from "./BlockInteractionHandler";
 
 export class HighlightManager {
 	private highlights: Highlight[] = [];
@@ -17,6 +18,7 @@ export class HighlightManager {
 	private eventEmitter: EventEmitter;
 	private interactionManager: InteractionManager;
 	private blockPlacementHandler: BlockPlacementHandler;
+	private blockInteractionHandler: BlockInteractionHandler;
 
 	constructor(
 		schematicRenderer: any,
@@ -38,6 +40,12 @@ export class HighlightManager {
 			this.eventEmitter
 		);
 		this.blockPlacementHandler = new BlockPlacementHandler(
+			this.eventEmitter,
+			schematicRenderer,
+			renderer,
+			scene
+		);
+		this.blockInteractionHandler = new BlockInteractionHandler(
 			this.eventEmitter,
 			schematicRenderer,
 			renderer,

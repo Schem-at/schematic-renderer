@@ -45,6 +45,10 @@ export class SchematicRenderer {
 	schematicExporter: SchematicExporter | undefined;
 	resourcePackManager: ResourcePackManager;
 
+	simulationWorld: any = null;
+	simulationIntervalId: any = null;
+	TICK_RATE = 50; // milliseconds (20Hz)
+
 	constructor(
 		canvas: HTMLCanvasElement,
 		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
@@ -142,8 +146,76 @@ export class SchematicRenderer {
 		if (this.options?.debugGUI) {
 			this.schematicRendererGUI = new SchematicRendererGUI(this);
 		}
+
+		// Initialize the simulation world
+		this.initializeSimulationWorld();
+
+		// Start the animation loop
+		this.renderer.animate();
 	}
 
+	initializeSimulationWorld() {
+		const schematicKeys = Object.keys(this.schematics);
+		if (schematicKeys.length === 0) {
+			console.error(
+				"No schematics available to initialize the simulation world."
+			);
+			return;
+		}
+
+		// Use the first schematic for simulation
+		const primarySchematicKey = schematicKeys[0];
+		const schematic = this.schematics[primarySchematicKey];
+
+		// Create the simulation world from the schematic
+		this.simulationWorld = schematic.create_simulation_world();
+
+		// Start the simulation
+		this.startSimulation();
+	}
+
+	startSimulation() {
+		if (!this.simulationWorld) {
+			console.error("Simulation world is not initialized.");
+			return;
+		}
+
+		this.simulationIntervalId = setInterval(() => {
+			this.runSimulationStep();
+		}, this.TICK_RATE);
+	}
+
+	stopSimulation() {
+		if (this.simulationIntervalId !== null) {
+			clearInterval(this.simulationIntervalId);
+			this.simulationIntervalId = null;
+		}
+	}
+
+	runSimulationStep() {
+		// Run the simulation step
+		this.simulationWorld.run_simulation_step();
+
+		// Get updated blocks
+		const updatedBlocks = this.simulationWorld.get_updated_blocks();
+
+		// Update the schematic with new block states
+		updatedBlocks.forEach((block) => {
+			const schematic = this.schematics[Object.keys(this.schematics)[0]];
+			schematic.set_block_with_properties(
+				block.x,
+				block.y,
+				block.z,
+				block.name,
+				block.properties
+			);
+		});
+
+		// Re-render the updated chunks
+		if (updatedBlocks.length > 0) {
+			console.log("Updated blocks", updatedBlocks);
+		}
+	}
 	async updateSchematic(
 		key: string,
 		schematicDataCallback: () => Promise<ArrayBuffer>

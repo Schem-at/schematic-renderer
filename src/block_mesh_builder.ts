@@ -17,6 +17,7 @@ import {
 
 import { ResourceLoader } from "./resource_loader";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
+import { Monitor } from "./monitoring";
 interface Block {
 	name: string;
 	properties: Record<string, string>;
@@ -29,7 +30,23 @@ export class BlockMeshBuilder {
 	schematic: any;
 	renderer: any;
 	faceDataCache: Map<string, any>;
+	DIRECTION_OFFSETS = [
+		{ face: "east", x: 1, y: 0, z: 0 },
+		{ face: "west", x: -1, y: 0, z: 0 },
+		{ face: "up", x: 0, y: 1, z: 0 },
+		{ face: "down", x: 0, y: -1, z: 0 },
+		{ face: "south", x: 0, y: 0, z: 1 },
+		{ face: "north", x: 0, y: 0, z: -1 },
+	];
 
+	FACE_BITMASKS = {
+		east: 0b000001,
+		west: 0b000010,
+		up: 0b000100,
+		down: 0b001000,
+		south: 0b010000,
+		north: 0b100000,
+	};
 	constructor(
 		ressourceLoader: any,
 		materialMap: Map<string, THREE.Material>,
@@ -43,6 +60,7 @@ export class BlockMeshBuilder {
 		this.faceDataCache = new Map();
 	}
 
+	@Monitor
 	public getMaterialId(model: BlockModel, faceData: any, color: THREE.Color) {
 		const textureName = this.ressourceLoader.resolveTextureName(
 			faceData.texture,
@@ -55,6 +73,7 @@ export class BlockMeshBuilder {
 		}${idSuffix}`;
 	}
 
+	@Monitor
 	public normalizeElementCoords(element: BlockModel["elements"][0]) {
 		if (!element.from || !element.to) {
 			throw new Error("Element is missing from or to");
@@ -68,13 +87,14 @@ export class BlockMeshBuilder {
 		}
 	}
 
+	@Monitor
 	public async processFaceData(
 		element: BlockModel["elements"][0],
 		model: BlockModel,
 		block: any
 	) {
 		const subMaterials: { [key: string]: string | null } = {};
-		const uvs: { [key: string]: [number, number, number, number] } = {};
+		const uvs: { [key: string]: [number, number][] } = {};
 		if (!element.faces) {
 			return { subMaterials, uvs };
 		}
@@ -82,12 +102,13 @@ export class BlockMeshBuilder {
 			const faceData: any = element.faces[face];
 			if (!faceData || faceData.texture == "#overlay") {
 				subMaterials[face] = null;
-				uvs[face] = DEFAULT_UV.map((u) => u / 16) as [
-					number,
-					number,
-					number,
-					number
-				];
+				// Use default UVs
+				const defaultUv: [number, number, number, number] = [0, 0, 16, 16];
+				// Convert to per-vertex UVs
+				uvs[face] = this.rotateUv(
+					defaultUv.map((u) => u / 16) as [number, number, number, number],
+					0
+				);
 				continue;
 			}
 			const textureName = this.ressourceLoader.resolveTextureName(
@@ -105,7 +126,6 @@ export class BlockMeshBuilder {
 				materialColor ?? new THREE.Color(1, 1, 1)
 			);
 			if (!this.materialMap.has(materialId)) {
-				// TODO: check performance, I think there might be redundant calls to getBase 64 Image
 				const material = await this.ressourceLoader.getTextureMaterial(
 					model,
 					faceData,
@@ -124,22 +144,22 @@ export class BlockMeshBuilder {
 				);
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
-			// this.showTextureOverlay(
-			// 	this.base64MaterialMap.get(materialId) ?? "",
-			// 	faceData.uv,
-			// 	faceData.texture
-			// );
 
 			subMaterials[face] = materialId;
 			const faceRotation = faceData.rotation || 0;
-			uvs[face] = this.rotateUv(
-				(faceData.uv || DEFAULT_UV).map((u: number) => u / 16),
-				faceRotation
-			) as [number, number, number, number];
+			const uvRect = (faceData.uv || DEFAULT_UV).map((u: number) => u / 16) as [
+				number,
+				number,
+				number,
+				number
+			];
+			// Get per-vertex UVs
+			uvs[face] = this.rotateUv(uvRect, faceRotation);
 		}
 		return { subMaterials, uvs };
 	}
 
+	@Monitor
 	public rotateUv(uv: [number, number, number, number], rotation: number) {
 		rotation = (rotation * Math.PI) / 180;
 		const center = [0.5, 0.5];
@@ -166,6 +186,7 @@ export class BlockMeshBuilder {
 
 	private popupWindow: Window | null = null;
 
+	@Monitor
 	public showTextureOverlay(
 		imageData: string,
 		uv: [number, number, number, number],
@@ -233,6 +254,7 @@ export class BlockMeshBuilder {
 		allImagesContainer.appendChild(imageContainer);
 	}
 
+	@Monitor
 	public async getBlockMesh(
 		block: any,
 		_blockPosition?: any
@@ -256,105 +278,90 @@ export class BlockMeshBuilder {
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
 		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-		let modelIndex = 0;
-		let start = performance.now();
-		for (const modelHolder of modelOptions.holders) {
-			modelIndex++;
-			if (modelHolder === undefined) continue;
-			let modelHolderRotation = {
-				x: modelHolder.x ?? 0,
-				y: modelHolder.y ?? 0,
-				z: modelHolder.z ?? 0,
-			};
 
-			const model = await this.ressourceLoader.loadModel(modelHolder.model);
+		let modelPromises = modelOptions.holders.map(
+			async (modelHolder, modelIndex) => {
+				if (!modelHolder) return;
 
-			const elements = model?.elements;
+				const modelHolderRotation = {
+					x: modelHolder.x ?? 0,
+					y: modelHolder.y ?? 0,
+					z: modelHolder.z ?? 0,
+				};
 
-			if (!elements) continue;
-			let elementIndex = 0;
-			for (const element of elements) {
-				elementIndex++;
-				if (!element.from || !element.to) continue;
-				this.normalizeElementCoords(element);
-				let faceData;
-				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
-				if (this.faceDataCache.has(faceDataCacheKey)) {
-					faceData = this.faceDataCache.get(faceDataCacheKey);
-				} else {
-					try {
-						faceData = await this.processFaceData(element, model, block);
-					} catch (e) {
-						continue;
-					}
-					this.faceDataCache.set(faceDataCacheKey, faceData);
-				}
+				const model = await this.ressourceLoader.loadModel(modelHolder.model);
+				const elements = model?.elements;
+				if (!elements) return;
 
-				const from = element.from;
-				const to = element.to;
-				const elementRotation = element.rotation || null;
-				if (!from || !to) continue;
-				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-				const directionData = getDirectionData(faceData.uvs);
-				let faceIndex = 0;
-				for (const dir of faces) {
-					faceIndex++;
-					const materialId = faceData.subMaterials[dir];
-					if (!materialId) continue;
+				let elementPromises = elements.map(async (element, elementIndex) => {
+					if (!element.from || !element.to) return;
+					this.normalizeElementCoords(element);
 
-					const uniqueKey = `${materialId}-${dir}`;
-
-					if (!blockComponents[uniqueKey]) {
-						blockComponents[uniqueKey] = {
-							materialId,
-							face: dir,
-							positions: [],
-							normals: [],
-							uvs: [],
-						};
-					}
-
-					const dirData = directionData[dir];
-
-					for (const { pos, uv } of dirData.corners) {
-						if (!from || !size || !pos || !uv) continue;
-						let cornerPos = [
-							from[0] + size[0] * pos[0],
-							from[1] + size[1] * pos[1],
-							from[2] + size[2] * pos[2],
-						];
-						if (elementRotation) {
-							cornerPos = this.applyElementRotation(
-								cornerPos,
-								elementRotation as any
-							);
+					const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
+					let faceData = this.faceDataCache.get(faceDataCacheKey);
+					if (!faceData) {
+						try {
+							faceData = await this.processFaceData(element, model, block);
+							this.faceDataCache.set(faceDataCacheKey, faceData);
+						} catch (e) {
+							return;
 						}
-						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
-
-						blockComponents[uniqueKey].positions.push(...cornerPos);
-						if (block.name === "redstone_wire" || block.name === "chest") {
-							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
-						} else {
-							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
-						}
-						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
-				}
+
+					const from = element.from;
+					const to = element.to;
+					const elementRotation = element.rotation || null;
+					const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+					const directionData = getDirectionData(faceData.uvs);
+
+					faces.forEach((dir) => {
+						const materialId = faceData.subMaterials[dir];
+						if (!materialId) return;
+
+						const uniqueKey = `${materialId}-${dir}`;
+						if (!blockComponents[uniqueKey]) {
+							blockComponents[uniqueKey] = {
+								materialId,
+								face: dir,
+								positions: [],
+								normals: [],
+								uvs: [],
+							};
+						}
+
+						const dirData = directionData[dir];
+						dirData.corners.forEach(({ pos, uv }) => {
+							if (!pos || !uv) return;
+
+							let cornerPos = [
+								from[0] + size[0] * pos[0],
+								from[1] + size[1] * pos[1],
+								from[2] + size[2] * pos[2],
+							];
+							if (elementRotation) {
+								cornerPos = this.applyElementRotation(
+									cornerPos,
+									elementRotation as any
+								);
+							}
+							cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
+
+							blockComponents[uniqueKey].positions.push(...cornerPos);
+							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
+							blockComponents[uniqueKey].normals.push(...dirData.normal);
+						});
+					});
+				});
+
+				await Promise.all(elementPromises);
 			}
-		}
+		);
 
-		if (performance.now() - start > 50) {
-			console.error(
-				"Slow block mesh builder",
-				block,
-				"took",
-				performance.now() - start
-			);
-		}
-
+		await Promise.all(modelPromises);
 		return blockComponents;
 	}
 
+	@Monitor
 	private applyRotation(
 		position: number[],
 		rotation: { x: number; y: number; z: number },
@@ -453,13 +460,88 @@ export class BlockMeshBuilder {
 		return result;
 	}
 
+	// Fast buggy
+	// @Monitor
+	// public getOccludedFacesForBlock(
+	// 	schematic: SchematicWrapper,
+	// 	block: Block,
+	// 	pos: { x: number; y: number; z: number }
+	// ): number {
+	// 	// Extract block type without namespace
+	// 	const blockType = block.name.includes(":")
+	// 		? block.name.split(":")[1]
+	// 		: block.name;
+	// 	const { x, y, z } = pos;
+
+	// 	let occludedFaces = 0; // Use bitmask
+
+	// 	// Handle special cases like glass
+	// 	if (blockType.includes("glass")) {
+	// 		for (const { face, x: dx, y: dy, z: dz } of this.DIRECTION_OFFSETS) {
+	// 			const adjacentBlock = schematic.get_block_with_properties(
+	// 				x + dx,
+	// 				y + dy,
+	// 				z + dz
+	// 			);
+	// 			if (adjacentBlock) {
+	// 				const adjacentBlockType = adjacentBlock.name().includes(":")
+	// 					? adjacentBlock.name().split(":")[1]
+	// 					: adjacentBlock.name();
+	// 				if (adjacentBlockType.includes("glass")) {
+	// 					occludedFaces |= this.FACE_BITMASKS[face];
+	// 				}
+	// 			}
+	// 		}
+	// 		// Do not return here; proceed to check for early exit
+	// 	}
+
+	// 	// Early exit for non-occluding blocks
+	// 	if (
+	// 		NON_OCCLUDING_BLOCKS.has(blockType) ||
+	// 		TRANSPARENT_BLOCKS.has(blockType)
+	// 	) {
+	// 		return occludedFaces;
+	// 	}
+
+	// 	// Handle extended pistons
+	// 	if (isExtendedPiston(block)) {
+	// 		const facing = block.properties?.["facing"] as string;
+	// 		const oppositeFace = getOppositeFace(facing);
+	// 		occludedFaces |= this.FACE_BITMASKS[oppositeFace];
+	// 		return occludedFaces;
+	// 	}
+
+	// 	// General case
+	// 	for (const { face, x: dx, y: dy, z: dz } of this.DIRECTION_OFFSETS) {
+	// 		const adjacentBlock = schematic.get_block_with_properties(
+	// 			x + dx,
+	// 			y + dy,
+	// 			z + dz
+	// 		);
+	// 		if (!adjacentBlock) continue;
+
+	// 		const adjacentBlockType = adjacentBlock.name().includes(":")
+	// 			? adjacentBlock.name().split(":")[1]
+	// 			: adjacentBlock.name();
+
+	// 		if (
+	// 			!NON_OCCLUDING_BLOCKS.has(adjacentBlockType) &&
+	// 			!TRANSPARENT_BLOCKS.has(adjacentBlockType)
+	// 		) {
+	// 			occludedFaces |= this.FACE_BITMASKS[face];
+	// 		}
+	// 	}
+
+	// 	return occludedFaces;
+	// }
+
+	// Slow but correct
+	@Monitor
 	public getOccludedFacesForBlock(
 		schematic: SchematicWrapper,
 		block: Block,
 		pos: THREE.Vector3
 	): number {
-		// const blockType = block.name;
-		// remove the minecraft: prefix
 		const blockType = block.name.split(":")[1];
 		const { x, y, z } = pos;
 		const directionVectors = {
@@ -470,30 +552,31 @@ export class BlockMeshBuilder {
 			south: new THREE.Vector3(0, 0, 1),
 			north: new THREE.Vector3(0, 0, -1),
 		};
-		const occludedFaces = {
+		const occludedFaces: { [key: string]: boolean } = {
 			east: false,
 			west: false,
 			up: false,
 			down: false,
 			south: false,
 			north: false,
-		} as { [key: string]: boolean };
+		};
+
 		if (blockType.includes("glass")) {
 			for (const face of POSSIBLE_FACES) {
 				const directionVector = directionVectors[face];
-				// @ts-ignore
-				const adjacentBlock = schematic.get_block(
-					new THREE.Vector3(x, y, z).add(directionVector)
+				const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
+				const adjacentBlock = schematic.get_block_with_properties(
+					adjacentPos.x,
+					adjacentPos.y,
+					adjacentPos.z
 				);
-				if (adjacentBlock === undefined) {
-					continue;
-				}
-				// @ts-ignore
-				if (adjacentBlock.includes("glass")) {
+
+				if (adjacentBlock && adjacentBlock.name().includes("glass")) {
 					occludedFaces[face] = true;
 				}
 			}
 		}
+
 		if (
 			NON_OCCLUDING_BLOCKS.has(blockType) ||
 			TRANSPARENT_BLOCKS.has(blockType)
@@ -507,38 +590,44 @@ export class BlockMeshBuilder {
 			occludedFaces[oppositeFace] = true;
 			return this.occludedFacesListToInt(occludedFaces);
 		}
+
 		for (const face of POSSIBLE_FACES) {
 			const directionVector = directionVectors[face];
-			// @ts-ignore
-			const adjacentBlock = schematic.get_block(
-				new THREE.Vector3(x, y, z).add(directionVector)
+			const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
+			const adjacentBlock = schematic.get_block_with_properties(
+				adjacentPos.x,
+				adjacentPos.y,
+				adjacentPos.z
 			);
-			// @ts-ignore
-			const adjacentBlockName = adjacentBlock?.name?.split(":")[1];
-			if (adjacentBlockName === undefined) {
+
+			if (!adjacentBlock || !adjacentBlock) {
 				continue;
 			}
-			if (NON_OCCLUDING_BLOCKS.has(adjacentBlockName)) {
-				continue;
+			const adjacentBlockName = adjacentBlock.name().split(":")[1];
+
+			if (
+				!NON_OCCLUDING_BLOCKS.has(adjacentBlockName) &&
+				!TRANSPARENT_BLOCKS.has(adjacentBlockName)
+			) {
+				occludedFaces[face] = true;
 			}
-			if (TRANSPARENT_BLOCKS.has(adjacentBlockName)) {
-				continue;
-			}
-			occludedFaces[face] = true;
 		}
+
 		return this.occludedFacesListToInt(occludedFaces);
 	}
 
 	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);
-		if (this.blockMeshCache.has(blockUniqueKey)) {
-			return this.blockMeshCache.get(blockUniqueKey);
+		let cachedBlockMesh = this.blockMeshCache.get(blockUniqueKey);
+
+		if (cachedBlockMesh) {
+			return cachedBlockMesh;
 		} else {
 			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
-			// if over 100ms log the block
+
 			if (performance.now() - start > 100) {
-				console.error(
+				console.warn(
 					"Slow block",
 					pos,
 					block,
@@ -546,6 +635,7 @@ export class BlockMeshBuilder {
 					performance.now() - start
 				);
 			}
+
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);
 			return blockComponents;
 		}

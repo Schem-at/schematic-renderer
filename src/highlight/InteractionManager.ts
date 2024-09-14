@@ -31,7 +31,7 @@ export class InteractionManager {
 		if (event.button === 2) {
 			// Right mouse button
 			if (this.currentHoverData) {
-				this.eventEmitter.emit("placeBlock", this.currentHoverData);
+				this.eventEmitter.emit("interactBlock", this.currentHoverData);
 			}
 		}
 	};

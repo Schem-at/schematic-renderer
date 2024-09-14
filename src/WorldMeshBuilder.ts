@@ -14,6 +14,7 @@ import { Vector } from "./types";
 // @ts-ignore
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 
+import { Monitor, displayPerformanceMetrics } from "./monitoring";
 interface ChunkDimensions {
 	chunkWidth: number;
 	chunkHeight: number;
@@ -54,6 +55,7 @@ export class WorldMeshBuilder {
 		);
 	}
 
+	@Monitor
 	public async getChunkMesh(
 		chunk: BlockData[],
 		offset: { x: number; y: number; z: number },
@@ -86,9 +88,11 @@ export class WorldMeshBuilder {
 			}
 
 			let { x, y, z, name, properties } = blockData;
-			x += offset.x;
-			y += offset.y;
-			z += offset.z;
+			// Remove the offset addition
+			// x += offset.x;
+			// y += offset.y;
+			// z += offset.z;
+
 			if (INVISIBLE_BLOCKS.has(name)) {
 				continue;
 			}
@@ -101,6 +105,7 @@ export class WorldMeshBuilder {
 					new THREE.Vector3(x, y, z)
 				)
 			);
+
 			chunkTimes.occlusion += performance.now() - start;
 			start = performance.now();
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
@@ -156,6 +161,7 @@ export class WorldMeshBuilder {
 		return block && !TRANSPARENT_BLOCKS.has(block.name);
 	}
 
+	@Monitor
 	public async getSchematicMeshes(
 		schematic: SchematicWrapper,
 		chunkDimensions: ChunkDimensions = {
@@ -164,62 +170,53 @@ export class WorldMeshBuilder {
 			chunkLength: 16,
 		}
 	): Promise<THREE.Mesh[]> {
-		const schematicDimensions = schematic.get_dimensions();
-		const offset = {
-			x: 0,
-			y: 0,
-			z: 0,
-		};
-
 		const chunks = schematic.chunks(
 			chunkDimensions.chunkWidth,
 			chunkDimensions.chunkHeight,
 			chunkDimensions.chunkLength
 		);
-		const totalChunks = chunks.length;
-		let currentChunk = 0;
+
 		const schematicMeshes: THREE.Mesh[] = [];
 
-		for (const chunk of chunks) {
-			currentChunk++;
+		const maxChunksAllowed = 1000;
+		let chunkCount = 0;
+		for (const chunkData of chunks) {
+			if (chunkCount > maxChunksAllowed) {
+				break;
+			}
+
+			chunkCount++;
+			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 			const chunkOffset = {
-				x:
-					(currentChunk % chunkDimensions.chunkWidth) *
-					chunkDimensions.chunkWidth,
-				y:
-					Math.floor(
-						currentChunk /
-							(chunkDimensions.chunkWidth * chunkDimensions.chunkLength)
-					) * chunkDimensions.chunkHeight,
-				z:
-					(Math.floor(currentChunk / chunkDimensions.chunkWidth) %
-						chunkDimensions.chunkLength) *
-					chunkDimensions.chunkLength,
+				x: chunk_x * chunkDimensions.chunkWidth,
+				y: chunk_y * chunkDimensions.chunkHeight,
+				z: chunk_z * chunkDimensions.chunkLength,
 			};
 
+			console.log("Chunk offset", chunkOffset);
+
 			const chunkMeshes = await this.getChunkMesh(
-				chunk as BlockData[],
+				blocks as BlockData[],
 				chunkOffset,
 				schematic
 			);
 
 			if (chunkMeshes.length === 0) {
-				console.log("Chunk", currentChunk, "of", totalChunks, "is empty");
+				console.log(`Chunk at (${chunk_x}, ${chunk_y}, ${chunk_z}) is empty`);
 				continue;
 			}
 
 			// Store the chunk meshes
-			const chunkX = chunkOffset.x / chunkDimensions.chunkWidth;
-			const chunkY = chunkOffset.y / chunkDimensions.chunkHeight;
-			const chunkZ = chunkOffset.z / chunkDimensions.chunkLength;
-			this.setChunkMeshAt(chunkX, chunkY, chunkZ, chunkMeshes);
+			this.setChunkMeshAt(chunk_x, chunk_y, chunk_z, chunkMeshes);
 
 			this.renderer.scene.add(...chunkMeshes);
 			schematicMeshes.push(...chunkMeshes);
-			console.log("Chunk", currentChunk, "of", totalChunks, "processed");
+			console.log(`Chunk at (${chunk_x}, ${chunk_y}, ${chunk_z}) processed`);
 		}
+		displayPerformanceMetrics();
 		return schematicMeshes;
 	}
+
 	public getChunkMeshAt(
 		chunkX: number,
 		chunkY: number,

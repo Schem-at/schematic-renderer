@@ -18,6 +18,8 @@ import type {
 	BlockStateModelHolder,
 } from "./types";
 
+import { Monitor } from "./monitoring";
+
 interface Block {
 	name: string;
 	properties: Record<string, string>;
@@ -115,19 +117,20 @@ export class ResourceLoader {
 		return data;
 	}
 
-	public async getResourceString(name: string) {
+	public async getResourceString(name: string): Promise<string | undefined> {
 		if (this.stringCache.has(name)) {
 			return this.stringCache.get(name);
-		} else {
-			for (const zip of this.zips) {
-				const data = await zip.file(`assets/minecraft/${name}`)?.async("text");
-				if (data) {
-					this.stringCache.set(name, data);
-					return data;
-				}
-			}
-			return undefined;
 		}
+		for (const zip of this.zips) {
+			const file = zip.file(`assets/minecraft/${name}`);
+			if (file) {
+				const data = await file.async("text");
+				this.stringCache.set(name, data);
+				return data;
+			}
+		}
+		console.warn(`Resource ${name} not found.`);
+		return undefined;
 	}
 
 	public async getBase64Image(model: BlockModel, faceData: any) {
@@ -150,48 +153,45 @@ export class ResourceLoader {
 	): Promise<THREE.MeshStandardMaterial | undefined> {
 		let textureName = faceData.texture;
 
-		while (textureName.startsWith("#")) {
-			if (!model.textures) {
-				throw new Error(
-					`Model ${model} has a reference to a texture but no textures are defined`
-				);
-			}
-			textureName = model.textures[textureName.substring(1)];
-			if (!textureName) {
-				throw new Error(`Texture ${textureName} not found`);
-			}
-		}
+		// Resolve texture references
+		textureName = this.resolveTextureName(textureName, model);
 
+		// Remove "minecraft:" prefix if present
 		if (textureName.startsWith("minecraft:")) {
 			textureName = textureName.substring("minecraft:".length);
 		}
+
+		// Get the base64 image
 		const base64Resource = await this.getResourceBase64(
 			`textures/${textureName}.png`
 		);
-
-		if (base64Resource === undefined) {
+		if (!base64Resource) {
+			console.warn(`Texture ${textureName} not found.`);
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
 
+		// Load the texture
 		const texture = this.textureLoader.load(base64Png, () => {
 			texture.minFilter = THREE.NearestFilter;
 			texture.magFilter = THREE.NearestFilter;
+			texture.wrapS = THREE.RepeatWrapping;
+			texture.wrapT = THREE.RepeatWrapping;
 			texture.needsUpdate = true;
 		});
 
-		//check if the faceData is rotated if so rotate the texture
+		// Handle rotation
 		const rotation = faceData.rotation;
 		if (rotation) {
 			texture.center = new THREE.Vector2(0.5, 0.5);
-			texture.rotation = rotation * Math.PI * 0.25;
+			texture.rotation = (rotation * Math.PI) / 180;
 		}
+
 		return new THREE.MeshStandardMaterial({
 			map: texture,
-			//side: transparent ? THREE.DoubleSide : THREE.FrontSide,
 			side: THREE.FrontSide,
 			alphaTest: 0.1,
-			transparent: transparent,
+			transparent: transparent ?? false,
 			color: color ?? 0xffffff,
 		});
 	}
@@ -264,29 +264,44 @@ export class ResourceLoader {
 		];
 	}
 
-	public async getBlockStateDefinition(blockType: string) {
+	public async getBlockStateDefinition(
+		blockType: string
+	): Promise<BlockStateDefinition> {
 		if (this.blockStateDefinitionCache.has(blockType)) {
-			return this.blockStateDefinitionCache.get(blockType);
+			return this.blockStateDefinitionCache.get(
+				blockType
+			) as BlockStateDefinition;
 		}
 
-		const blockStateDefinition = await this.loadBlockStateDefinition(blockType);
+		const jsonString = await this.getResourceString(
+			`blockstates/${blockType}.json`
+		);
+		if (!jsonString) {
+			console.warn(`Block state definition for ${blockType} not found.`);
+			this.blockStateDefinitionCache.set(blockType, {} as BlockStateDefinition);
+			return {} as BlockStateDefinition;
+		}
+
+		const blockStateDefinition = JSON.parse(jsonString) as BlockStateDefinition;
 		this.blockStateDefinitionCache.set(blockType, blockStateDefinition);
 		return blockStateDefinition;
 	}
 
 	public async getBlockMeta(block: Block) {
-		// remove the minecraft: prefix
+		// Remove the "minecraft:" prefix
 		block.name = block.name.replace("minecraft:", "");
-		if (this.blockMetaCache.has(hashBlockForMap(block))) {
-			return this.blockMetaCache.get(hashBlockForMap(block));
+
+		const blockKey = hashBlockForMap(block);
+		if (this.blockMetaCache.has(blockKey)) {
+			return this.blockMetaCache.get(blockKey);
 		}
-		const blockStateDefinition = await this.loadBlockStateDefinition(
-			block.name
-		);
+
+		const blockStateDefinition = await this.getBlockStateDefinition(block.name);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
+
 		const blockMeta = { blockStateDefinition, modelData, modelOptions };
-		this.blockMetaCache.set(hashBlockForMap(block), blockMeta);
+		this.blockMetaCache.set(blockKey, blockMeta);
 		return blockMeta;
 	}
 
@@ -345,90 +360,79 @@ export class ResourceLoader {
 		group.count += positions.length / 3;
 	}
 
+	@Monitor
 	public createMeshesFromBlocks(blocks: any, chunkTimes: any): THREE.Mesh[] {
 		const meshes: THREE.Mesh[] = [];
-		let start;
 
 		for (const [materialId, blockList] of Object.entries(blocks)) {
-			start = performance.now();
 			const material = this.materialMap.get(materialId);
 			let totalVertices = 0;
 			let totalIndices = 0;
 
+			// First pass: calculate total vertices and indices
 			for (const block of blockList as any) {
-				totalVertices += block[0].positions.length / 3;
-				totalIndices += block[0].positions.length / 2;
+				const vertexCount = block[0].positions.length / 3;
+				totalVertices += vertexCount;
+				totalIndices += (vertexCount / 4) * 6; // Each quad becomes two triangles
 			}
-			chunkTimes.chunkMeshCreation.materialRetrieval +=
-				performance.now() - start;
 
-			start = performance.now();
 			const geometry = new THREE.BufferGeometry();
 			const positions = new Float32Array(totalVertices * 3);
 			const normals = new Float32Array(totalVertices * 3);
 			const uvs = new Float32Array(totalVertices * 2);
-			chunkTimes.chunkMeshCreation.arrayCreation += performance.now() - start;
+			const indices = new Uint32Array(totalIndices);
 
-			// const indices: Uint16Array = new Uint16Array(totalIndices);
-			const indices: number[] = [];
-
+			let positionOffset = 0;
+			let normalOffset = 0;
+			let uvOffset = 0;
 			let indexOffset = 0;
-			let iterationOffset = 0;
+			let indicesOffset = 0;
+
 			for (const block of blockList as any) {
 				const blockComponent = block[0];
 				const worldPos = block[1];
-				start = performance.now();
-				const newPositions = blockComponent.positions.slice();
-				chunkTimes.chunkMeshCreation.slicing += performance.now() - start;
+				const vertexCount = blockComponent.positions.length / 3;
 
-				start = performance.now();
-				for (let i = 0; i < newPositions.length; i += 3) {
-					newPositions[i] += worldPos[0];
-					newPositions[i + 1] += worldPos[1];
-					newPositions[i + 2] += worldPos[2];
+				// Positions
+				for (let i = 0; i < blockComponent.positions.length; i += 3) {
+					positions[positionOffset++] =
+						blockComponent.positions[i] + worldPos[0];
+					positions[positionOffset++] =
+						blockComponent.positions[i + 1] + worldPos[1];
+					positions[positionOffset++] =
+						blockComponent.positions[i + 2] + worldPos[2];
 				}
-				chunkTimes.chunkMeshCreation.positionTranslation +=
-					performance.now() - start;
 
-				start = performance.now();
-				positions.set(newPositions, indexOffset * 3);
-				normals.set(blockComponent.normals, indexOffset * 3);
-				uvs.set(blockComponent.uvs, indexOffset * 2);
-				chunkTimes.chunkMeshCreation.arrayAllocation +=
-					performance.now() - start;
+				// Normals
+				normals.set(blockComponent.normals, normalOffset);
+				normalOffset += blockComponent.normals.length;
 
-				start = performance.now();
-				for (let i = 0; i < newPositions.length / 3; i += 4) {
-					indices.push(
-						...[
-							indexOffset + i,
-							indexOffset + i + 1,
-							indexOffset + i + 2,
-							indexOffset + i + 2,
-							indexOffset + i + 1,
-							indexOffset + i + 3,
-						]
-					);
-					// indices.set(this.recalculateIndex(indexOffset + i), iterationOffset);
-					iterationOffset += 6;
+				// UVs
+				uvs.set(blockComponent.uvs, uvOffset);
+				uvOffset += blockComponent.uvs.length;
+
+				// Indices
+				for (let i = 0; i < vertexCount; i += 4) {
+					indices[indicesOffset++] = indexOffset + i;
+					indices[indicesOffset++] = indexOffset + i + 1;
+					indices[indicesOffset++] = indexOffset + i + 2;
+					indices[indicesOffset++] = indexOffset + i + 2;
+					indices[indicesOffset++] = indexOffset + i + 1;
+					indices[indicesOffset++] = indexOffset + i + 3;
 				}
-				chunkTimes.chunkMeshCreation.indexCalculation +=
-					performance.now() - start;
 
-				indexOffset += newPositions.length / 3;
+				indexOffset += vertexCount;
 			}
 
-			start = performance.now();
+			// Set attributes
 			geometry.setAttribute(
 				"position",
 				new THREE.BufferAttribute(positions, 3)
 			);
 			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-			geometry.setIndex(indices);
-			// geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-			chunkTimes.chunkMeshCreation.geometryCreation +=
-				performance.now() - start;
+			geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
@@ -439,16 +443,22 @@ export class ResourceLoader {
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
-		// check if the texture is "#missing"
+		const maxDepth = 5;
+		let depth = 0;
 		if (ref === "#missing") {
-			return ref;
+			return "missing_texture";
 		}
-
-		while (ref.startsWith("#")) {
+		while (ref.startsWith("#") && depth < maxDepth) {
 			if (!model.textures) {
-				return ref;
+				console.warn(`Model has no textures defined for reference ${ref}.`);
+				return "missing_texture";
 			}
 			ref = model.textures[ref.substring(1)] ?? ref;
+			depth++;
+		}
+		if (depth === maxDepth) {
+			console.warn(`Texture reference ${ref} exceeded maximum depth.`);
+			return "missing_texture";
 		}
 		return ref;
 	}
