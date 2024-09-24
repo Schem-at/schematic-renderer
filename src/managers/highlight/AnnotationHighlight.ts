@@ -1,14 +1,10 @@
 // AnnotationHighlight.ts
 import * as THREE from "three";
-import { Highlight } from "./Highlight";
-import { EventEmitter } from "./EventEmitter";
+import { Highlight } from "../managers/highlight/Highlight";
+import { SchematicRenderer } from "../../SchematicRenderer";
 
 export class AnnotationHighlight implements Highlight {
-	private schematicRenderer: any;
-	private scene: THREE.Scene;
-	private camera: THREE.Camera;
-	private renderer: THREE.WebGLRenderer;
-	private eventEmitter: EventEmitter;
+	private schematicRenderer: SchematicRenderer;
 	private annotations: {
 		[key: string]: { mesh: THREE.Mesh; label: THREE.Sprite };
 	} = {};
@@ -17,20 +13,13 @@ export class AnnotationHighlight implements Highlight {
 	private mouse: THREE.Vector2;
 	private hoverPosition: THREE.Vector3 | null = null;
 
-	constructor(
-		schematicRenderer: any,
-		scene: THREE.Scene,
-		camera: THREE.Camera,
-		renderer: THREE.WebGLRenderer,
-		eventEmitter: EventEmitter
-	) {
+	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
-		this.scene = scene;
-		this.camera = camera;
-		this.renderer = renderer;
-		this.eventEmitter = eventEmitter;
 
-		this.eventEmitter.on("addAnnotation", this.onAddAnnotation);
+		this.schematicRenderer.eventEmitter.on(
+			"addAnnotation",
+			this.onAddAnnotation
+		);
 		this.annotationInput = document.createElement("div");
 		this.raycaster = new THREE.Raycaster();
 		this.mouse = new THREE.Vector2();
@@ -46,7 +35,10 @@ export class AnnotationHighlight implements Highlight {
 	deactivate() {
 		this.clearAllAnnotations();
 		this.annotationInput.remove();
-		this.eventEmitter.off("addAnnotation", this.onAddAnnotation);
+		this.schematicRenderer.eventEmitter.off(
+			"addAnnotation",
+			this.onAddAnnotation
+		);
 	}
 
 	update(deltaTime: number) {
@@ -81,11 +73,16 @@ export class AnnotationHighlight implements Highlight {
 
 	private showAnnotationInput(position: THREE.Vector3) {
 		// Convert world position to screen coordinates
-		const screenPosition = position.clone().project(this.camera);
+		const screenPosition = position
+			.clone()
+			.project(this.schematicRenderer.cameraManager.activeCamera.camera);
 		const x =
-			(screenPosition.x * 0.5 + 0.5) * this.renderer.domElement.clientWidth;
+			(screenPosition.x * 0.5 + 0.5) *
+			this.schematicRenderer.renderManager.getRenderer().domElement.clientWidth;
 		const y =
-			(-screenPosition.y * 0.5 + 0.5) * this.renderer.domElement.clientHeight;
+			(-screenPosition.y * 0.5 + 0.5) *
+			this.schematicRenderer.renderManager.getRenderer().domElement
+				.clientHeight;
 
 		this.annotationInput.style.display = "block";
 		this.annotationInput.style.left = `${x}px`;
@@ -174,30 +171,39 @@ export class AnnotationHighlight implements Highlight {
 		sprite.position.copy(position).add(new THREE.Vector3(0, 1.25, 0));
 
 		// Add to scene and store reference
-		this.scene.add(highlightCube);
-		this.scene.add(sprite);
+		this.schematicRenderer.sceneManager.scene.add(highlightCube);
+		this.schematicRenderer.sceneManager.scene.add(sprite);
 		this.annotations[key] = { mesh: highlightCube, label: sprite };
 	}
 
 	private removeAnnotation(position: THREE.Vector3) {
 		const key = `${position.x},${position.y},${position.z}`;
 		if (this.annotations[key]) {
-			this.scene.remove(this.annotations[key].mesh);
-			this.scene.remove(this.annotations[key].label);
+			this.schematicRenderer.sceneManager.scene.remove(
+				this.annotations[key].mesh
+			);
+			this.schematicRenderer.sceneManager.scene.remove(
+				this.annotations[key].label
+			);
 			delete this.annotations[key];
 		}
 	}
 
 	private clearAllAnnotations() {
 		for (const key in this.annotations) {
-			this.scene.remove(this.annotations[key].mesh);
-			this.scene.remove(this.annotations[key].label);
+			this.schematicRenderer.sceneManager.scene.remove(
+				this.annotations[key].mesh
+			);
+			this.schematicRenderer.sceneManager.scene.remove(
+				this.annotations[key].label
+			);
 		}
 		this.annotations = {};
 	}
 
 	private updateAnnotationVisibility() {
-		const cameraPosition = this.camera.position;
+		const cameraPosition =
+			this.schematicRenderer.cameraManager.activeCamera.position;
 		for (const key in this.annotations) {
 			const annotation = this.annotations[key];
 			if (annotation && annotation.label && annotation.label.position) {

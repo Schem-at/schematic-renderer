@@ -15,20 +15,19 @@ import {
 	getDegreeRotationMatrix,
 } from "./utils";
 
-import { ResourceLoader } from "./resource_loader";
+import { ResourceLoader } from "./ResourceLoader";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 import { Monitor } from "./monitoring";
+import { SchematicRenderer } from "./SchematicRenderer";
 interface Block {
 	name: string;
 	properties: Record<string, string>;
 }
 export class BlockMeshBuilder {
+	private schematicRenderer: SchematicRenderer;
 	public blockMeshCache: Map<any, any>;
-	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
-	ressourceLoader: ResourceLoader;
 	schematic: any;
-	renderer: any;
 	faceDataCache: Map<string, any>;
 	DIRECTION_OFFSETS = [
 		{ face: "east", x: 1, y: 0, z: 0 },
@@ -47,25 +46,21 @@ export class BlockMeshBuilder {
 		south: 0b010000,
 		north: 0b100000,
 	};
-	constructor(
-		ressourceLoader: any,
-		materialMap: Map<string, THREE.Material>,
-		renderer: any
-	) {
+	constructor(schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
 		this.blockMeshCache = new Map();
-		this.materialMap = materialMap;
 		this.base64MaterialMap = new Map();
-		this.ressourceLoader = ressourceLoader;
-		this.renderer = renderer;
 		this.faceDataCache = new Map();
 	}
 
 	@Monitor
 	public getMaterialId(model: BlockModel, faceData: any, color: THREE.Color) {
-		const textureName = this.ressourceLoader.resolveTextureName(
-			faceData.texture,
-			model
-		);
+		// console.log("getMaterialId", model, faceData, color);
+		const textureName =
+			this.schematicRenderer.resourceLoader.resolveTextureName(
+				faceData.texture,
+				model
+			);
 		const rotation = faceData.rotation;
 		const idSuffix = rotation ? `-${rotation}` : "";
 		return `${textureName}-${color?.r ?? 1}-${color?.g ?? 1}-${
@@ -111,37 +106,42 @@ export class BlockMeshBuilder {
 				);
 				continue;
 			}
-			const textureName = this.ressourceLoader.resolveTextureName(
-				faceData.texture,
-				model
-			);
-			const materialColor = this.ressourceLoader.getColorForElement(
-				faceData,
-				textureName,
-				block
-			);
+			const textureName =
+				this.schematicRenderer.resourceLoader.resolveTextureName(
+					faceData.texture,
+					model
+				);
+
+			const materialColor =
+				this.schematicRenderer.resourceLoader.getColorForElement(
+					faceData,
+					textureName,
+					block
+				);
 			const materialId = this.getMaterialId(
 				model,
 				faceData,
 				materialColor ?? new THREE.Color(1, 1, 1)
 			);
-			if (!this.materialMap.has(materialId)) {
-				const material = await this.ressourceLoader.getTextureMaterial(
-					model,
-					faceData,
-					TRANSPARENT_BLOCKS.has(block.name) ||
-						faceData.texture.includes("overlay"),
-					materialColor
-				);
+			if (!this.schematicRenderer.materialMap.has(materialId)) {
+				const material =
+					await this.schematicRenderer.resourceLoader.getTextureMaterial(
+						model,
+						faceData,
+						TRANSPARENT_BLOCKS.has(block.name) ||
+							faceData.texture.includes("overlay"),
+						materialColor
+					);
 
-				this.materialMap.set(
+				this.schematicRenderer.materialMap.set(
 					materialId,
 					material ?? new THREE.MeshBasicMaterial()
 				);
-				const base64Material = await this.ressourceLoader.getBase64Image(
-					model,
-					faceData
-				);
+				const base64Material =
+					await this.schematicRenderer.resourceLoader.getBase64Image(
+						model,
+						faceData
+					);
 				this.base64MaterialMap.set(materialId, base64Material ?? "");
 			}
 
@@ -277,10 +277,13 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
-		const { modelOptions } = await this.ressourceLoader.getBlockMeta(block);
-
+		const { modelOptions } =
+			await this.schematicRenderer.resourceLoader.getBlockMeta(block);
 		let modelPromises = modelOptions.holders.map(
-			async (modelHolder, modelIndex) => {
+			async (
+				modelHolder: { x: any; y: any; z: any; model: string },
+				modelIndex: any
+			) => {
 				if (!modelHolder) return;
 
 				const modelHolderRotation = {
@@ -289,9 +292,23 @@ export class BlockMeshBuilder {
 					z: modelHolder.z ?? 0,
 				};
 
-				const model = await this.ressourceLoader.loadModel(modelHolder.model);
-				const elements = model?.elements;
+				const model = await this.schematicRenderer.resourceLoader.loadModel(
+					modelHolder.model,
+					block.properties
+				);
+				let elements;
+				try {
+					elements = JSON.parse(JSON.stringify(model?.elements));
+				} catch (e) {
+					console.log("Error parsing elements", model);
+					return;
+				}
 				if (!elements) return;
+				if (block.name.includes("shulker")) {
+					console.log(block);
+					const shulker_box_color = block.name.split("_")[0];
+					model.textures[0] = "entity/shulker/shulker_" + shulker_box_color;
+				}
 
 				let elementPromises = elements.map(async (element, elementIndex) => {
 					if (!element.from || !element.to) return;
@@ -619,13 +636,11 @@ export class BlockMeshBuilder {
 	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);
 		let cachedBlockMesh = this.blockMeshCache.get(blockUniqueKey);
-
 		if (cachedBlockMesh) {
 			return cachedBlockMesh;
 		} else {
 			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
-
 			if (performance.now() - start > 100) {
 				console.warn(
 					"Slow block",
@@ -636,6 +651,10 @@ export class BlockMeshBuilder {
 				);
 			}
 
+			if (Object.keys(blockComponents).length === 0) {
+				console.warn("Block has no components", block);
+				return null;
+			}
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);
 			return blockComponents;
 		}

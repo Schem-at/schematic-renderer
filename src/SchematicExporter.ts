@@ -1,4 +1,4 @@
-import { Renderer } from "./renderer";
+import { Renderer } from "./schematicRendererWorld";
 
 export class SchematicExporter {
 	constructor(private renderer: Renderer) {}

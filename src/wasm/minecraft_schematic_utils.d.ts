@@ -60,18 +60,43 @@ export class BlockStateWrapper {
 export class MchprsWorldWrapper {
   free(): void;
 /**
+* @param {SchematicWrapper} schematic
 */
-  run_simulation_step(): void;
-/**
-* @returns {Array<any>}
-*/
-  get_updated_blocks(): Array<any>;
+  constructor(schematic: SchematicWrapper);
 /**
 * @param {number} x
 * @param {number} y
 * @param {number} z
 */
   on_use_block(x: number, y: number, z: number): void;
+/**
+* @param {number} number_of_ticks
+*/
+  tick(number_of_ticks: number): void;
+/**
+*/
+  flush(): void;
+/**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+* @returns {boolean}
+*/
+  is_lit(x: number, y: number, z: number): boolean;
+/**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+* @returns {boolean}
+*/
+  get_lever_power(x: number, y: number, z: number): boolean;
+/**
+* @param {number} x
+* @param {number} y
+* @param {number} z
+* @returns {number}
+*/
+  get_redstone_power(x: number, y: number, z: number): number;
 }
 /**
 */
@@ -80,6 +105,10 @@ export class SchematicWrapper {
 /**
 */
   constructor();
+/**
+* @returns {MchprsWorldWrapper}
+*/
+  create_simulation_world(): MchprsWorldWrapper;
 /**
 * @param {Uint8Array} data
 */
@@ -107,10 +136,6 @@ export class SchematicWrapper {
 * @param {string} block_name
 */
   set_block(x: number, y: number, z: number, block_name: string): void;
-/**
-* @returns {MchprsWorldWrapper}
-*/
-  create_simulation_world(): MchprsWorldWrapper;
 /**
 * @param {number} x
 * @param {number} y
@@ -197,9 +222,13 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_mchprsworldwrapper_free: (a: number, b: number) => void;
-  readonly mchprsworldwrapper_run_simulation_step: (a: number) => void;
-  readonly mchprsworldwrapper_get_updated_blocks: (a: number) => number;
+  readonly mchprsworldwrapper_new: (a: number) => number;
   readonly mchprsworldwrapper_on_use_block: (a: number, b: number, c: number, d: number) => void;
+  readonly mchprsworldwrapper_tick: (a: number, b: number) => void;
+  readonly mchprsworldwrapper_flush: (a: number) => void;
+  readonly mchprsworldwrapper_is_lit: (a: number, b: number, c: number, d: number) => number;
+  readonly mchprsworldwrapper_get_lever_power: (a: number, b: number, c: number, d: number) => number;
+  readonly mchprsworldwrapper_get_redstone_power: (a: number, b: number, c: number, d: number) => number;
   readonly schematicwrapper_new: () => number;
   readonly schematicwrapper_from_data: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_from_litematic: (a: number, b: number, c: number, d: number) => void;
@@ -207,7 +236,6 @@ export interface InitOutput {
   readonly schematicwrapper_from_schematic: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_to_schematic: (a: number, b: number) => void;
   readonly schematicwrapper_set_block: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-  readonly schematicwrapper_create_simulation_world: (a: number) => number;
   readonly schematicwrapper_set_block_with_properties: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
   readonly schematicwrapper_get_block: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly schematicwrapper_get_block_with_properties: (a: number, b: number, c: number, d: number) => number;
@@ -229,6 +257,7 @@ export interface InitOutput {
   readonly blockstatewrapper_properties: (a: number) => number;
   readonly debug_schematic: (a: number, b: number) => void;
   readonly debug_json_schematic: (a: number, b: number) => void;
+  readonly schematicwrapper_create_simulation_world: (a: number) => number;
   readonly start: () => void;
   readonly __wbg_blockposition_free: (a: number, b: number) => void;
   readonly __wbg_get_blockposition_x: (a: number) => number;

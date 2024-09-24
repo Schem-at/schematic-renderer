@@ -1,6 +1,6 @@
 // BlockEntityHighlight.ts
 import * as THREE from "three";
-import { Highlight } from "./Highlight";
+import { Highlight } from "../managers/highlight/Highlight";
 import { EventEmitter } from "./EventEmitter";
 import { BlockData } from "./types";
 

@@ -1,50 +1,37 @@
 // HoverHighlight.ts
 import * as THREE from "three";
 import { Highlight } from "./Highlight";
-import { EventEmitter } from "./EventEmitter";
+import { EventEmitter } from "events";
 import { BlockData } from "./types";
+import { SchematicRenderer } from "../../SchematicRenderer";
 
 export class HoverHighlight implements Highlight {
 	private schematicRenderer: any;
-	private eventEmitter: EventEmitter;
-	private scene: THREE.Scene;
-	private camera: THREE.Camera;
-	private renderer: THREE.WebGLRenderer;
 	private hoverMesh: THREE.Mesh | null = null;
 	private raycaster: THREE.Raycaster;
 	private mouse: THREE.Vector2;
 	private lastIntersectedObject: THREE.Object3D | null = null;
 
-	constructor(
-		schematicRenderer: any,
-		scene: THREE.Scene,
-		camera: THREE.Camera,
-		renderer: THREE.WebGLRenderer,
-		eventEmitter: EventEmitter
-	) {
+	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
-		this.scene = scene;
-		this.camera = camera;
-		this.renderer = renderer;
-		this.eventEmitter = eventEmitter;
 		this.raycaster = new THREE.Raycaster();
 		this.mouse = new THREE.Vector2();
 	}
 
 	activate() {
-		this.renderer.domElement.addEventListener(
+		this.schematicRenderer.renderManager.renderer.domElement.addEventListener(
 			"pointermove",
 			this.onPointerMove
 		);
 	}
 
 	deactivate() {
-		this.renderer.domElement.removeEventListener(
+		this.schematicRenderer.renderManager.renderer.domElement.removeEventListener(
 			"pointermove",
 			this.onPointerMove
 		);
 		if (this.hoverMesh) {
-			this.scene.remove(this.hoverMesh);
+			this.schematicRenderer.sceneManager.scene.remove(this.hoverMesh);
 			this.hoverMesh = null;
 		}
 	}
@@ -56,21 +43,25 @@ export class HoverHighlight implements Highlight {
 	private onPointerMove = (event: PointerEvent) => {
 		// Remove previous hover highlight
 		if (this.hoverMesh) {
-			this.scene.remove(this.hoverMesh);
+			this.schematicRenderer.sceneManager.scene.remove(this.hoverMesh);
 			this.hoverMesh = null;
 		}
 
 		// Calculate mouse position in normalized device coordinates
-		const rect = this.renderer.domElement.getBoundingClientRect();
+		const rect =
+			this.schematicRenderer.renderManager.renderer.domElement.getBoundingClientRect();
 		this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 		this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
 		// Update the raycaster
-		this.raycaster.setFromCamera(this.mouse, this.camera);
+		this.raycaster.setFromCamera(
+			this.mouse,
+			this.schematicRenderer.cameraManager.activeCamera.camera
+		);
 
 		// Calculate objects intersecting the raycaster
 		const intersects = this.raycaster.intersectObjects(
-			this.scene.children,
+			this.schematicRenderer.sceneManager.scene.children,
 			true
 		);
 
@@ -98,7 +89,7 @@ export class HoverHighlight implements Highlight {
 				);
 
 				// Emit an event with the position and face normal
-				this.eventEmitter.emit("hover", {
+				this.schematicRenderer.eventEmitter.emit("hover", {
 					position,
 					faceNormal,
 				});
@@ -113,12 +104,12 @@ export class HoverHighlight implements Highlight {
 				this.hoverMesh = new THREE.Mesh(geometry, material);
 				this.hoverMesh.position.copy(position).addScalar(0.5); // Center the mesh
 				this.hoverMesh.userData.isHighlight = true;
-				this.scene.add(this.hoverMesh);
+				this.schematicRenderer.sceneManager.add(this.hoverMesh);
 			} else {
-				this.eventEmitter.emit("hover", null);
+				this.schematicRenderer.eventEmitter.emit("hover", null);
 			}
 		} else {
-			this.eventEmitter.emit("hover", null);
+			this.schematicRenderer.eventEmitter.emit("hover", null);
 		}
 	};
 

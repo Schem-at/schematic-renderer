@@ -3,6 +3,8 @@ import deepmerge from "deepmerge";
 import { BlockStateWrapper } from "./wasm/minecraft_schematic_utils";
 
 import chestModel from "./custom_models/chest.json";
+import chestLeftModel from "./custom_models/chest_left.json";
+import chestRightModel from "./custom_models/chest_right.json";
 import shulkerBoxModel from "./custom_models/shulker_box.json";
 import {
 	hashBlockForMap,
@@ -19,12 +21,14 @@ import type {
 } from "./types";
 
 import { Monitor } from "./monitoring";
+import { SchematicRenderer } from "./SchematicRenderer";
 
 interface Block {
 	name: string;
 	properties: Record<string, string>;
 }
 export class ResourceLoader {
+	schematicRenderer: SchematicRenderer;
 	schematic: any;
 	textureCache: Map<string, THREE.Texture>;
 	blobCache: Map<string, string>;
@@ -35,7 +39,6 @@ export class ResourceLoader {
 	faceDataCache: Map<string, any>;
 	blockStateDefinitionCache: Map<string, BlockStateDefinition>;
 
-	materialMap: Map<string, THREE.Material>;
 	base64MaterialMap: Map<string, string>;
 	resourcePackBlobs: any;
 	zips: any;
@@ -51,12 +54,12 @@ export class ResourceLoader {
 	DEBUG = true;
 	CUSTOM_MODELS: { [key: string]: any } = {
 		"block/chest": chestModel,
+		"block/chest_left": chestLeftModel,
+		"block/chest_right": chestRightModel,
 		"block/shulker_box": shulkerBoxModel,
 	};
-	constructor(
-		resourcePackBlobs: any,
-		materialMap?: Map<string, THREE.Material>
-	) {
+	constructor(resourcePackBlobs: any, schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
 		this.textureCache = new Map();
 		this.blobCache = new Map();
 		this.stringCache = new Map();
@@ -65,7 +68,6 @@ export class ResourceLoader {
 		this.blockModelCache = new Map();
 		this.faceDataCache = new Map();
 		this.blockStateDefinitionCache = new Map();
-		this.materialMap = materialMap ?? new Map();
 		this.base64MaterialMap = new Map();
 		this.resourcePackBlobs = resourcePackBlobs;
 		this.textureLoader = new THREE.TextureLoader();
@@ -361,11 +363,11 @@ export class ResourceLoader {
 	}
 
 	@Monitor
-	public createMeshesFromBlocks(blocks: any, chunkTimes: any): THREE.Mesh[] {
+	public createMeshesFromBlocks(blocks: any): THREE.Mesh[] {
 		const meshes: THREE.Mesh[] = [];
 
 		for (const [materialId, blockList] of Object.entries(blocks)) {
-			const material = this.materialMap.get(materialId);
+			const material = this.schematicRenderer.materialMap.get(materialId);
 			let totalVertices = 0;
 			let totalIndices = 0;
 
@@ -432,7 +434,6 @@ export class ResourceLoader {
 			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
 			geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
@@ -446,6 +447,7 @@ export class ResourceLoader {
 		const maxDepth = 5;
 		let depth = 0;
 		if (ref === "#missing") {
+			console.warn(`Texture reference ${ref} is missing.`, model);
 			return "missing_texture";
 		}
 		while (ref.startsWith("#") && depth < maxDepth) {
@@ -563,16 +565,29 @@ export class ResourceLoader {
 		) as BlockStateDefinition;
 	}
 
-	public async loadModel(modelRef: string): Promise<BlockModel | undefined> {
+	public async loadModel(
+		modelRef: string,
+		properties: any
+	): Promise<BlockModel | undefined> {
 		if (modelRef.startsWith("minecraft:")) {
 			modelRef = modelRef.substring("minecraft:".length);
 		}
-		//if it's block/chest we need to load the custom model; from custom_models/chest.json
-		//if it's block.purple_shulker_box we need to load the custom model; from custom_models/shulker_box.json
 		if (modelRef.includes("shulker_box")) {
 			modelRef = "block/shulker_box";
 		}
 		if (this.CUSTOM_MODELS[modelRef]) {
+			if (modelRef === "block/chest") {
+				if (properties.type === "single") {
+					return this.CUSTOM_MODELS[modelRef];
+				}
+				if (properties.type === "left") {
+					return this.CUSTOM_MODELS["block/chest_left"];
+				}
+				if (properties.type === "right") {
+					return this.CUSTOM_MODELS["block/chest_right"];
+				}
+			}
+			console.log("Returning custom model", modelRef);
 			return this.CUSTOM_MODELS[modelRef];
 		}
 		let model = JSON.parse(

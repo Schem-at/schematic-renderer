@@ -1,86 +1,117 @@
 import * as THREE from "three";
-import { Renderer } from "./renderer";
-import { ResourceLoader } from "./resource_loader";
+import { CameraManager } from "./managers/CameraManager";
+import { SceneManager } from "./managers/SceneManager";
+import { RenderManager } from "./managers/RenderManager";
+import { InteractionManager } from "./managers/InteractionManager";
+import { HighlightManager } from "./managers/HighlightManager";
+import { SchematicManager } from "./managers/SchematicManager";
+import { SchematicObject } from "./managers/SchematicObject";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
-import { SchematicRendererGUI } from "./SchematicRendererGUI";
-import { SchematicRendererCore } from "./SchematicRendererCore";
-import { SchematicMediaCapture } from "./SchematicMediaCapture";
-import { SchematicExporter } from "./SchematicExporter";
+import { ResourceLoader } from "./ResourceLoader";
+import { EventEmitter } from "events";
 import {
 	ResourcePackManager,
 	DefaultPackCallback,
-} from "./ResourcePackManager";
-
+} from "./managers/ResourcePackManager";
 // @ts-ignore
 import init, { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 
-function relayMethods(target: any, sourceKey: string) {
-	const source = target[sourceKey];
-	Object.getOwnPropertyNames(Object.getPrototypeOf(source)).forEach(
-		(method) => {
-			if (method !== "constructor" && typeof source[method] === "function") {
-				target[method] = function (...args: any[]) {
-					return source[method].apply(source, args);
-				};
-			}
-		}
-	);
-}
-
 export class SchematicRenderer {
-	[x: string]: any;
-	canvas: HTMLCanvasElement;
-	options: any;
-
-	renderer: Renderer;
-	resourceLoader: any;
-	materialMap: Map<string, THREE.Material> = new Map();
-	worldMeshBuilder: WorldMeshBuilder | undefined;
-	jarUrl: string | string[] | undefined;
-	schematics: { [key: string]: SchematicWrapper } = {};
-	schematicRendererGUI: SchematicRendererGUI | null = null;
-
-	schematicRendererCore: SchematicRendererCore | undefined;
-	schematicMediaCapture: SchematicMediaCapture | undefined;
-	schematicExporter: SchematicExporter | undefined;
-	resourcePackManager: ResourcePackManager;
-
-	simulationWorld: any = null;
-	simulationIntervalId: any = null;
-	TICK_RATE = 50; // milliseconds (20Hz)
+	public canvas: HTMLCanvasElement;
+	public clock: THREE.Clock;
+	public options: any;
+	public eventEmitter: EventEmitter;
+	public cameraManager: CameraManager;
+	public sceneManager: SceneManager;
+	public renderManager: RenderManager;
+	public interactionManager: InteractionManager;
+	public highlightManager: HighlightManager;
+	private schematicManager: SchematicManager;
+	private worldMeshBuilder: WorldMeshBuilder;
+	public resourceLoader: ResourceLoader;
+	public materialMap: Map<string, THREE.Material>;
+	private resourcePackManager: ResourcePackManager;
+	private wasmModule: any;
+	public state: any;
 
 	constructor(
 		canvas: HTMLCanvasElement,
-		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
+		schematicData: { [key: string]: () => Promise<ArrayBuffer> } = {},
 		defaultResourcePacks: Record<string, DefaultPackCallback> = {},
 		options: any = {}
 	) {
 		this.canvas = canvas;
-		this.options = options;
-		this.renderer = new Renderer(this, canvas, options);
-		this.resourcePackManager = new ResourcePackManager();
-		this.initWasm().then(() => {
-			this.initializeResourcePacks(defaultResourcePacks).then(() => {
-				this.resourceLoader = new ResourceLoader(
-					this.options.resourcePackBlobs,
-					this.materialMap
-				);
-				this.worldMeshBuilder = new WorldMeshBuilder(
-					this.resourceLoader,
-					this.materialMap,
-					this.renderer
-				);
-				this.schematicRendererCore = new SchematicRendererCore(
-					this.renderer,
-					this.worldMeshBuilder
-				);
-				this.schematicMediaCapture = new SchematicMediaCapture(this.renderer);
-				this.schematicExporter = new SchematicExporter(this.renderer);
 
-				this.setupRelayedMethods();
-				this.initialize(schematicData);
-			});
-		});
+		this.clock = new THREE.Clock();
+		this.materialMap = new Map();
+
+		this.options = options;
+		this.eventEmitter = new EventEmitter();
+
+		this.canvas.schematicRenderer = this;
+
+		// Initialize managers
+		this.cameraManager = new CameraManager(this);
+		this.sceneManager = new SceneManager(this);
+
+		this.resourcePackManager = new ResourcePackManager();
+
+		this.state = {
+			cameraPosition: new THREE.Vector3(),
+		};
+
+		// Start the initialization process
+		this.initialize(schematicData, defaultResourcePacks);
+	}
+
+	updateCameraPosition() {
+		this.state.cameraPosition.copy(this.cameraManager.activeCamera.position);
+		// This will automatically trigger UI updates if bound correctly
+	}
+
+	private async initialize(
+		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
+		defaultResourcePacks: Record<string, DefaultPackCallback>
+	) {
+		try {
+			// Initialize WASM module
+			await this.initWasm();
+
+			// Initialize resource packs
+			await this.initializeResourcePacks(defaultResourcePacks);
+
+			// Initialize the resource loader
+			this.resourceLoader = new ResourceLoader(
+				this.options.resourcePackBlobs,
+				this
+			);
+			await this.resourceLoader.initialize();
+
+			// Initialize the world mesh builder
+			this.worldMeshBuilder = new WorldMeshBuilder(this);
+
+			// Initialize the schematic manager
+			this.schematicManager = new SchematicManager();
+
+			// Initialize the render manager
+			this.renderManager = new RenderManager(this);
+
+			// Initialize the interaction manager
+			this.interactionManager = new InteractionManager(this);
+
+			// Initialize the highlight manager
+			this.highlightManager = new HighlightManager(this);
+
+			// Load the schematics
+			await this.loadSchematics(schematicData);
+			// Start the rendering loop
+			this.animate();
+		} catch (error) {
+			console.error("Failed to initialize SchematicRenderer:", error);
+		}
+
+		const event = new CustomEvent("rendererInitialized");
+		this.canvas.dispatchEvent(event);
 	}
 
 	private async initWasm() {
@@ -91,13 +122,6 @@ export class SchematicRenderer {
 		}
 	}
 
-	private setupRelayedMethods() {
-		relayMethods(this, "renderer");
-		relayMethods(this, "schematicMediaCapture");
-		relayMethods(this, "schematicExporter");
-		relayMethods(this, "schematicRendererCore");
-	}
-
 	private async initializeResourcePacks(
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	) {
@@ -105,214 +129,73 @@ export class SchematicRenderer {
 			await this.resourcePackManager.getResourcePackBlobs(
 				defaultResourcePacks || {}
 			);
-		this.resourceLoader = new ResourceLoader(
-			this.options.resourcePackBlobs,
-			this.materialMap
-		);
-		this.worldMeshBuilder = new WorldMeshBuilder(
-			this.resourceLoader,
-			this.materialMap,
-			this.renderer
-		);
-		this.schematicRendererCore = new SchematicRendererCore(
-			this.renderer,
-			this.worldMeshBuilder
-		);
 	}
 
-	async initialize(schematicData: {
-		[key: string]: () => Promise<ArrayBuffer>;
-	}) {
-		const loadedSchematics = {} as { [key: string]: SchematicWrapper };
+	private animate() {
+		requestAnimationFrame(() => this.animate());
+		const deltaTime = this.clock.getDelta();
 
+		// Update interaction manager
+		this.interactionManager.update(deltaTime);
+		// Update highlight manager
+		this.highlightManager.update(deltaTime);
+		// Render the scene
+		this.renderManager.render();
+	}
+
+	public async loadSchematics(
+		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
+		propertiesMap?: {
+			[key: string]: Partial<{
+				position: THREE.Vector3;
+				rotation: THREE.Euler;
+				scale: THREE.Vector3;
+				opacity: number;
+				visible: boolean;
+			}>;
+		}
+	) {
 		for (const key in schematicData) {
 			if (schematicData.hasOwnProperty(key)) {
 				const arrayBuffer = await schematicData[key]();
-				const schematicWrapper = new SchematicWrapper();
-				schematicWrapper?.from_data(new Uint8Array(arrayBuffer));
-				loadedSchematics[key] = schematicWrapper;
+				const properties = propertiesMap ? propertiesMap[key] : undefined;
+				await this.loadSchematic(key, arrayBuffer, properties);
 			}
 		}
-
-		this.materialMap = new Map();
-		this.renderer.schematics = loadedSchematics;
-		this.schematics = loadedSchematics;
-
-		await this.resourceLoader.initialize();
-
-		if (this.schematicRendererCore) {
-			await this.schematicRendererCore.render();
-		}
-		if (this.options?.debugGUI) {
-			this.schematicRendererGUI = new SchematicRendererGUI(this);
-		}
-
-		// Initialize the simulation world
-		this.initializeSimulationWorld();
-
-		// Start the animation loop
-		this.renderer.animate();
 	}
 
-	initializeSimulationWorld() {
-		const schematicKeys = Object.keys(this.schematics);
-		if (schematicKeys.length === 0) {
-			console.error(
-				"No schematics available to initialize the simulation world."
-			);
-			return;
-		}
-
-		// Use the first schematic for simulation
-		const primarySchematicKey = schematicKeys[0];
-		const schematic = this.schematics[primarySchematicKey];
-
-		// Create the simulation world from the schematic
-		this.simulationWorld = schematic.create_simulation_world();
-
-		// Start the simulation
-		this.startSimulation();
-	}
-
-	startSimulation() {
-		if (!this.simulationWorld) {
-			console.error("Simulation world is not initialized.");
-			return;
-		}
-
-		this.simulationIntervalId = setInterval(() => {
-			this.runSimulationStep();
-		}, this.TICK_RATE);
-	}
-
-	stopSimulation() {
-		if (this.simulationIntervalId !== null) {
-			clearInterval(this.simulationIntervalId);
-			this.simulationIntervalId = null;
-		}
-	}
-
-	runSimulationStep() {
-		// Run the simulation step
-		this.simulationWorld.run_simulation_step();
-
-		// Get updated blocks
-		const updatedBlocks = this.simulationWorld.get_updated_blocks();
-
-		// Update the schematic with new block states
-		updatedBlocks.forEach((block) => {
-			const schematic = this.schematics[Object.keys(this.schematics)[0]];
-			schematic.set_block_with_properties(
-				block.x,
-				block.y,
-				block.z,
-				block.name,
-				block.properties
-			);
-		});
-
-		// Re-render the updated chunks
-		if (updatedBlocks.length > 0) {
-			console.log("Updated blocks", updatedBlocks);
-		}
-	}
-	async updateSchematic(
-		key: string,
-		schematicDataCallback: () => Promise<ArrayBuffer>
+	// Method to load a single schematic
+	public async loadSchematic(
+		name: string,
+		schematicData: ArrayBuffer,
+		properties?: Partial<{
+			position: THREE.Vector3;
+			rotation: THREE.Euler;
+			scale: THREE.Vector3;
+			opacity: number;
+			visible: boolean;
+		}>
 	) {
-		const arrayBuffer = await schematicDataCallback();
+		// Create a SchematicWrapper from the data
 		const schematicWrapper = new SchematicWrapper();
-		schematicWrapper?.from_schematic(new Uint8Array(arrayBuffer));
-		this.renderer.schematics[key] = schematicWrapper;
-		await this.renderSchematic(key);
-	}
+		schematicWrapper.from_data(new Uint8Array(schematicData));
 
-	async exportUsdz(): Promise<any> {
-		return this.exportUsdz();
-	}
-
-	async getScreenshot(resolutionX: number, resolutionY: number): Promise<any> {
-		return this.getScreenshot(resolutionX, resolutionY);
-	}
-
-	async getRotationWebM(
-		resolutionX: number,
-		resolutionY: number,
-		frameRate: number,
-		duration: number,
-		angle: number = 360
-	): Promise<any> {
-		return this.getRotationWebM(
-			resolutionX,
-			resolutionY,
-			frameRate,
-			duration,
-			angle
+		// Create a SchematicObject
+		const schematicObject = new SchematicObject(
+			name,
+			schematicWrapper,
+			this.worldMeshBuilder,
+			this.eventEmitter,
+			this.sceneManager,
+			properties
 		);
-	}
 
-	updateZoom(value: number) {
-		this.renderer.updateZoom(value);
-	}
+		this.schematicManager.addSchematic(schematicObject);
 
-	updateGammaCorrection(value: number) {
-		this.renderer.updateGammaCorrection(value);
-	}
-
-	addLight(
-		type: "ambient" | "directional" | "point" | "spot",
-		options: any
-	): string {
-		return this.renderer.addLight(type, options);
-	}
-
-	removeLight(id: string) {
-		this.renderer.removeLight(id);
-	}
-
-	updateLight(id: string, options: any) {
-		this.renderer.updateLight(id, options);
-	}
-
-	getLights() {
-		return this.renderer.getLights();
-	}
-
-	async uploadResourcePack(file: File) {
-		await this.resourcePackManager.uploadPack(file);
-		await this.reloadResourcePacks();
-	}
-
-	async clearResourcePacks() {
-		await this.resourcePackManager.clearPacks();
-		await this.reloadResourcePacks();
-	}
-
-	async listResourcePacks(): Promise<{ name: string; enabled: boolean }[]> {
-		return this.resourcePackManager.listPacks();
-	}
-
-	async toggleResourcePack(name: string, enabled: boolean) {
-		await this.resourcePackManager.togglePackEnabled(name, enabled);
-		await this.reloadResourcePacks();
-	}
-
-	async reorderResourcePack(name: string, newOrder: number) {
-		await this.resourcePackManager.reorderPack(name, newOrder);
-		await this.reloadResourcePacks();
-	}
-
-	async getResourcePackInfo(): Promise<
-		{ name: string; enabled: boolean; order: number }[]
-	> {
-		return this.resourcePackManager.listPacks();
-	}
-
-	private async reloadResourcePacks() {
-		await this.initializeResourcePacks();
-		await this.resourceLoader.initialize();
-		if (this.schematicRendererCore) {
-			await this.schematicRendererCore.render();
-		}
+		// Wait for meshes to be ready before adding them to the scene
+		const meshes = await schematicObject.getMeshes();
+		meshes.forEach((mesh) => {
+			this.sceneManager.add(mesh);
+		});
 	}
 }

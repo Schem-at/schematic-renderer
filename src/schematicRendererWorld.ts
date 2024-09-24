@@ -7,39 +7,17 @@ import GIF from "gif.js.optimized";
 import WebMWriter from "webm-writer";
 import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
 import * as POSTPROCESSING from "postprocessing";
+import { GammaCorrectionEffect } from "./effects/GammaCorrectionEffect";
+
 // @ts-ignore
 import { SSAOEffect } from "realism-effects";
 
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
-import { HighlightManager } from "./highlight/HighlightManager";
-class GammaCorrectionEffect extends POSTPROCESSING.Effect {
-	constructor(gamma = 0.6) {
-		super(
-			"GammaCorrectionEffect",
-			`
-            uniform float gamma;
-
-            void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-				if (gamma == 0.0) {
-					outputColor = inputColor;
-					return;
-				}
-                vec3 color = pow(inputColor.rgb, vec3(1.0 / gamma));
-                outputColor = vec4(color, inputColor.a);
-            }
-        `,
-			{
-				blendFunction: POSTPROCESSING.BlendFunction.NORMAL,
-				uniforms: new Map([["gamma", new THREE.Uniform(gamma)]]),
-			}
-		);
-	}
-
-	setGamma(value: number) {
-		this.uniforms.get("gamma")!.value = value;
-	}
-}
+import { HighlightManager } from "./managers/HighlightManager";
+import { SceneManager } from "./managers/SceneManager";
+import { CameraManager } from "./managers/CameraManager";
+import { InteractionManager } from "./managers/InteractionManager";
 
 interface Light {
 	id: string;
@@ -47,173 +25,17 @@ interface Light {
 	light: THREE.Light;
 }
 
-export class Renderer {
-	canvas: HTMLCanvasElement;
-	renderer: THREE.WebGLRenderer;
-	scene: THREE.Scene;
-	camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
-	controls: OrbitControls | FlyControls;
-	composer: POSTPROCESSING.EffectComposer;
-	schematics: { [key: string]: SchematicWrapper } = {};
-	schematicRenderer: any;
-	gammaCorrectionEffect: GammaCorrectionEffect;
-	lights: Light[] = [];
-	pmremGenerator: THREE.PMREMGenerator;
+export class SchematicRendererWorld {
+	private schematicRenderer: SchematicRenderer;
+	private clock: THREE.Clock;
 	annotations: { [key: string]: { mesh: THREE.Mesh; label: THREE.Sprite } } =
 		{};
 
 	hoverHighlight: THREE.Mesh | null = null;
 
-	private highlightManager: HighlightManager;
-	private clock: THREE.Clock;
-
-	constructor(schematicRenderer: any, canvas: HTMLCanvasElement, options: any) {
+	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
-		this.canvas = canvas;
-		this.renderer = new THREE.WebGLRenderer({
-			// antialias: true,
-			depth: false,
-			canvas: this.canvas,
-			alpha: true,
-		});
-		this.gammaCorrectionEffect = new GammaCorrectionEffect(0.6);
-		this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-		this.scene = new THREE.Scene();
-		this.camera = this.createCamera();
-		this.controls = new OrbitControls(this.camera, this.canvas);
-
-		// this.controls = new FlyControls(this.camera, this.canvas);
-		this.composer = new POSTPROCESSING.EffectComposer(this.renderer);
-		this.composer.addPass(
-			new POSTPROCESSING.RenderPass(this.scene, this.camera)
-		);
-		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-		this.setupScene(options);
-
-		this.setBackgroundColor("#000000", 1);
-
-		this.clock = new THREE.Clock();
-		this.highlightManager = new HighlightManager(
-			this.schematicRenderer,
-			this.scene,
-			this.camera,
-			this.renderer
-		);
-	}
-
-	addDebugCuboide(position: THREE.Vector3, size: THREE.Vector3, color: number) {
-		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
-		const material = new THREE.MeshBasicMaterial({ color: color });
-		const cube = new THREE.Mesh(geometry, material);
-		cube.position.copy(position);
-		this.scene.add(cube);
-	}
-
-	// Helper function to wrap text
-
-	addDebugBoundingBox(
-		position: THREE.Vector3,
-		size: THREE.Vector3,
-		color: number
-	) {
-		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
-		const edges = new THREE.EdgesGeometry(geometry);
-		const line = new THREE.LineSegments(
-			edges,
-			new THREE.LineBasicMaterial({ color: color })
-		);
-		line.position.copy(position);
-		this.scene.add(line);
-	}
-
-	addDebugText(
-		text: string,
-		position: THREE.Vector3,
-		color: number = 0x000000,
-		backgroundColor: number = 0xffffff
-	) {
-		const canvas = document.createElement("canvas");
-		const context = canvas.getContext("2d");
-		if (context) {
-			context.font = "Bold 40px Arial";
-			context.fillStyle = "rgba(" + backgroundColor + ", 1)";
-			context.fillRect(0, 0, context.measureText(text).width, 50);
-			context.fillStyle = "rgba(" + color + ", 1)";
-			context.fillText(text, 0, 40);
-		}
-		const texture = new THREE.CanvasTexture(canvas);
-		const material = new THREE.SpriteMaterial({
-			map: texture,
-			transparent: true,
-		});
-		const sprite = new THREE.Sprite(material);
-		sprite.position.copy(position);
-		sprite.scale.set(5, 2, 1);
-		this.scene.add(sprite);
-	}
-
-	getPerspectiveCamera() {
-		const d = 20;
-		const fov = 75;
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-		const near = 0.1;
-		const far = 1000;
-		const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-		camera.position.set(d, 3 * d, d);
-		camera.lookAt(0, 0, 0);
-		return camera;
-	}
-
-	getIsometricCamera() {
-		const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-		const d = 20;
-		const camera = new THREE.OrthographicCamera(
-			-d * aspect,
-			d * aspect,
-			d,
-			-d,
-			1,
-			1000
-		);
-		camera.position.set(d, d, d);
-		return camera;
-	}
-
-	setBackgroundColor(color: string, alpha: number = 1) {
-		this.renderer.setClearColor(color, alpha);
-	}
-
-	createCamera() {
-		return this.getPerspectiveCamera();
-		// return this.getIsometricCamera();
-	}
-
-	getGridHelper() {
-		const size = 100;
-		const divisions = size;
-		const gridHelper = new THREE.GridHelper(size, divisions);
-		gridHelper.name = "GridHelper";
-		return gridHelper;
-	}
-
-	addGrid() {
-		const gridHelper = this.getGridHelper();
-		this.scene.add(gridHelper);
-	}
-
-	removeGrid() {
-		const gridHelper = this.scene.getObjectByName("GridHelper");
-		if (gridHelper) {
-			this.scene.remove(gridHelper);
-		}
-	}
-
-	toggleGrid() {
-		if (this.scene.getObjectByName("GridHelper")) {
-			this.removeGrid();
-		} else {
-			this.addGrid();
-		}
+		this.canvas = this.schematicRenderer.canvas;
 	}
 
 	setupHDRIBackground(hdriPath: string, backgroundOnly: boolean = true) {

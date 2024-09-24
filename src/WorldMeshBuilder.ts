@@ -1,85 +1,51 @@
+// managers/WorldMeshBuilder.ts
 import * as THREE from "three";
-
-import { BlockMeshBuilder } from "./block_mesh_builder";
+import { BlockMeshBuilder } from "./BlockMeshBuilder";
 import {
 	INVISIBLE_BLOCKS,
-	TRANSPARENT_BLOCKS,
+	faceToFacingVector,
 	facingvectorToFace,
 	getDegreeRotationMatrix,
 	occludedFacesIntToList,
 	rotateVectorMatrix,
 } from "./utils";
-import { Renderer } from "./renderer";
 import { Vector } from "./types";
 // @ts-ignore
-import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
+import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
+import { ResourceLoader } from "./ResourceLoader";
+import { SchematicRenderer } from "./SchematicRenderer";
 
-import { Monitor, displayPerformanceMetrics } from "./monitoring";
-interface ChunkDimensions {
+export interface ChunkDimensions {
 	chunkWidth: number;
 	chunkHeight: number;
 	chunkLength: number;
 }
 
-interface BlockPosition {
+export interface BlockPosition {
 	x: number;
 	y: number;
 	z: number;
 }
 
-interface BlockData extends BlockPosition {
+export interface BlockData extends BlockPosition {
 	name: string;
 	properties: Record<string, string>;
 }
+
 export class WorldMeshBuilder {
-	schematic: any;
-	blockMeshBuilder: BlockMeshBuilder;
-	ressourceLoader: any;
-	renderer: Renderer;
-	worldMeshes: any[] = [];
+	private schematicRenderer: SchematicRenderer;
+	private blockMeshBuilder: BlockMeshBuilder;
 
-	private chunkMeshes: Map<string, THREE.Mesh[]> = new Map();
-
-	constructor(
-		ressourceLoader: any,
-		materialMap: Map<string, THREE.Material>,
-		renderer: Renderer
-	) {
-		this.ressourceLoader = ressourceLoader;
-		this.renderer = renderer;
-
-		this.blockMeshBuilder = new BlockMeshBuilder(
-			ressourceLoader,
-			materialMap,
-			this.renderer
-		);
+	constructor(schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
+		this.blockMeshBuilder = new BlockMeshBuilder(this.schematicRenderer);
 	}
-
-	@Monitor
 	public async getChunkMesh(
 		chunk: BlockData[],
-		offset: { x: number; y: number; z: number },
 		schematic: SchematicWrapper
 	): Promise<THREE.Mesh[]> {
 		const maxBlocksAllowed = 1000000;
-
 		let count = 0;
-		let chunkTimes = {
-			blockMeshCreation: 0,
-			blockMeshRetrieval: 0,
-			occlusion: 0,
-			chunkMeshCreation: {
-				total_time: 0,
-				arrayCreation: 0,
-				arrayAllocation: 0,
-				indexCalculation: 0,
-				vertexTranslation: 0,
-				geometryCreation: 0,
-				materialRetrieval: 0,
-				slicing: 0,
-			},
-		};
-		let start;
 		const components: Record<string, any[]> = {};
 
 		for (const blockData of chunk) {
@@ -87,17 +53,13 @@ export class WorldMeshBuilder {
 				break;
 			}
 
-			let { x, y, z, name, properties } = blockData;
-			// Remove the offset addition
-			// x += offset.x;
-			// y += offset.y;
-			// z += offset.z;
+			const { x, y, z, name, properties } = blockData;
 
 			if (INVISIBLE_BLOCKS.has(name)) {
 				continue;
 			}
 
-			start = performance.now();
+			// Get occluded faces for the block
 			const occludedFaces = occludedFacesIntToList(
 				this.blockMeshBuilder.getOccludedFacesForBlock(
 					schematic,
@@ -106,13 +68,11 @@ export class WorldMeshBuilder {
 				)
 			);
 
-			chunkTimes.occlusion += performance.now() - start;
-			start = performance.now();
+			// Get block components (meshes) from cache or build new
 			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
 				{ name, properties },
 				{ x, y, z }
 			);
-			chunkTimes.blockMeshRetrieval += performance.now() - start;
 
 			for (const key in blockComponents) {
 				const materialId = blockComponents[key].materialId;
@@ -120,7 +80,10 @@ export class WorldMeshBuilder {
 
 				// Check for rotation with model holder
 				const holder = (
-					await this.ressourceLoader.getBlockMeta({ name, properties })
+					await this.schematicRenderer.resourceLoader.getBlockMeta({
+						name,
+						properties,
+					})
 				).modelOptions.holders[0];
 				const rotationMatrix = getDegreeRotationMatrix(
 					-(holder.x ?? 0),
@@ -143,33 +106,22 @@ export class WorldMeshBuilder {
 				components[materialId].push([blockComponents[key], [x, y, z]]);
 			}
 
-			chunkTimes.blockMeshCreation += performance.now() - start;
 			count++;
 		}
-
-		start = performance.now();
-		const meshes = this.ressourceLoader.createMeshesFromBlocks(
-			components,
-			chunkTimes
-		);
-		chunkTimes.chunkMeshCreation.total_time = performance.now() - start;
+		// Create meshes from block components
+		const meshes =
+			this.schematicRenderer.resourceLoader.createMeshesFromBlocks(components);
 		return meshes;
 	}
 
-	public isSolid(schematic: any, x: number, y: number, z: number) {
-		const block = schematic.getBlock(new THREE.Vector3(x, y, z));
-		return block && !TRANSPARENT_BLOCKS.has(block.name);
-	}
-
-	@Monitor
-	public async getSchematicMeshes(
+	public async buildSchematicMeshes(
 		schematic: SchematicWrapper,
 		chunkDimensions: ChunkDimensions = {
 			chunkWidth: 16,
 			chunkHeight: 16,
 			chunkLength: 16,
 		}
-	): Promise<THREE.Mesh[]> {
+	): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
 		const chunks = schematic.chunks(
 			chunkDimensions.chunkWidth,
 			chunkDimensions.chunkHeight,
@@ -177,6 +129,7 @@ export class WorldMeshBuilder {
 		);
 
 		const schematicMeshes: THREE.Mesh[] = [];
+		const chunkMap: Map<string, THREE.Mesh[]> = new Map();
 
 		const maxChunksAllowed = 1000;
 		let chunkCount = 0;
@@ -187,52 +140,21 @@ export class WorldMeshBuilder {
 
 			chunkCount++;
 			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
-			const chunkOffset = {
-				x: chunk_x * chunkDimensions.chunkWidth,
-				y: chunk_y * chunkDimensions.chunkHeight,
-				z: chunk_z * chunkDimensions.chunkLength,
-			};
-
-			console.log("Chunk offset", chunkOffset);
 
 			const chunkMeshes = await this.getChunkMesh(
 				blocks as BlockData[],
-				chunkOffset,
 				schematic
 			);
-
 			if (chunkMeshes.length === 0) {
-				console.log(`Chunk at (${chunk_x}, ${chunk_y}, ${chunk_z}) is empty`);
 				continue;
 			}
 
-			// Store the chunk meshes
-			this.setChunkMeshAt(chunk_x, chunk_y, chunk_z, chunkMeshes);
+			// Create a key for the chunk position
+			const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
+			chunkMap.set(chunkKey, chunkMeshes);
 
-			this.renderer.scene.add(...chunkMeshes);
 			schematicMeshes.push(...chunkMeshes);
-			console.log(`Chunk at (${chunk_x}, ${chunk_y}, ${chunk_z}) processed`);
 		}
-		displayPerformanceMetrics();
-		return schematicMeshes;
-	}
-
-	public getChunkMeshAt(
-		chunkX: number,
-		chunkY: number,
-		chunkZ: number
-	): THREE.Mesh[] | null {
-		const key = `${chunkX},${chunkY},${chunkZ}`;
-		return this.chunkMeshes.get(key) || null;
-	}
-
-	public setChunkMeshAt(
-		chunkX: number,
-		chunkY: number,
-		chunkZ: number,
-		meshes: THREE.Mesh[]
-	) {
-		const key = `${chunkX},${chunkY},${chunkZ}`;
-		this.chunkMeshes.set(key, meshes);
+		return { meshes: schematicMeshes, chunkMap };
 	}
 }

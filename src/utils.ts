@@ -444,12 +444,12 @@ export function isExtendedPiston(block: Block) {
 }
 
 export const INVISIBLE_BLOCKS = new Set([
-	"air",
-	"cave_air",
-	"void_air",
-	"structure_void",
-	"barrier",
-	"light",
+	"minecraft:air",
+	"minecraft:cave_air",
+	"minecraft:void_air",
+	"minecraft:structure_void",
+	"minecraft:barrier",
+	"minecraft:light",
 ]);
 
 export const TRANSPARENT_BLOCKS = new Set([
