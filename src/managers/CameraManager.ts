@@ -12,19 +12,23 @@ export class CameraManager extends EventEmitter {
 	private schematicRenderer: SchematicRenderer;
 	private cameras: Map<string, CameraWrapper> = new Map();
 	private activeCameraKey: string;
-	private controls: Map<string, any> = new Map();
+	public controls: Map<string, any> = new Map();
 	private activeControlKey: string;
 	private rendererDomElement: HTMLCanvasElement;
 
-	constructor(schematicRenderer: SchematicRenderer) {
+	constructor(
+		schematicRenderer: SchematicRenderer,
+		defaultCameraParams: any = {}
+	) {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.rendererDomElement = this.schematicRenderer.canvas;
 
 		// Initialize with a default perspective camera
 		const defaultCamera = this.createCamera("perspective", {
-			position: [0, 0, 5],
-			rotation: [0, 0, 0],
+			position: defaultCameraParams.position || [0, 0, 0],
+			rotation: defaultCameraParams.rotation || [0, 0, 0],
+			lookAt: defaultCameraParams.lookAt || [0, 0, 0],
 		});
 		this.cameras.set("default", defaultCamera);
 		this.activeCameraKey = "default";
@@ -133,7 +137,7 @@ export class CameraManager extends EventEmitter {
 	}
 
 	// Update loop for controls
-	public update(deltaTime: number) {
+	public update(deltaTime: number = 0) {
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls && controls.update) {
 			controls.update(deltaTime);
@@ -145,7 +149,7 @@ export class CameraManager extends EventEmitter {
 		return this.activeCamera.position;
 	}
 
-	set position(value: THREE.Vector3 | THREE.Vector3Tuple) {
+	set position(value: THREE.Vector3 | THREE.Vector3Tuple | Array<number>) {
 		if (Array.isArray(value)) {
 			this.activeCamera.position.set(...value);
 		} else {
@@ -191,5 +195,25 @@ export class CameraManager extends EventEmitter {
 		} else {
 			this.activeCamera.lookAt(target);
 		}
+	}
+
+	public focusOnSchematics() {
+		const boundingBox =
+			this.schematicRenderer.schematicManager.getGlobalBoundingBox();
+		const width = boundingBox[1][0] - boundingBox[0][0];
+		const height = boundingBox[1][1] - boundingBox[0][1];
+		const depth = boundingBox[1][2] - boundingBox[0][2];
+		const distance = Math.max(width, height, depth);
+		const center =
+			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		const elevationAngle = Math.PI / 4;
+		const azimuthalAngle = Math.PI / 4;
+		const x =
+			center.x + distance * Math.sin(elevationAngle) * Math.cos(azimuthalAngle);
+		const y = center.y + distance * Math.cos(elevationAngle);
+		const z =
+			center.z + distance * Math.sin(elevationAngle) * Math.sin(azimuthalAngle);
+		this.activeCamera.position = new THREE.Vector3(x, y, z);
+		this.activeCamera.lookAt(center);
 	}
 }

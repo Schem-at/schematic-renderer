@@ -4,9 +4,10 @@ import { EventEmitter } from "events";
 import { Grid } from "./helpers/Grid";
 import { Axes } from "./helpers/Axes";
 import { SchematicRenderer } from "../SchematicRenderer";
+import { SchematicObject } from "./SchematicObject";
 
 export class SceneManager extends EventEmitter {
-	private schematicRenderer: SchematicRenderer;
+	public schematicRenderer: SchematicRenderer;
 	public scene: THREE.Scene;
 	private gridHelper: Grid | null = null;
 	private axesHelper: Axes | null = null;
@@ -21,7 +22,7 @@ export class SceneManager extends EventEmitter {
 		this.updateHelpers();
 
 		// Add ambient light
-		const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+		const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
 		this.scene.add(ambientLight);
 		this.lights.set("ambientLight", ambientLight);
 
@@ -209,5 +210,14 @@ export class SceneManager extends EventEmitter {
 		this.emit("environmentMapChanged", { envMap });
 	}
 
+	addSchematic(schematic: SchematicObject): void {
+		this.scene.add(schematic.group);
+		this.emit("schematicAdded", schematic);
+	}
+
+	removeSchematic(schematic: SchematicObject): void {
+		this.scene.remove(schematic.group);
+		this.emit("schematicRemoved", schematic);
+	}
 	// Additional methods for managing scene components
 }

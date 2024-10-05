@@ -51,6 +51,12 @@ export class CameraWrapper extends EventEmitter {
 		} else {
 			this.rotation = [0, 0, 0];
 		}
+
+		if (params.lookAt) {
+			this.lookAt(params.lookAt);
+		} else {
+			this.lookAt([0, 0, 0]);
+		}
 	}
 
 	// Expose the underlying camera
@@ -86,6 +92,10 @@ export class CameraWrapper extends EventEmitter {
 		} else {
 			this._camera.position.copy(value);
 		}
+		if (this._camera instanceof THREE.PerspectiveCamera) {
+			this._camera.updateProjectionMatrix();
+		}
+
 		this.emit("propertyChanged", {
 			property: "position",
 			value: this._camera.position.clone(),
@@ -102,6 +112,9 @@ export class CameraWrapper extends EventEmitter {
 			this._camera.rotation.set(value[0], value[1], value[2]);
 		} else {
 			this._camera.rotation.copy(value);
+		}
+		if (this._camera instanceof THREE.PerspectiveCamera) {
+			this._camera.updateProjectionMatrix();
 		}
 		this.emit("propertyChanged", {
 			property: "rotation",
@@ -148,6 +161,39 @@ export class CameraWrapper extends EventEmitter {
 		} else {
 			this._camera.lookAt(target);
 		}
+		if (this._camera instanceof THREE.PerspectiveCamera) {
+			this._camera.updateProjectionMatrix();
+		}
 		this.emit("propertyChanged", { property: "lookAt", value: target });
+	}
+
+	changeType(type: "perspective" | "orthographic") {
+		this._type = type;
+		if (type === "perspective") {
+			const currentCamera = this._camera as THREE.OrthographicCamera;
+			const d = 20;
+			const aspect = window.innerWidth / window.innerHeight;
+			this._camera = new THREE.PerspectiveCamera(
+				currentCamera.fov,
+				aspect,
+				currentCamera.near,
+				currentCamera.far
+			);
+		} else {
+			const currentCamera = this._camera as THREE.PerspectiveCamera;
+			const d = 20;
+			const aspect = window.innerWidth / window.innerHeight;
+			this._camera = new THREE.OrthographicCamera(
+				-d * aspect,
+				d * aspect,
+				d,
+				-d,
+				currentCamera.near,
+				currentCamera.far
+			);
+		}
+		this.position = this._camera.position;
+		this.rotation = this._camera.rotation;
+		this.emit("propertyChanged", { property: "type", value: type });
 	}
 }

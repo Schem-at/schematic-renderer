@@ -1,45 +1,217 @@
-// managers/InteractionManager.ts
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
-import { CameraManager } from "./CameraManager";
-import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
+import { SelectableObject } from "./SelectableObject";
+import { SchematicObject } from "./SchematicObject";
 
 export class InteractionManager {
 	private schematicRenderer: SchematicRenderer;
-	private cameraManager: CameraManager;
-	private renderer: THREE.WebGLRenderer;
+	private raycaster: THREE.Raycaster;
+	private mouse: THREE.Vector2;
+	private camera: THREE.Camera;
+	private hoveredObject: SelectableObject | null = null;
 	private canvas: HTMLCanvasElement;
-	private eventEmitter: EventEmitter;
+	private selectedObject: SelectableObject | null = null;
+	private boundingBoxHelper: THREE.BoxHelper | null = null;
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
-		this.cameraManager = this.schematicRenderer.cameraManager;
-		this.renderer = this.schematicRenderer.renderManager.renderer;
+		this.raycaster = new THREE.Raycaster();
+		this.mouse = new THREE.Vector2();
+		this.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
 		this.canvas = this.schematicRenderer.canvas;
-		this.eventEmitter = this.schematicRenderer.eventEmitter;
 
-		// Setup event listeners
-		this.setupEventListeners();
+		this.addEventListeners();
 	}
 
-	private setupEventListeners() {
-		// Handle user interactions
+	private addEventListeners() {
+		this.canvas.addEventListener("mousemove", this.onMouseMove.bind(this));
 		this.canvas.addEventListener("mousedown", this.onMouseDown.bind(this));
-		// Other event listeners as needed
+		window.addEventListener("keydown", this.onKeyDown.bind(this));
+	}
+
+	private onMouseMove(event: MouseEvent) {
+		this.updateMousePosition(event);
+		// this.checkHover();
 	}
 
 	private onMouseDown(event: MouseEvent) {
-		// Emit events based on interaction
-		this.eventEmitter.emit("mouseDown", event);
+		this.updateMousePosition(event);
+		this.checkSelection();
 	}
 
-	public update(deltaTime: number) {
-		// Handle other updates if necessary
+	private onKeyDown(event: KeyboardEvent) {
+		// if (event.key === "Escape") {
+		// console.log("Escape key pressed");
+		// 	this.deselectObject();
+		// }
+		switch (event.key) {
+			case "g": // Press 'g' for translate mode
+				this.schematicRenderer.gizmoManager.setMode("translate");
+				break;
+			case "r": // Press 'r' for rotate mode
+				this.schematicRenderer.gizmoManager.setMode("rotate");
+				break;
+			case "s": // Press 's' for scale mode
+				this.schematicRenderer.gizmoManager.setMode("scale");
+				break;
+			case "Escape": // Press 'Escape' to deselect object
+				this.deselectObject();
+		}
+	}
+
+	private updateMousePosition(event: MouseEvent) {
+		const rect = this.canvas.getBoundingClientRect();
+		this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+		this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+	}
+
+	private checkHover() {
+		this.raycaster.setFromCamera(this.mouse, this.camera);
+
+		const selectableObjects =
+			this.schematicRenderer.schematicManager.getSelectableObjects();
+
+		if (!selectableObjects || selectableObjects.length === 0) {
+			console.warn("No selectable objects found");
+			return;
+		}
+
+		// Filter out any undefined objects
+		const validObjects = selectableObjects.filter((obj) => obj !== undefined);
+
+		if (validObjects.length !== selectableObjects.length) {
+			console.warn(
+				`Filtered out ${
+					selectableObjects.length - validObjects.length
+				} undefined objects`
+			);
+		}
+
+		try {
+			const intersects = this.raycaster.intersectObjects(validObjects, true);
+
+			if (intersects.length > 0) {
+				const intersectedObject = intersects[0].object;
+				const selectableObject = this.findSelectableParent(intersectedObject);
+
+				if (selectableObject && selectableObject !== this.hoveredObject) {
+					if (this.hoveredObject) {
+						this.schematicRenderer.eventEmitter.emit(
+							"hoverExit",
+							this.hoveredObject
+						);
+					}
+					this.hoveredObject = selectableObject;
+					this.schematicRenderer.eventEmitter.emit(
+						"hoverEnter",
+						selectableObject,
+						intersects[0]
+					);
+					console.log("Hovering over object", selectableObject.id);
+				}
+			} else if (this.hoveredObject) {
+				this.schematicRenderer.eventEmitter.emit(
+					"hoverExit",
+					this.hoveredObject
+				);
+				this.hoveredObject = null;
+			}
+		} catch (error) {
+			console.error("Error in checkHover:", error);
+			console.log("Camera:", this.camera);
+			console.log("Mouse:", this.mouse);
+			console.log("Valid objects:", validObjects);
+		}
+	}
+
+	private findSelectableParent(
+		object: THREE.Object3D
+	): SelectableObject | null {
+		let current: THREE.Object3D | null = object;
+		while (current) {
+			console.log("Checking object:", current.name, current.type);
+			if (current instanceof THREE.Group && current.name) {
+				const schematic = this.schematicRenderer.schematicManager.getSchematic(
+					current.name
+				);
+				if (schematic) {
+					console.log("Found selectable parent:", schematic.id);
+					return schematic;
+				}
+			}
+			current = current.parent;
+		}
+		console.log("No selectable parent found");
+		return null;
+	}
+
+	private visualizeBoundingBoxes() {
+		const selectableObjects =
+			this.schematicRenderer.schematicManager.getSelectableObjects();
+		selectableObjects.forEach((object) => {
+			const box = new THREE.Box3().setFromObject(object);
+			const helper = new THREE.Box3Helper(box, new THREE.Color(0xffff00));
+			this.schematicRenderer.sceneManager.scene.add(helper);
+
+			console.log("Object:", object.name);
+			console.log("  Position:", object.position);
+			console.log("  Scale:", object.scale);
+			console.log("  Bounding box min:", box.min);
+			console.log("  Bounding box max:", box.max);
+			console.log("  Bounding box size:", box.getSize(new THREE.Vector3()));
+		});
+		console.log("Added bounding box visualizations");
+	}
+
+	private checkSelection() {
+		this.raycaster.setFromCamera(this.mouse, this.camera);
+
+		const selectableObjects =
+			this.schematicRenderer.schematicManager.getSelectableObjects();
+
+		const intersects = this.raycaster.intersectObjects(selectableObjects, true);
+
+		if (intersects.length > 0) {
+			const intersectedObject = intersects[0].object;
+			console.log("Intersected object:", intersectedObject);
+			const selectableObject = this.findSelectableParent(intersectedObject);
+
+			if (selectableObject) {
+				this.selectObject(selectableObject);
+			} else {
+				console.log("No selectable parent found for intersected object");
+			}
+		} else {
+			console.log("No intersections found");
+			// this.deselectObject();
+		}
+	}
+	private selectObject(object: SelectableObject) {
+		if (this.selectedObject !== object) {
+			this.deselectObject(); // Deselect previous object if any
+			this.selectedObject = object;
+			this.schematicRenderer.eventEmitter.emit("objectSelected", object);
+			console.log("Selected object:", object.id);
+		}
+	}
+
+	private deselectObject() {
+		if (this.selectedObject) {
+			this.schematicRenderer.eventEmitter.emit(
+				"objectDeselected",
+				this.selectedObject
+			);
+			this.selectedObject = null;
+			console.log("Deselected object");
+		}
+	}
+
+	public update() {
+		// This method can be called in the render loop if continuous updates are needed
 	}
 
 	public dispose() {
-		// Clean up event listeners
+		this.canvas.removeEventListener("mousemove", this.onMouseMove);
 		this.canvas.removeEventListener("mousedown", this.onMouseDown);
 	}
 }

@@ -5,7 +5,6 @@ import { RenderManager } from "./managers/RenderManager";
 import { InteractionManager } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
 import { SchematicManager } from "./managers/SchematicManager";
-import { SchematicObject } from "./managers/SchematicObject";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { ResourceLoader } from "./ResourceLoader";
 import { EventEmitter } from "events";
@@ -14,7 +13,8 @@ import {
 	DefaultPackCallback,
 } from "./managers/ResourcePackManager";
 // @ts-ignore
-import init, { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
+import init from "./wasm/minecraft_schematic_utils";
+import { GizmoManager } from "./managers/GizmoManager";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
@@ -26,8 +26,9 @@ export class SchematicRenderer {
 	public renderManager: RenderManager;
 	public interactionManager: InteractionManager;
 	public highlightManager: HighlightManager;
-	private schematicManager: SchematicManager;
-	private worldMeshBuilder: WorldMeshBuilder;
+	public schematicManager: SchematicManager;
+	public worldMeshBuilder: WorldMeshBuilder;
+	public gizmoManager: GizmoManager;
 	public resourceLoader: ResourceLoader;
 	public materialMap: Map<string, THREE.Material>;
 	private resourcePackManager: ResourcePackManager;
@@ -51,8 +52,11 @@ export class SchematicRenderer {
 		this.canvas.schematicRenderer = this;
 
 		// Initialize managers
-		this.cameraManager = new CameraManager(this);
+		this.cameraManager = new CameraManager(this, {
+			position: [5, 5, 5],
+		});
 		this.sceneManager = new SceneManager(this);
+		this.eventEmitter.emit("sceneReady");
 
 		this.resourcePackManager = new ResourcePackManager();
 
@@ -66,7 +70,6 @@ export class SchematicRenderer {
 
 	updateCameraPosition() {
 		this.state.cameraPosition.copy(this.cameraManager.activeCamera.position);
-		// This will automatically trigger UI updates if bound correctly
 	}
 
 	private async initialize(
@@ -91,7 +94,11 @@ export class SchematicRenderer {
 			this.worldMeshBuilder = new WorldMeshBuilder(this);
 
 			// Initialize the schematic manager
-			this.schematicManager = new SchematicManager();
+			this.schematicManager = new SchematicManager(
+				this.worldMeshBuilder,
+				this.eventEmitter,
+				this.sceneManager
+			);
 
 			// Initialize the render manager
 			this.renderManager = new RenderManager(this);
@@ -102,8 +109,25 @@ export class SchematicRenderer {
 			// Initialize the highlight manager
 			this.highlightManager = new HighlightManager(this);
 
-			// Load the schematics
-			await this.loadSchematics(schematicData);
+			this.gizmoManager = new GizmoManager(this);
+
+			// Load the schematics using the schematic manager
+			await this.schematicManager.loadSchematics(schematicData);
+
+			// Adjust camera based on schematics
+			const averagePosition =
+				this.schematicManager.getSchematicsAveragePosition();
+			const maxDimensions = this.schematicManager.getMaxSchematicDimensions();
+			console.log("Schematic dimensions:", maxDimensions);
+			console.log(this.worldMeshBuilder.blockMeshCache);
+			this.cameraManager.activeCamera.lookAt(averagePosition);
+			this.cameraManager.activeCamera.position = new THREE.Vector3(
+				averagePosition.x + maxDimensions.x,
+				averagePosition.y + maxDimensions.y,
+				averagePosition.z + maxDimensions.z
+			);
+			this.cameraManager.update();
+
 			// Start the rendering loop
 			this.animate();
 		} catch (error) {
@@ -136,66 +160,12 @@ export class SchematicRenderer {
 		const deltaTime = this.clock.getDelta();
 
 		// Update interaction manager
-		this.interactionManager.update(deltaTime);
+		this.interactionManager.update();
 		// Update highlight manager
 		this.highlightManager.update(deltaTime);
+
+		this.gizmoManager.update();
 		// Render the scene
 		this.renderManager.render();
-	}
-
-	public async loadSchematics(
-		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
-		propertiesMap?: {
-			[key: string]: Partial<{
-				position: THREE.Vector3;
-				rotation: THREE.Euler;
-				scale: THREE.Vector3;
-				opacity: number;
-				visible: boolean;
-			}>;
-		}
-	) {
-		for (const key in schematicData) {
-			if (schematicData.hasOwnProperty(key)) {
-				const arrayBuffer = await schematicData[key]();
-				const properties = propertiesMap ? propertiesMap[key] : undefined;
-				await this.loadSchematic(key, arrayBuffer, properties);
-			}
-		}
-	}
-
-	// Method to load a single schematic
-	public async loadSchematic(
-		name: string,
-		schematicData: ArrayBuffer,
-		properties?: Partial<{
-			position: THREE.Vector3;
-			rotation: THREE.Euler;
-			scale: THREE.Vector3;
-			opacity: number;
-			visible: boolean;
-		}>
-	) {
-		// Create a SchematicWrapper from the data
-		const schematicWrapper = new SchematicWrapper();
-		schematicWrapper.from_data(new Uint8Array(schematicData));
-
-		// Create a SchematicObject
-		const schematicObject = new SchematicObject(
-			name,
-			schematicWrapper,
-			this.worldMeshBuilder,
-			this.eventEmitter,
-			this.sceneManager,
-			properties
-		);
-
-		this.schematicManager.addSchematic(schematicObject);
-
-		// Wait for meshes to be ready before adding them to the scene
-		const meshes = await schematicObject.getMeshes();
-		meshes.forEach((mesh) => {
-			this.sceneManager.add(mesh);
-		});
 	}
 }

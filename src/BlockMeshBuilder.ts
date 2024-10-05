@@ -633,27 +633,23 @@ export class BlockMeshBuilder {
 		return this.occludedFacesListToInt(occludedFaces);
 	}
 
+
 	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);
-		let cachedBlockMesh = this.blockMeshCache.get(blockUniqueKey);
-		if (cachedBlockMesh) {
-			return cachedBlockMesh;
+		if (this.blockMeshCache.has(blockUniqueKey)) {
+			return this.blockMeshCache.get(blockUniqueKey);
 		} else {
 			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
+			// if over 100ms log the block
 			if (performance.now() - start > 100) {
-				console.warn(
+				console.error(
 					"Slow block",
 					pos,
 					block,
 					"took",
 					performance.now() - start
 				);
-			}
-
-			if (Object.keys(blockComponents).length === 0) {
-				console.warn("Block has no components", block);
-				return null;
 			}
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);
 			return blockComponents;

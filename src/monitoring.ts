@@ -111,3 +111,9 @@ export function displayPerformanceMetrics() {
 		console.log("---");
 	}
 }
+
+export function resetPerformanceMetrics() {
+	for (const key of Object.keys(performanceMetrics)) {
+		delete performanceMetrics[key];
+	}
+}

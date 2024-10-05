@@ -168,7 +168,7 @@ export class ResourceLoader {
 			`textures/${textureName}.png`
 		);
 		if (!base64Resource) {
-			console.warn(`Texture ${textureName} not found.`);
+			// console.warn(`Texture ${textureName} not found.`);
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
@@ -246,6 +246,7 @@ export class ResourceLoader {
 			) {
 				// @ts-ignore
 				const power = block?.properties?.["power"] ?? 0;
+
 				return REDSTONE_COLORS[power as number];
 			} else if (faceData.tintindex !== undefined) {
 				return this.TINT_COLOR;
@@ -447,19 +448,19 @@ export class ResourceLoader {
 		const maxDepth = 5;
 		let depth = 0;
 		if (ref === "#missing") {
-			console.warn(`Texture reference ${ref} is missing.`, model);
+			// console.warn(`Texture reference ${ref} is missing.`, model);
 			return "missing_texture";
 		}
 		while (ref.startsWith("#") && depth < maxDepth) {
 			if (!model.textures) {
-				console.warn(`Model has no textures defined for reference ${ref}.`);
+				// console.warn(`Model has no textures defined for reference ${ref}.`);
 				return "missing_texture";
 			}
 			ref = model.textures[ref.substring(1)] ?? ref;
 			depth++;
 		}
 		if (depth === maxDepth) {
-			console.warn(`Texture reference ${ref} exceeded maximum depth.`);
+			// console.warn(`Texture reference ${ref} exceeded maximum depth.`);
 			return "missing_texture";
 		}
 		return ref;

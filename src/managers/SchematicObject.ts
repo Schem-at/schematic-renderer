@@ -4,14 +4,20 @@ import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
 import { WorldMeshBuilder, ChunkDimensions } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
+import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
+import { castToEuler, castToVector3 } from "../utils/Casts";
+import {
+	displayPerformanceMetrics,
+	resetPerformanceMetrics,
+} from "../monitoring";
 
-export class SchematicObject {
+export class SchematicObject extends EventEmitter {
 	public name: string;
-	private schematicWrapper: SchematicWrapper;
+	public schematicWrapper: SchematicWrapper;
 	private meshes: THREE.Mesh[] = [];
 	private worldMeshBuilder: WorldMeshBuilder;
 	private eventEmitter: EventEmitter;
-	private sceneManager: SceneManager; // Add sceneManager reference
+	private sceneManager: SceneManager;
 	private chunkMeshes: Map<string, THREE.Mesh[]> = new Map();
 	private chunkDimensions: ChunkDimensions = {
 		chunkWidth: 16,
@@ -19,70 +25,193 @@ export class SchematicObject {
 		chunkLength: 16,
 	};
 
-	// Private properties with initial values
-	private _position: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-	private _rotation: THREE.Euler = new THREE.Euler(0, 0, 0);
-	private _scale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
-	private _opacity: number = 1.0;
-	private _visible: boolean = true;
+	public id: string;
+	public group: THREE.Group;
+
+	// Public properties without underscores
+	public position: THREE.Vector3;
+	public rotation: THREE.Euler;
+	public scale: THREE.Vector3;
+	public opacity: number;
+	public visible: boolean;
 
 	private meshesReady: Promise<void>;
-
 	constructor(
 		name: string,
 		schematicWrapper: SchematicWrapper,
 		worldMeshBuilder: WorldMeshBuilder,
 		eventEmitter: EventEmitter,
-		sceneManager: SceneManager, // Receive sceneManager
+		sceneManager: SceneManager,
 		properties?: Partial<{
-			position: THREE.Vector3;
-			rotation: THREE.Euler;
-			scale: THREE.Vector3;
+			position: THREE.Vector3 | number[];
+			rotation: THREE.Euler | number[];
+			scale: THREE.Vector3 | number[] | number;
 			opacity: number;
 			visible: boolean;
 		}>
 	) {
+		super();
+
+		this.id = name;
 		this.name = name;
 		this.schematicWrapper = schematicWrapper;
 		this.worldMeshBuilder = worldMeshBuilder;
 		this.eventEmitter = eventEmitter;
 		this.sceneManager = sceneManager;
 
+		// Initialize properties with default values
+		this.position = new THREE.Vector3();
+		this.rotation = new THREE.Euler();
+		this.scale = new THREE.Vector3(1, 1, 1);
+		this.opacity = 1.0;
+		this.visible = true;
+
 		// Set initial properties if provided
-		if (properties?.position) this._position.copy(properties.position);
-		if (properties?.rotation) this._rotation.copy(properties.rotation);
-		if (properties?.scale) this._scale.copy(properties.scale);
-		if (properties?.opacity !== undefined) this._opacity = properties.opacity;
-		if (properties?.visible !== undefined) this._visible = properties.visible;
+		Object.assign(this, properties);
+
+		this.group = new THREE.Group();
+		this.group.name = name;
+
+		// Build meshes and other initialization
 		this.meshesReady = this.buildMeshes();
+		this.updateTransform();
+		this.sceneManager.add(this.group);
+
+		// Define property configurations
+		const propertyConfigs: Partial<Record<keyof this, PropertyConfig<any>>> = {
+			position: {
+				cast: castToVector3,
+				afterSet: () => {
+					this.updateTransform();
+					this.emitPropertyChanged("position", this.position);
+				},
+			},
+			rotation: {
+				cast: castToEuler,
+				afterSet: () => {
+					this.updateTransform();
+					this.emitPropertyChanged("rotation", this.rotation);
+				},
+			},
+			scale: {
+				cast: castToVector3,
+				afterSet: () => {
+					this.updateTransform();
+					this.emitPropertyChanged("scale", this.scale);
+				},
+			},
+			opacity: {
+				afterSet: () => {
+					this.updateMeshMaterials("opacity");
+					this.emitPropertyChanged("opacity", this.opacity);
+				},
+			},
+			visible: {
+				afterSet: () => {
+					this.updateMeshVisibility();
+					this.emitPropertyChanged("visible", this.visible);
+				},
+			},
+		};
+
+		// Create the reactive proxy
+		return createReactiveProxy(this, propertyConfigs);
+	}
+
+	private emitPropertyChanged(property: string, value: any) {
+		this.eventEmitter.emit("schematicPropertyChanged", {
+			schematic: this,
+			property,
+			value,
+		});
+	}
+
+	private updateTransform(): void {
+		this.group.position.copy(this.position);
+		this.group.rotation.copy(this.rotation);
+		this.group.scale.copy(this.scale);
+	}
+
+	public checkMeshValidity() {
+		console.log(`Checking mesh validity for SchematicObject: ${this.id}`);
+		console.log(`  Group children count: ${this.group.children.length}`);
+
+		this.group.children.forEach((child, index) => {
+			if (child instanceof THREE.Mesh) {
+				console.log(`  Mesh ${index}:`);
+				console.log(`    Geometry type: ${child.geometry.type}`);
+				console.log(
+					`    Vertex count: ${
+						child.geometry.attributes.position?.count || "N/A"
+					}`
+				);
+				console.log(`    Material type: ${child.material.type}`);
+				console.log(`    Visible: ${child.visible}`);
+				console.log(`    Frustum culled: ${child.frustumCulled}`);
+
+				const box = new THREE.Box3().setFromObject(child);
+				console.log(
+					`    Bounding box min: ${box.min.x}, ${box.min.y}, ${box.min.z}`
+				);
+				console.log(
+					`    Bounding box max: ${box.max.x}, ${box.max.y}, ${box.max.z}`
+				);
+			}
+		});
+	}
+
+	public syncTransformFromGroup() {
+		this.position.copy(this.group.position);
+		this.rotation.copy(this.group.rotation);
+		this.scale.copy(this.group.scale);
+
+		// Emit event
+		this.emitPropertyChanged("transform", {
+			position: this.position,
+			rotation: this.rotation,
+			scale: this.scale,
+		});
 	}
 
 	private async buildMeshes(): Promise<void> {
-		// Use the worldMeshBuilder to generate meshes for the schematic
 		const { meshes, chunkMap } =
 			await this.worldMeshBuilder.buildSchematicMeshes(
 				this.schematicWrapper,
 				this.chunkDimensions
 			);
-		// Store the chunk meshes
 		this.chunkMeshes = chunkMap;
 
-		// Apply properties to the meshes
 		meshes.forEach((mesh) => {
-			mesh.position.copy(this._position);
-			mesh.rotation.copy(this._rotation);
-			mesh.scale.copy(this._scale);
-			mesh.material.opacity = this._opacity;
-			mesh.material.transparent = this._opacity < 1.0;
-			mesh.visible = this._visible;
+			// Adjust the mesh position relative to the group
+			mesh.position.sub(this.position);
+
+			const material = mesh.material as THREE.Material;
+			material.opacity = this.opacity;
+			material.transparent = this.opacity < 1.0;
+			mesh.visible = this.visible;
+
+			// Compute the bounding box for the geometry
+			mesh.geometry.computeBoundingBox();
+
+			this.group.add(mesh);
 		});
 
+		this.updateTransform(); // This will apply position, rotation, and scale to the group
+		this.group.visible = this.visible;
 		this.meshes = meshes;
+
+		this.group.updateMatrixWorld(true);
+		this.group.updateWorldMatrix(true, true);
+
+		const box = new THREE.Box3().setFromObject(this.group);
+		console.log("Updated bounding box min:", box.min);
+		console.log("Updated bounding box max:", box.max);
+		console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
 	}
 
 	public async getMeshes(): Promise<THREE.Mesh[]> {
 		await this.meshesReady;
-		return this.meshes;
+		return Array.from(this.group.children) as THREE.Mesh[];
 	}
 
 	// Methods to manage chunk meshes
@@ -104,109 +233,35 @@ export class SchematicObject {
 		const key = `${chunkX},${chunkY},${chunkZ}`;
 		this.chunkMeshes.set(key, meshes);
 	}
-	// Reactive property: position
-	get position(): THREE.Vector3 {
-		return this._position;
-	}
-
-	set position(value: THREE.Vector3 | Array<number>) {
-		if (Array.isArray(value)) {
-			this._position.set(value[0], value[1], value[2]);
-		} else {
-			this._position.copy(value);
-		}
-		this.updateMeshTransforms("position");
-	}
-
-	// Reactive property: rotation
-	get rotation(): THREE.Euler {
-		return this._rotation;
-	}
-
-	set rotation(value: THREE.Euler) {
-		this._rotation.copy(value);
-		this.updateMeshTransforms("rotation");
-	}
-
-	// Reactive property: scale
-	get scale(): THREE.Vector3 {
-		return this._scale;
-	}
-
-	set scale(value: THREE.Vector3) {
-		this._scale.copy(value);
-		this.updateMeshTransforms("scale");
-	}
-
-	// Reactive property: opacity
-	get opacity(): number {
-		return this._opacity;
-	}
-
-	set opacity(value: number) {
-		this._opacity = value;
-		this.updateMeshMaterials("opacity");
-	}
-
-	// Reactive property: visible
-	get visible(): boolean {
-		return this._visible;
-	}
-
-	set visible(value: boolean) {
-		this._visible = value;
-		this.updateMeshVisibility();
-	}
-
-	private updateMeshTransforms(property: "position" | "rotation" | "scale") {
-		this.meshes.forEach((mesh) => {
-			switch (property) {
-				case "position":
-					mesh.position.copy(this._position);
-					break;
-				case "rotation":
-					mesh.rotation.copy(this._rotation);
-					break;
-				case "scale":
-					mesh.scale.copy(this._scale);
-					break;
-			}
-		});
-		// If necessary, notify others of the change
-		this.eventEmitter.emit("schematicTransformUpdated", {
-			schematic: this,
-			property,
-		});
-	}
 
 	private updateMeshMaterials(property: "opacity") {
-		this.meshes.forEach((mesh) => {
-			if (property === "opacity") {
-				mesh.material.opacity = this._opacity;
-				mesh.material.transparent = this._opacity < 1.0;
+		this.group.traverse((child) => {
+			if (child instanceof THREE.Mesh) {
+				const material = child.material as THREE.Material;
+				material.opacity = this.opacity;
+				material.transparent = this.opacity < 1.0;
 			}
 		});
-		// If necessary, notify others of the change
-		this.eventEmitter.emit("schematicMaterialUpdated", {
-			schematic: this,
-			property,
-		});
+		// Emit event if necessary
+		this.emitPropertyChanged("material", { property, value: this.opacity });
 	}
 
 	private updateMeshVisibility() {
-		this.meshes.forEach((mesh) => {
-			mesh.visible = this._visible;
-		});
-		// If necessary, emit an event
-		this.eventEmitter.emit("schematicVisibilityUpdated", this);
+		this.group.visible = this.visible;
+		// Emit event if necessary
+		this.emitPropertyChanged("visibility", this.visible);
 	}
 
 	public async updateMesh() {
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
-			this.sceneManager.removeFromScene(mesh);
+			this.group.remove(mesh);
 			mesh.geometry.dispose();
-			mesh.material.dispose();
+			if (Array.isArray(mesh.material)) {
+				mesh.material.forEach((material) => material.dispose());
+			} else {
+				mesh.material.dispose();
+			}
 		});
 
 		// Clear chunk meshes
@@ -220,25 +275,83 @@ export class SchematicObject {
 		return this.schematicWrapper;
 	}
 
-	public async setBlock(position: THREE.Vector3, blockType: string) {
-		// Update the block in the schematic data
+	private async setBlockNoRebuild(position: THREE.Vector3, blockType: string) {
 		this.schematicWrapper.set_block(
 			position.x,
 			position.y,
 			position.z,
 			blockType
 		);
-
-		// Determine which chunk contains the block
-		const chunkCoords = this.getChunkCoordinates(position);
-
-		// Rebuild the affected chunk
-		await this.rebuildChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
 	}
 
-	public rebuildChunkAtPosition(position: THREE.Vector3) {
+	public async setBlock(position: THREE.Vector3 | number[], blockType: string) {
+		if (Array.isArray(position)) {
+			position = new THREE.Vector3(position[0], position[1], position[2]);
+		}
+		await this.setBlockNoRebuild(position, blockType);
+
+		await this.rebuildChunkAtPosition(position);
+	}
+
+	//takes an array of block positions and block types pairs
+	public async setBlocks(blocks: [THREE.Vector3 | number[], string][]) {
+		const affectedChunks = new Set<string>();
+		let startTime = performance.now();
+		console.log("Setting blocks");
+		resetPerformanceMetrics();
+		for (let [position, blockType] of blocks) {
+			if (Array.isArray(position)) {
+				position = new THREE.Vector3(position[0], position[1], position[2]);
+			}
+			await this.setBlockNoRebuild(position, blockType);
+			const chunkCoords = this.getChunkCoordinates(position);
+			affectedChunks.add(`${chunkCoords.x},${chunkCoords.y},${chunkCoords.z}`);
+		}
+		console.log("Blocks set");
+		console.log("Time to set blocks:", performance.now() - startTime + "ms");
+
+		startTime = performance.now();
+		console.log("Rebuilding chunks");
+		console.log(this.worldMeshBuilder.blockMeshCache);
+
+		for (let chunk of affectedChunks) {
+			const [chunkX, chunkY, chunkZ] = chunk.split(",").map((v) => parseInt(v));
+			await this.rebuildChunk(chunkX, chunkY, chunkZ);
+		}
+		console.log("Chunks rebuilt in", performance.now() - startTime + "ms");
+	}
+
+	public async addCube(
+		position: THREE.Vector3 | number[],
+		size: THREE.Vector3 | number[],
+		blockType: string
+	): Promise<SchematicObject> {
+		if (Array.isArray(position)) {
+			position = new THREE.Vector3(position[0], position[1], position[2]);
+		}
+		if (Array.isArray(size)) {
+			size = new THREE.Vector3(size[0], size[1], size[2]);
+		}
+
+		const blocks: [THREE.Vector3, string][] = [];
+		for (let x = 0; x < size.x; x++) {
+			for (let y = 0; y < size.y; y++) {
+				for (let z = 0; z < size.z; z++) {
+					blocks.push([
+						position.clone().add(new THREE.Vector3(x, y, z)),
+						blockType,
+					]);
+				}
+			}
+		}
+
+		await this.setBlocks(blocks);
+		return this;
+	}
+
+	public async rebuildChunkAtPosition(position: THREE.Vector3) {
 		const chunkCoords = this.getChunkCoordinates(position);
-		this.rebuildChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
+		await this.rebuildChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
 	}
 
 	private getChunkCoordinates(position: THREE.Vector3): {
@@ -276,16 +389,14 @@ export class SchematicObject {
 		// Build new chunk meshes
 		const newChunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 			chunkBlocks,
-			chunkOffset,
 			this.schematicWrapper
 		);
 
 		// Apply properties to the new meshes
 		this.applyPropertiesToMeshes(newChunkMeshes);
 
-		// Add new chunk meshes to the scene
 		newChunkMeshes.forEach((mesh) => {
-			this.sceneManager.addToScene(mesh);
+			this.group.add(mesh);
 		});
 
 		// Update the chunk mesh reference in chunkMeshes map
@@ -296,35 +407,39 @@ export class SchematicObject {
 		const oldChunkMeshes = this.getChunkMeshAt(chunkX, chunkY, chunkZ);
 		if (oldChunkMeshes) {
 			oldChunkMeshes.forEach((mesh) => {
-				this.sceneManager.removeFromScene(mesh);
+				this.group.remove(mesh);
 				mesh.geometry.dispose();
-				mesh.material.dispose();
+				if (Array.isArray(mesh.material)) {
+					mesh.material.forEach((material) => material.dispose());
+				} else {
+					mesh.material.dispose();
+				}
 			});
-			// Remove from chunkMeshes map
 			this.chunkMeshes.delete(`${chunkX},${chunkY},${chunkZ}`);
 		}
 	}
 
 	private applyPropertiesToMeshes(meshes: THREE.Mesh[]) {
 		meshes.forEach((mesh) => {
-			mesh.position.copy(this._position);
-			mesh.rotation.copy(this._rotation);
-			mesh.scale.copy(this._scale);
-			mesh.material.opacity = this._opacity;
-			mesh.material.transparent = this._opacity < 1.0;
-			mesh.visible = this._visible;
+			// The position is relative to the group
+			mesh.rotation.copy(this.rotation);
+			mesh.scale.copy(this.scale);
+			const material = mesh.material as THREE.Material;
+			material.opacity = this.opacity;
+			material.transparent = this.opacity < 1.0;
+			mesh.visible = this.visible;
 		});
 	}
 
 	public containsPosition(position: THREE.Vector3): boolean {
 		// Calculate the bounds of the schematic
 		const dimensions = this.schematicWrapper.get_dimensions();
-		const min = this._position.clone();
+		const min = this.position.clone();
 		const max = min
 			.clone()
 			.add(
-				new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z).multiply(
-					this._scale
+				new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2]).multiply(
+					this.scale
 				)
 			);
 
@@ -336,5 +451,74 @@ export class SchematicObject {
 			position.z >= min.z &&
 			position.z <= max.z
 		);
+	}
+
+	public getSchematicCenter(): THREE.Vector3 {
+		const dimensions = this.schematicWrapper.get_dimensions();
+		return new THREE.Vector3(
+			dimensions[0] / 2 + this.position.x,
+			dimensions[1] / 2 + this.position.y,
+			dimensions[2] / 2 + this.position.z
+		);
+	}
+
+	public centerInScene() {
+		const averagePosition = this.getSchematicCenter();
+		const newSchematicPosition = new THREE.Vector3(
+			this.position.x - averagePosition.x,
+			this.position.y - averagePosition.y,
+			this.position.z - averagePosition.z
+		);
+		this.position.copy(newSchematicPosition);
+		this.updateTransform();
+	}
+
+	public centerInScenePlane() {
+		const averagePosition = this.getSchematicCenter();
+		const newSchematicPosition = new THREE.Vector3(
+			this.position.x - averagePosition.x,
+			0,
+			this.position.z - averagePosition.z
+		);
+		this.position.copy(newSchematicPosition);
+		this.updateTransform();
+	}
+
+	public setPosition(position: THREE.Vector3 | number[]): void {
+		if (Array.isArray(position)) {
+			this.position = new THREE.Vector3(position[0], position[1], position[2]);
+			this.updateTransform();
+			return;
+		}
+		this.position = position;
+		this.updateTransform();
+	}
+
+	public setRotation(rotation: THREE.Euler | number[]): void {
+		if (Array.isArray(rotation)) {
+			this.rotation = new THREE.Euler(rotation[0], rotation[1], rotation[2]);
+			return;
+		}
+		this.rotation = rotation;
+	}
+
+	public setScale(scale: THREE.Vector3 | number[]): void {
+		if (Array.isArray(scale)) {
+			this.scale = new THREE.Vector3(scale[0], scale[1], scale[2]);
+			return;
+		}
+		this.scale = scale;
+	}
+
+	public getWorldPosition(): THREE.Vector3 {
+		return this.group.getWorldPosition(new THREE.Vector3());
+	}
+
+	public getBoundingBox(): [number[], number[]] {
+		const boundingBox = this.schematicWrapper.get_dimensions();
+		const positionArray = this.position.toArray();
+		const min = positionArray;
+		const max = positionArray.map((v, i) => v + boundingBox[i]);
+		return [min, max];
 	}
 }

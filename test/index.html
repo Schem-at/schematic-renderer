@@ -92,10 +92,47 @@
 			.dropdown-content {
 				backdrop-filter: blur(5px);
 			}
+			/* Sidebar */
+			.sidebar {
+				background-color: rgba(31, 41, 55, 0.9);
+				backdrop-filter: blur(10px);
+				width: 250px;
+				max-width: 100%;
+				height: 100%;
+				position: absolute;
+				top: 0;
+				right: 0;
+				overflow-y: auto;
+				z-index: 10;
+				padding: 1rem;
+			}
+			.sidebar-header {
+				font-size: 1.25rem;
+				font-weight: bold;
+				margin-bottom: 1rem;
+				color: white;
+			}
+			.schematic-item {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				background-color: rgba(55, 65, 81, 0.9); /* Tailwind's gray-700 */
+				padding: 0.5rem;
+				border-radius: 0.25rem;
+				margin-bottom: 0.5rem;
+				color: white;
+			}
+			.schematic-item:hover {
+				background-color: rgba(75, 85, 99, 0.9); /* Tailwind's gray-600 */
+			}
+			.schematic-name {
+				flex-grow: 1;
+				margin-right: 0.5rem;
+			}
 		</style>
 	</head>
 	<body
-		class="bg-gray-900 flex items-center justify-center min-h-screen p-4"
+		class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4"
 		x-data="rendererUI()"
 		x-init="init()"
 	>
@@ -169,6 +206,56 @@
 					</div>
 					<!-- Add more status cards if needed -->
 				</div>
+
+				<!-- Schematics Sidebar -->
+				<div class="sidebar" x-show="showSidebar">
+					<div class="sidebar-header flex justify-between items-center">
+						<span>Schematics</span>
+						<button
+							class="btn btn-sm btn-primary"
+							@click="addSchematic"
+							title="Add Schematic"
+						>
+							<svg class="w-5 h-5" fill="none" stroke="currentColor">
+								<use href="#heroicon-o-plus"></use>
+							</svg>
+						</button>
+					</div>
+					<div class="schematic-list">
+						<template x-for="schematic in schematics" :key="schematic.id">
+							<div class="schematic-item">
+								<span class="schematic-name" x-text="schematic.name"></span>
+								<button
+									class="btn btn-xs"
+									:class="schematic.visible ? 'btn-success' : 'btn-warning'"
+									@click="toggleSchematicVisibility(schematic)"
+									:title="schematic.visible ? 'Hide' : 'Show'"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor">
+										<use
+											:href="schematic.visible
+                        ? '#heroicon-o-eye'
+                        : '#heroicon-o-eye-off'"
+										></use>
+									</svg>
+								</button>
+							</div>
+						</template>
+					</div>
+				</div>
+
+				<!-- Toggle Sidebar Button -->
+				<button
+					class="absolute top-16 right-4 btn btn-circle btn-sm btn-ghost"
+					@click="showSidebar = !showSidebar"
+					title="Toggle Schematics Panel"
+				>
+					<svg class="w-5 h-5" fill="none" stroke="currentColor">
+						<use
+							:href="showSidebar ? '#heroicon-o-chevron-right' : '#heroicon-o-chevron-left'"
+						></use>
+					</svg>
+				</button>
 			</div>
 		</div>
 
@@ -178,6 +265,8 @@
 				return {
 					renderer: null,
 					cameraPosition: { x: 0.0, y: 0.0, z: 0.0 },
+					schematics: [],
+					showSidebar: true,
 					init() {
 						// Wait for the renderer to be initialized
 						document
@@ -198,11 +287,19 @@
 								// Listen for camera position changes
 								const updateCameraPosition = (event) => {
 									if (event.property === "position") {
-										this.cameraPosition = {
-											x: event.value.x.toFixed(2),
-											y: event.value.y.toFixed(2),
-											z: event.value.z.toFixed(2),
-										};
+										if (Array.isArray(event.value)) {
+											this.cameraPosition = {
+												x: event.value[0].toFixed(2),
+												y: event.value[1].toFixed(2),
+												z: event.value[2].toFixed(2),
+											};
+										} else {
+											this.cameraPosition = {
+												x: event.value.x.toFixed(2),
+												y: event.value.y.toFixed(2),
+												z: event.value.z.toFixed(2),
+											};
+										}
 									}
 								};
 
@@ -218,8 +315,93 @@
 									y: initialPosition.y.toFixed(2),
 									z: initialPosition.z.toFixed(2),
 								};
+
+								// Initialize schematics list
+								this.updateSchematicsList();
+
+								// Listen for changes in the schematics
+								this.renderer.schematicManager.eventEmitter.on(
+									"schematicAdded",
+									() => {
+										this.updateSchematicsList();
+									}
+								);
+
+								this.renderer.schematicManager.eventEmitter.on(
+									"schematicRemoved",
+									() => {
+										this.updateSchematicsList();
+									}
+								);
+
+								// Update schematic visibility when changed externally
+								this.renderer.schematicManager.eventEmitter.on(
+									"schematicPropertyChanged",
+									({ schematic, property, value }) => {
+										if (property === "visible") {
+											const schematicItem = this.schematics.find(
+												(s) => s.id === schematic.id
+											);
+											if (schematicItem) {
+												schematicItem.visible = value;
+											}
+										}
+									}
+								);
 							});
 					},
+					updateSchematicsList() {
+						if (!this.renderer) {
+							console.warn("Renderer not initialized");
+							return;
+						}
+						const schematicObjects = Array.from(
+							this.renderer.schematicManager.schematics.values()
+						);
+						this.schematics = schematicObjects.map((schematic) => ({
+							id: schematic.id,
+							name: schematic.name,
+							visible: schematic.visible,
+						}));
+					},
+					toggleSchematicVisibility(schematic) {
+						const rendererSchematic =
+							this.renderer.schematicManager.schematics.get(schematic.id);
+						if (rendererSchematic) {
+							rendererSchematic.visible = !rendererSchematic.visible;
+							schematic.visible = rendererSchematic.visible;
+						}
+					},
+					addSchematic() {
+						if (!this.renderer) {
+							console.warn("Renderer not initialized");
+							return;
+						}
+
+						// Create an input element dynamically
+						const input = document.createElement("input");
+						input.type = "file";
+						input.accept = ".schematic,.schem, .litematic";
+
+						input.onchange = async (event) => {
+							const file = event.target.files[0];
+							if (file) {
+								try {
+									await this.renderer.schematicManager.loadSchematicFromFile(
+										file
+									);
+									// Update the schematics list
+									this.updateSchematicsList();
+								} catch (error) {
+									console.error("Failed to load schematic:", error);
+								}
+							}
+						};
+
+						// Trigger the file dialog
+						input.click();
+					},
+
 					toggleGrid() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
@@ -237,27 +419,21 @@
 							!this.renderer.sceneManager.showAxes;
 					},
 					resetCamera() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						// Reset camera position and rotation
-						this.renderer.cameraManager.position = [0, 0, 5];
-						this.renderer.cameraManager.rotation = [0, 0, 0];
+						this.renderer.cameraManager.focusOnSchematics();
 					},
 					switchToPerspective() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
 							return;
 						}
-						this.renderer.cameraManager.switchCamera("perspective");
+						this.renderer.cameraManager.activeCamera.changeType("perspective");
 					},
 					switchToOrthographic() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
 							return;
 						}
-						this.renderer.cameraManager.switchCamera("orthographic");
+						this.renderer.cameraManager.activeCamera.changeType("orthographic");
 					},
 					toggleFullScreen() {
 						const elem = document.documentElement;
@@ -289,8 +465,5 @@
 				};
 			}
 		</script>
-
-		<!-- Include your main.js or main.ts script that initializes the SchematicRenderer -->
-		<script type="module" src="./main.js"></script>
 	</body>
 </html>

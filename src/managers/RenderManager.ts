@@ -52,7 +52,7 @@ export class RenderManager {
 	private initDefaultPasses(options: any) {
 		// Gamma Correction Effect
 		const gammaCorrectionEffect = new GammaCorrectionEffect(
-			options.gamma ?? 0.6
+			options.gamma ?? 0.5
 		);
 		this.passes.set("gammaCorrection", gammaCorrectionEffect);
 
@@ -81,7 +81,30 @@ export class RenderManager {
 	}
 
 	private setupEventListeners() {
-		// Update camera in passes when it changes
+		// listen to the browser window resize event
+		window.addEventListener("resize", () => {
+			//resize the canvas to fit its container
+
+			const canvas = this.schematicRenderer.canvas;
+			const parent = canvas.parentElement;
+			if (parent) {
+				const width = parent.clientWidth;
+				const height = parent.clientHeight;
+
+				canvas.width = width;
+				canvas.height = height;
+				canvas.style.width = width + "px";
+				canvas.style.height = height + "px";
+				this.renderer.setSize(width, height);
+				this.composer.setSize(width, height);
+
+				// Update the camera aspect ratio
+				const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+				camera.aspect = width / height;
+				camera.updateProjectionMatrix();
+			}
+		});
+
 		this.eventEmitter.on("cameraUpdated", (camera: THREE.Camera) => {
 			this.updateCamera(camera);
 		});
