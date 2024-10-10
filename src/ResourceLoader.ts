@@ -596,7 +596,7 @@ export class ResourceLoader {
 		) as BlockModel;
 
 		if (model.parent) {
-			const parent = await this.loadModel(model.parent);
+			const parent = await this.loadModel(model.parent, properties);
 			if (!parent) {
 				return model;
 			}

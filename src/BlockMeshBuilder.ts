@@ -15,7 +15,6 @@ import {
 	getDegreeRotationMatrix,
 } from "./utils";
 
-import { ResourceLoader } from "./ResourceLoader";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 import { Monitor } from "./monitoring";
 import { SchematicRenderer } from "./SchematicRenderer";
@@ -100,10 +99,12 @@ export class BlockMeshBuilder {
 				// Use default UVs
 				const defaultUv: [number, number, number, number] = [0, 0, 16, 16];
 				// Convert to per-vertex UVs
-				uvs[face] = this.rotateUv(
-					defaultUv.map((u) => u / 16) as [number, number, number, number],
-					0
-				);
+				uvs[face] = DEFAULT_UV.map((u) => u / 16) as [
+					number,
+					number,
+					number,
+					number
+				];
 				continue;
 			}
 			const textureName =
@@ -147,14 +148,10 @@ export class BlockMeshBuilder {
 
 			subMaterials[face] = materialId;
 			const faceRotation = faceData.rotation || 0;
-			const uvRect = (faceData.uv || DEFAULT_UV).map((u: number) => u / 16) as [
-				number,
-				number,
-				number,
-				number
-			];
-			// Get per-vertex UVs
-			uvs[face] = this.rotateUv(uvRect, faceRotation);
+			uvs[face] = this.rotateUv(
+				(faceData.uv || DEFAULT_UV).map((u: number) => u / 16),
+				faceRotation
+			) as [number, number, number, number];
 		}
 		return { subMaterials, uvs };
 	}
@@ -254,7 +251,6 @@ export class BlockMeshBuilder {
 		allImagesContainer.appendChild(imageContainer);
 	}
 
-	@Monitor
 	public async getBlockMesh(
 		block: any,
 		_blockPosition?: any
@@ -277,104 +273,103 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
-		const { modelOptions } =
-			await this.schematicRenderer.resourceLoader.getBlockMeta(block);
-		let modelPromises = modelOptions.holders.map(
-			async (
-				modelHolder: { x: any; y: any; z: any; model: string },
-				modelIndex: any
-			) => {
-				if (!modelHolder) return;
+		const { modelOptions } = await this.schematicRenderer.resourceLoader.getBlockMeta(block);
+		let modelIndex = 0;
+		let start = performance.now();
+		for (const modelHolder of modelOptions.holders) {
+			modelIndex++;
+			if (modelHolder === undefined) continue;
+			let modelHolderRotation = {
+				x: modelHolder.x ?? 0,
+				y: modelHolder.y ?? 0,
+				z: modelHolder.z ?? 0,
+			};
 
-				const modelHolderRotation = {
-					x: modelHolder.x ?? 0,
-					y: modelHolder.y ?? 0,
-					z: modelHolder.z ?? 0,
-				};
+			const model = await this.schematicRenderer.resourceLoader.loadModel(modelHolder.model, block.properties);
 
-				const model = await this.schematicRenderer.resourceLoader.loadModel(
-					modelHolder.model,
-					block.properties
-				);
-				let elements;
-				try {
-					elements = JSON.parse(JSON.stringify(model?.elements));
-				} catch (e) {
-					console.log("Error parsing elements", model);
-					return;
+			const elements = model?.elements;
+
+			if (!elements) continue;
+			let elementIndex = 0;
+			for (const element of elements) {
+				elementIndex++;
+				if (!element.from || !element.to) continue;
+				this.normalizeElementCoords(element);
+				let faceData;
+				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
+				if (this.faceDataCache.has(faceDataCacheKey)) {
+					faceData = this.faceDataCache.get(faceDataCacheKey);
+				} else {
+					try {
+						faceData = await this.processFaceData(element, model, block);
+					} catch (e) {
+						continue;
+					}
+					this.faceDataCache.set(faceDataCacheKey, faceData);
 				}
-				if (!elements) return;
-				if (block.name.includes("shulker")) {
-					console.log(block);
-					const shulker_box_color = block.name.split("_")[0];
-					model.textures[0] = "entity/shulker/shulker_" + shulker_box_color;
-				}
 
-				let elementPromises = elements.map(async (element, elementIndex) => {
-					if (!element.from || !element.to) return;
-					this.normalizeElementCoords(element);
+				const from = element.from;
+				const to = element.to;
+				const elementRotation = element.rotation || null;
+				if (!from || !to) continue;
+				const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+				const directionData = getDirectionData(faceData.uvs);
+				let faceIndex = 0;
+				for (const dir of faces) {
+					faceIndex++;
+					const materialId = faceData.subMaterials[dir];
+					if (!materialId) continue;
 
-					const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
-					let faceData = this.faceDataCache.get(faceDataCacheKey);
-					if (!faceData) {
-						try {
-							faceData = await this.processFaceData(element, model, block);
-							this.faceDataCache.set(faceDataCacheKey, faceData);
-						} catch (e) {
-							return;
-						}
+					const uniqueKey = `${materialId}-${dir}`;
+
+					if (!blockComponents[uniqueKey]) {
+						blockComponents[uniqueKey] = {
+							materialId,
+							face: dir,
+							positions: [],
+							normals: [],
+							uvs: [],
+						};
 					}
 
-					const from = element.from;
-					const to = element.to;
-					const elementRotation = element.rotation || null;
-					const size = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-					const directionData = getDirectionData(faceData.uvs);
+					const dirData = directionData[dir];
 
-					faces.forEach((dir) => {
-						const materialId = faceData.subMaterials[dir];
-						if (!materialId) return;
-
-						const uniqueKey = `${materialId}-${dir}`;
-						if (!blockComponents[uniqueKey]) {
-							blockComponents[uniqueKey] = {
-								materialId,
-								face: dir,
-								positions: [],
-								normals: [],
-								uvs: [],
-							};
+					for (const { pos, uv } of dirData.corners) {
+						if (!from || !size || !pos || !uv) continue;
+						let cornerPos = [
+							from[0] + size[0] * pos[0],
+							from[1] + size[1] * pos[1],
+							from[2] + size[2] * pos[2],
+						];
+						if (elementRotation) {
+							cornerPos = this.applyElementRotation(
+								cornerPos,
+								elementRotation as any
+							);
 						}
+						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
-						const dirData = directionData[dir];
-						dirData.corners.forEach(({ pos, uv }) => {
-							if (!pos || !uv) return;
-
-							let cornerPos = [
-								from[0] + size[0] * pos[0],
-								from[1] + size[1] * pos[1],
-								from[2] + size[2] * pos[2],
-							];
-							if (elementRotation) {
-								cornerPos = this.applyElementRotation(
-									cornerPos,
-									elementRotation as any
-								);
-							}
-							cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
-
-							blockComponents[uniqueKey].positions.push(...cornerPos);
+						blockComponents[uniqueKey].positions.push(...cornerPos);
+						if (block.name === "redstone_wire" || block.name === "chest") {
 							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
-							blockComponents[uniqueKey].normals.push(...dirData.normal);
-						});
-					});
-				});
-
-				await Promise.all(elementPromises);
+						} else {
+							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
+						}
+						blockComponents[uniqueKey].normals.push(...dirData.normal);
+					}
+				}
 			}
-		);
+		}
 
-		await Promise.all(modelPromises);
+		if (performance.now() - start > 50) {
+			console.error(
+				"Slow block mesh builder",
+				block,
+				"took",
+				performance.now() - start
+			);
+		}
+
 		return blockComponents;
 	}
 

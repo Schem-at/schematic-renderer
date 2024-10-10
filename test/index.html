@@ -1,469 +1,839 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Schematic Renderer Pro</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schematic Renderer Pro</title>
 
-		<script type="module" src="./main.ts"></script>
-		<!-- Alpine.js -->
-		<script
-			defer
-			src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-		></script>
+  <!-- Include Three.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-		<!-- Tailwind CSS -->
-		<script src="https://cdn.tailwindcss.com"></script>
+  <!-- Include your main JavaScript file -->
+  <script type="module" src="./main.ts"></script>
 
-		<!-- DaisyUI -->
-		<link
-			href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
-			rel="stylesheet"
-			type="text/css"
-		/>
+    <!-- DaisyUI -->
+	<link href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css" rel="stylesheet" type="text/css" />
 
-		<!-- Heroicons -->
-		<script src="https://unpkg.com/heroicons@1.0.6/dist/outline.js"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-		<!-- Custom Styles -->
-		<style>
-			/* Custom Styles */
-			.canvas-container {
-				position: relative;
-				width: 100%;
-				max-width: 2400px;
-				height: 80vh;
-				margin: auto;
-				background-color: #1f2937; /* Tailwind's gray-800 */
-				border-radius: 0.5rem;
-				box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-			}
-			#canvas {
-				width: 100%;
-				height: 100%;
-				display: block;
-				border-radius: 0.5rem;
-			}
-			.overlay {
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				pointer-events: none;
-			}
-			.overlay > * {
-				pointer-events: auto;
-			}
-			/* Menu Bar */
-			.menu-bar {
-				background-color: rgba(
-					31,
-					41,
-					55,
-					0.9
-				); /* Tailwind's gray-800 with opacity */
-				backdrop-filter: blur(10px);
-			}
-			/* Floating Toolbar */
-			.floating-toolbar {
-				background-color: rgba(31, 41, 55, 0.9);
-				backdrop-filter: blur(10px);
-				padding: 0.5rem;
-				border-radius: 0.5rem;
-			}
-			/* Status Cards */
-			.status-card {
-				background-color: rgba(31, 41, 55, 0.9);
-				backdrop-filter: blur(10px);
-				padding: 0.5rem 1rem;
-				border-radius: 0.5rem;
-			}
-			/* Buttons */
-			.menu-btn,
-			.toolbar-btn {
-				@apply btn btn-sm btn-ghost text-white;
-			}
-			.menu-btn:hover,
-			.toolbar-btn:hover {
-				@apply bg-gray-700;
-			}
-			/* Dropdown */
-			.dropdown-content {
-				backdrop-filter: blur(5px);
-			}
-			/* Sidebar */
-			.sidebar {
-				background-color: rgba(31, 41, 55, 0.9);
-				backdrop-filter: blur(10px);
-				width: 250px;
-				max-width: 100%;
-				height: 100%;
-				position: absolute;
-				top: 0;
-				right: 0;
-				overflow-y: auto;
-				z-index: 10;
-				padding: 1rem;
-			}
-			.sidebar-header {
-				font-size: 1.25rem;
-				font-weight: bold;
-				margin-bottom: 1rem;
-				color: white;
-			}
-			.schematic-item {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				background-color: rgba(55, 65, 81, 0.9); /* Tailwind's gray-700 */
-				padding: 0.5rem;
-				border-radius: 0.25rem;
-				margin-bottom: 0.5rem;
-				color: white;
-			}
-			.schematic-item:hover {
-				background-color: rgba(75, 85, 99, 0.9); /* Tailwind's gray-600 */
-			}
-			.schematic-name {
-				flex-grow: 1;
-				margin-right: 0.5rem;
-			}
-		</style>
-	</head>
-	<body
-		class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4"
-		x-data="rendererUI()"
-		x-init="init()"
-	>
-		<div class="canvas-container relative">
-			<canvas id="canvas"></canvas>
+  <!-- Tailwind CSS with DaisyUI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#2563eb', // Tailwind's blue-600
+            secondary: '#1d4ed8', // Tailwind's blue-700
+          },
+        },
+      },
+      plugins: [daisyui],
+      daisyui: {
+        themes: ["dark", "light"],
+      },
+    }
+  </script>
 
-			<div class="overlay flex flex-col h-full">
-				<!-- Menu Bar -->
-				<div
-					class="menu-bar flex items-center justify-between p-2 h-12 text-sm"
-				>
-					<div class="flex items-center space-x-4">
-						<!-- View Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<svg class="w-5 h-5" fill="none" stroke="currentColor">
-									<use href="#heroicon-o-eye"></use>
-								</svg>
-								<span>View</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52"
-							>
-								<li><a @click="toggleGrid">Toggle Grid</a></li>
-								<li><a @click="toggleAxes">Toggle Axes</a></li>
-							</ul>
-						</div>
-						<!-- Camera Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<svg class="w-5 h-5" fill="none" stroke="currentColor">
-									<use href="#heroicon-o-camera"></use>
-								</svg>
-								<span>Camera</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52"
-							>
-								<li><a @click="resetCamera">Reset Camera</a></li>
-								<li><a @click="switchToPerspective">Perspective View</a></li>
-								<li><a @click="switchToOrthographic">Orthographic View</a></li>
-							</ul>
-						</div>
-					</div>
-					<!-- Right Side Buttons -->
-					<div class="flex items-center space-x-2">
-						<button class="menu-btn" @click="toggleFullScreen">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor">
-								<use href="#heroicon-o-arrows-expand"></use>
-							</svg>
-						</button>
-						<button class="menu-btn" @click="takeScreenshot">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor">
-								<use href="#heroicon-o-photograph"></use>
-							</svg>
-						</button>
-					</div>
-				</div>
+  <!-- Include Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
-				<!-- Status Cards -->
-				<div class="absolute bottom-4 left-4 flex space-x-4">
-					<div class="status-card flex flex-col text-white text-sm">
-						<span class="font-semibold">Coordinates</span>
-						<span id="coordinates">
-							X: <span x-text="cameraPosition.x">0.00</span>, Y:
-							<span x-text="cameraPosition.y">0.00</span>, Z:
-							<span x-text="cameraPosition.z">0.00</span>
-						</span>
-					</div>
-					<!-- Add more status cards if needed -->
-				</div>
+  <!-- Custom Styles -->
+  <style>
+    /* Custom Styles */
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      max-width: 2400px;
+      height: 80vh;
+      margin: auto;
+      background-color: #1f2937; /* Tailwind's gray-800 */
+      border-radius: 0.5rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+    #canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 0.5rem;
+    }
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+    .overlay > * {
+      pointer-events: auto;
+    }
+    /* Menu Bar */
+    .menu-bar {
+      background-color: rgba(31, 41, 55, 0.9); /* Tailwind's gray-800 with opacity */
+      backdrop-filter: blur(10px);
+      padding: 0.5rem 1rem;
+    }
+    /* Buttons */
+    .menu-btn,
+    .toolbar-btn {
+      @apply btn btn-sm btn-ghost text-white;
+    }
+    .menu-btn:hover,
+    .toolbar-btn:hover {
+      @apply bg-gray-700;
+    }
+    /* Dropdown */
+    .dropdown-content {
+      backdrop-filter: blur(5px);
+    }
+    /* Sidebar */
+    .sidebar {
+      background-color: rgba(31, 41, 55, 0.9);
+      backdrop-filter: blur(10px);
+      width: 250px;
+      max-width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      right: 0;
+      overflow-y: auto;
+      z-index: 10;
+      padding: 1rem;
+    }
+    .sidebar-header {
+      font-size: 1.25rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      color: white;
+    }
+    .schematic-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: rgba(55, 65, 81, 0.9); /* Tailwind's gray-700 */
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      margin-bottom: 0.5rem;
+      color: white;
+    }
+    .schematic-item:hover {
+      background-color: rgba(75, 85, 99, 0.9); /* Tailwind's gray-600 */
+    }
+    .schematic-name {
+      flex-grow: 1;
+      margin-right: 0.5rem;
+    }
+    /* Modern Menu Style */
+    .menu-bar {
+      background: linear-gradient(90deg, #1f2937 0%, #374151 100%);
+      border-bottom: 1px solid #4b5563;
+    }
+    .menu-btn {
+      color: #d1d5db;
+    }
+    .menu-btn:hover {
+      color: #ffffff;
+    }
+    .dropdown-content {
+      background-color: #1f2937;
+      border: 1px solid #4b5563;
+    }
+    .dropdown-content a {
+      color: #d1d5db;
+    }
+    .dropdown-content a:hover {
+      background-color: #374151;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body
+  class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4"
+  x-data="rendererUI()"
+  x-init="init()"
+  :class="{ 'dark': isDarkMode, 'light': !isDarkMode }"
+>
+  <div class="canvas-container relative">
+    <canvas id="canvas"></canvas>
 
-				<!-- Schematics Sidebar -->
-				<div class="sidebar" x-show="showSidebar">
-					<div class="sidebar-header flex justify-between items-center">
-						<span>Schematics</span>
-						<button
-							class="btn btn-sm btn-primary"
-							@click="addSchematic"
-							title="Add Schematic"
-						>
-							<svg class="w-5 h-5" fill="none" stroke="currentColor">
-								<use href="#heroicon-o-plus"></use>
-							</svg>
-						</button>
-					</div>
-					<div class="schematic-list">
-						<template x-for="schematic in schematics" :key="schematic.id">
-							<div class="schematic-item">
-								<span class="schematic-name" x-text="schematic.name"></span>
-								<button
-									class="btn btn-xs"
-									:class="schematic.visible ? 'btn-success' : 'btn-warning'"
-									@click="toggleSchematicVisibility(schematic)"
-									:title="schematic.visible ? 'Hide' : 'Show'"
-								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor">
-										<use
-											:href="schematic.visible
-                        ? '#heroicon-o-eye'
-                        : '#heroicon-o-eye-off'"
-										></use>
-									</svg>
-								</button>
-							</div>
-						</template>
-					</div>
-				</div>
+    <div class="overlay flex flex-col h-full">
+      <!-- Menu Bar -->
+      <div class="menu-bar flex items-center justify-between h-12 text-sm">
+        <div class="flex items-center space-x-4">
+          <!-- View Dropdown -->
+          <div class="dropdown dropdown-hover">
+            <label tabindex="0" class="menu-btn flex items-center space-x-1">
+              <span class="material-icons">visibility</span>
+              <span>View</span>
+              <span class="material-icons">expand_more</span>
+            </label>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52">
+              <li><a @click="toggleGrid">Toggle Grid</a></li>
+              <li><a @click="toggleAxes">Toggle Axes</a></li>
+              <li><a @click="toggleWireframe">Toggle Wireframe Mode</a></li>
+              <li><a @click="resetScene">Reset Scene</a></li>
+            </ul>
+          </div>
+          <!-- Rendering Options Dropdown -->
+          <div class="dropdown dropdown-hover">
+            <label tabindex="0" class="menu-btn flex items-center space-x-1">
+              <span class="material-icons">tune</span>
+              <span>Rendering</span>
+              <span class="material-icons">expand_more</span>
+            </label>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-60">
+              <li><a @click="toggleShadows">Toggle Shadows</a></li>
+              <li><a @click="openBackgroundColorPicker">Change Background Color</a></li>
+              <li>
+                <div class="px-2 py-1">
+                  <label class="text-white text-sm">Lighting Intensity</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    x-model="lightingIntensity"
+                    @input="updateLightingIntensity()"
+                    class="w-full"
+                  />
+                </div>
+              </li>
+              <li>
+                <div class="px-2 py-1">
+                  <label class="text-white text-sm">Grid Size</label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    x-model="gridSize"
+                    @input="updateGridSize()"
+                    class="w-full"
+                  />
+                </div>
+              </li>
+            </ul>
+          </div>
+          <!-- Camera Dropdown -->
+          <div class="dropdown dropdown-hover">
+            <label tabindex="0" class="menu-btn flex items-center space-x-1">
+              <span class="material-icons">camera_alt</span>
+              <span>Camera</span>
+              <span class="material-icons">expand_more</span>
+            </label>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52">
+              <li><a @click="resetCamera">Reset Camera</a></li>
+              <li><a @click="switchToPerspective">Perspective View</a></li>
+              <li><a @click="switchToOrthographic">Orthographic View</a></li>
+              <li><a @click="showCameraControls = !showCameraControls">Camera Path Controls</a></li>
+            </ul>
+          </div>
+          <!-- Help Dropdown -->
+          <div class="dropdown dropdown-hover">
+            <label tabindex="0" class="menu-btn flex items-center space-x-1">
+              <span class="material-icons">help_outline</span>
+              <span>Help</span>
+              <span class="material-icons">expand_more</span>
+            </label>
+            <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52">
+              <li><a @click="showControlsInfo()">View Controls</a></li>
+              <li><a @click="showAbout()">About</a></li>
+            </ul>
+          </div>
+        </div>
+        <!-- Right Side Buttons -->
+        <div class="flex items-center space-x-2">
+          <!-- Theme Toggle Button -->
+          <button class="menu-btn" @click="toggleDarkMode()" title="Toggle Theme">
+            <span class="material-icons" x-show="isDarkMode">light_mode</span>
+            <span class="material-icons" x-show="!isDarkMode">dark_mode</span>
+          </button>
+          <!-- Fullscreen Button -->
+          <button class="menu-btn" @click="toggleFullScreen" title="Toggle Fullscreen">
+            <span class="material-icons">fullscreen</span>
+          </button>
+          <!-- Screenshot Button -->
+          <button class="menu-btn" @click="takeScreenshot" title="Take Screenshot">
+            <span class="material-icons">photo_camera</span>
+          </button>
+          <!-- Video Recording Button -->
+          <button class="menu-btn" @click="startVideoRecording" :disabled="isRecording" title="Record Animation">
+            <span class="material-icons">videocam</span>
+          </button>
+        </div>
+      </div>
 
-				<!-- Toggle Sidebar Button -->
-				<button
-					class="absolute top-16 right-4 btn btn-circle btn-sm btn-ghost"
-					@click="showSidebar = !showSidebar"
-					title="Toggle Schematics Panel"
-				>
-					<svg class="w-5 h-5" fill="none" stroke="currentColor">
-						<use
-							:href="showSidebar ? '#heroicon-o-chevron-right' : '#heroicon-o-chevron-left'"
-						></use>
-					</svg>
-				</button>
-			</div>
-		</div>
+      <!-- Camera Controls Panel -->
+      <div
+        class="absolute top-16 left-4 bg-gray-800 bg-opacity-80 p-4 rounded-md"
+        x-show="showCameraControls"
+        x-transition
+      >
+        <h2 class="text-white text-lg font-semibold mb-2">Camera Path Controls</h2>
+        <!-- Sliders for Height, Radius, Orbit Time -->
+        <div class="mb-4">
+          <label class="text-white">Height: <span x-text="cameraPathParams.height"></span></label>
+          <input
+            type="range"
+            min="0"
+            max="50"
+            step="1"
+            x-model="cameraPathParams.height"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <div class="mb-4">
+          <label class="text-white">Radius: <span x-text="cameraPathParams.radius"></span></label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            x-model="cameraPathParams.radius"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <div class="mb-4">
+          <label class="text-white">Orbit Time: <span x-text="cameraPathParams.orbitTime"></span>s</label>
+          <input
+            type="range"
+            min="1"
+            max="60"
+            step="1"
+            x-model="cameraPathParams.orbitTime"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <!-- Sliders for Target Coordinates -->
+        <div class="mb-4">
+          <label class="text-white">Target X: <span x-text="cameraPathParams.targetX"></span></label>
+          <input
+            type="range"
+            min="-50"
+            max="50"
+            step="1"
+            x-model="cameraPathParams.targetX"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <div class="mb-4">
+          <label class="text-white">Target Y: <span x-text="cameraPathParams.targetY"></span></label>
+          <input
+            type="range"
+            min="-50"
+            max="50"
+            step="1"
+            x-model="cameraPathParams.targetY"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <div class="mb-4">
+          <label class="text-white">Target Z: <span x-text="cameraPathParams.targetZ"></span></label>
+          <input
+            type="range"
+            min="-50"
+            max="50"
+            step="1"
+            x-model="cameraPathParams.targetZ"
+            @input="updateCameraPathParameters()"
+            class="w-full"
+          />
+        </div>
+        <!-- Button to start/stop the camera animation -->
+        <button
+          class="btn btn-primary w-full"
+          @click="toggleCameraAnimation()"
+          x-text="isAnimating ? 'Stop Animation' : 'Start Animation'"
+        ></button>
+      </div>
 
-		<!-- Script -->
-		<script>
-			function rendererUI() {
-				return {
-					renderer: null,
-					cameraPosition: { x: 0.0, y: 0.0, z: 0.0 },
-					schematics: [],
-					showSidebar: true,
-					init() {
-						// Wait for the renderer to be initialized
-						document
-							.getElementById("canvas")
-							.addEventListener("rendererInitialized", () => {
-								console.log("Renderer initialized");
-								this.renderer =
-									document.getElementById("canvas").schematicRenderer;
+      <!-- Status Cards -->
+      <div class="absolute bottom-4 left-4 flex space-x-4">
+        <div class="status-card flex flex-col text-white text-sm">
+          <span class="font-semibold">Coordinates</span>
+          <span id="coordinates">
+            X: <span x-text="cameraPosition.x">0.00</span>, Y:
+            <span x-text="cameraPosition.y">0.00</span>, Z:
+            <span x-text="cameraPosition.z">0.00</span>
+          </span>
+        </div>
+        <!-- Optional: Display Recording Progress -->
+        <div x-show="isRecording" class="status-card flex flex-col text-white text-sm">
+          <span class="font-semibold">Recording</span>
+          <span><span x-text="recordingProgress"></span>%</span>
+        </div>
+      </div>
 
-								// Ensure the renderer is initialized
-								if (!this.renderer) {
-									console.warn(
-										"Renderer not initialized attempting to retrieve"
-									);
-									return;
-								}
+      <!-- Schematics Sidebar -->
+      <div class="sidebar" x-show="showSidebar" x-transition>
+        <div class="sidebar-header flex justify-between items-center">
+          <span>Schematics</span>
+          <button
+            class="btn btn-sm btn-primary"
+            @click="addSchematic"
+            title="Add Schematic"
+          >
+            <span class="material-icons">add</span>
+          </button>
+          <button
+            class="btn btn-sm btn-primary"
+            @click="showSidebar = !showSidebar"
+            title="Toggle Schematics Panel"
+          >
+            <span class="material-icons" x-text="showSidebar ? 'chevron_right' : 'chevron_left'"></span>
+          </button>
+        </div>
+        <div class="schematic-list">
+          <template x-for="schematic in schematics" :key="schematic.id">
+            <div class="schematic-item">
+              <span class="schematic-name" x-text="schematic.name"></span>
+              <button
+                class="btn btn-xs"
+                :class="schematic.visible ? 'btn-success' : 'btn-warning'"
+                @click="toggleSchematicVisibility(schematic)"
+                :title="schematic.visible ? 'Hide' : 'Show'"
+              >
+                <span class="material-icons" x-text="schematic.visible ? 'visibility' : 'visibility_off'"></span>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
 
-								// Listen for camera position changes
-								const updateCameraPosition = (event) => {
-									if (event.property === "position") {
-										if (Array.isArray(event.value)) {
-											this.cameraPosition = {
-												x: event.value[0].toFixed(2),
-												y: event.value[1].toFixed(2),
-												z: event.value[2].toFixed(2),
-											};
-										} else {
-											this.cameraPosition = {
-												x: event.value.x.toFixed(2),
-												y: event.value.y.toFixed(2),
-												z: event.value.z.toFixed(2),
-											};
-										}
-									}
-								};
+      <!-- Toggle Sidebar Button -->
+      <button
+        class="absolute top-16 right-4 btn btn-circle btn-sm btn-ghost"
+        @click="showSidebar = !showSidebar"
+        title="Toggle Schematics Panel"
+      >
+        <span class="material-icons" x-text="showSidebar ? 'chevron_right' : 'chevron_left'"></span>
+      </button>
+    </div>
+  </div>
 
-								this.renderer.cameraManager.on(
-									"propertyChanged",
-									updateCameraPosition
-								);
+  <!-- Alpine.js Script -->
+  <script>
+    function rendererUI() {
+      return {
+        renderer: null,
+        cameraPosition: { x: 0.0, y: 0.0, z: 0.0 },
+        schematics: [],
+        showSidebar: false,
+        showCameraControls: false,
+        isAnimating: false,
+        isRecording: false,
+		showSchematicsSidebar: true,
+		showResourcePacksSidebar: false,
+		resourcePacks: [],
+        recordingProgress: 0,
+        lightingIntensity: 1,
+        gridSize: 50,
+        isDarkMode: true,
+        cameraPathParams: {
+          height: 10,
+          radius: 20,
+          orbitTime: 10,
+          targetX: 0,
+          targetY: 0,
+          targetZ: 0,
+        },
+        init() {
+          // Wait for the renderer to be initialized
+          document.getElementById("canvas").addEventListener("rendererInitialized", () => {
+            console.log("Renderer initialized");
+            this.renderer = document.getElementById("canvas").schematicRenderer;
 
-								// Initialize with current camera position
-								const initialPosition = this.renderer.cameraManager.position;
-								this.cameraPosition = {
-									x: initialPosition.x.toFixed(2),
-									y: initialPosition.y.toFixed(2),
-									z: initialPosition.z.toFixed(2),
-								};
+            // Ensure the renderer is initialized
+            if (!this.renderer) {
+              console.warn("Renderer not initialized attempting to retrieve");
+              return;
+            }
 
-								// Initialize schematics list
-								this.updateSchematicsList();
+            // Listen for camera position changes
+            const updateCameraPosition = (event) => {
+              if (event.property === "position") {
+                if (Array.isArray(event.value)) {
+                  this.cameraPosition = {
+                    x: event.value[0].toFixed(2),
+                    y: event.value[1].toFixed(2),
+                    z: event.value[2].toFixed(2),
+                  };
+                } else {
+                  this.cameraPosition = {
+                    x: event.value.x.toFixed(2),
+                    y: event.value.y.toFixed(2),
+                    z: event.value.z.toFixed(2),
+                  };
+                }
+              }
+            };
 
-								// Listen for changes in the schematics
-								this.renderer.schematicManager.eventEmitter.on(
-									"schematicAdded",
-									() => {
-										this.updateSchematicsList();
-									}
-								);
+            this.renderer.cameraManager.on("propertyChanged", updateCameraPosition);
 
-								this.renderer.schematicManager.eventEmitter.on(
-									"schematicRemoved",
-									() => {
-										this.updateSchematicsList();
-									}
-								);
+            // Initialize with current camera position
+            const initialPosition = this.renderer.cameraManager.position;
+            this.cameraPosition = {
+              x: initialPosition.x.toFixed(2),
+              y: initialPosition.y.toFixed(2),
+              z: initialPosition.z.toFixed(2),
+            };
 
-								// Update schematic visibility when changed externally
-								this.renderer.schematicManager.eventEmitter.on(
-									"schematicPropertyChanged",
-									({ schematic, property, value }) => {
-										if (property === "visible") {
-											const schematicItem = this.schematics.find(
-												(s) => s.id === schematic.id
-											);
-											if (schematicItem) {
-												schematicItem.visible = value;
-											}
-										}
-									}
-								);
-							});
-					},
-					updateSchematicsList() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						const schematicObjects = Array.from(
-							this.renderer.schematicManager.schematics.values()
-						);
-						this.schematics = schematicObjects.map((schematic) => ({
-							id: schematic.id,
-							name: schematic.name,
-							visible: schematic.visible,
-						}));
-					},
-					toggleSchematicVisibility(schematic) {
-						const rendererSchematic =
-							this.renderer.schematicManager.schematics.get(schematic.id);
-						if (rendererSchematic) {
-							rendererSchematic.visible = !rendererSchematic.visible;
-							schematic.visible = rendererSchematic.visible;
-						}
-					},
-					addSchematic() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
+            // Initialize schematics list
+            this.updateSchematicsList();
 
-						// Create an input element dynamically
-						const input = document.createElement("input");
-						input.type = "file";
-						input.accept = ".schematic,.schem, .litematic";
+            // Listen for changes in the schematics
+            this.renderer.schematicManager.eventEmitter.on("schematicAdded", () => {
+              this.updateSchematicsList();
+            });
 
-						input.onchange = async (event) => {
-							const file = event.target.files[0];
-							if (file) {
-								try {
-									await this.renderer.schematicManager.loadSchematicFromFile(
-										file
-									);
-									// Update the schematics list
-									this.updateSchematicsList();
-								} catch (error) {
-									console.error("Failed to load schematic:", error);
-								}
-							}
-						};
+            this.renderer.schematicManager.eventEmitter.on("schematicRemoved", () => {
+              this.updateSchematicsList();
+            });
 
-						// Trigger the file dialog
-						input.click();
-					},
+			  // Initialize ResourcePackManager
+  this.resourcePackManager = new ResourcePackManager();
 
-					toggleGrid() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.sceneManager.showGrid =
-							!this.renderer.sceneManager.showGrid;
-					},
-					toggleAxes() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.sceneManager.showAxes =
-							!this.renderer.sceneManager.showAxes;
-					},
-					resetCamera() {
-						this.renderer.cameraManager.focusOnSchematics();
-					},
-					switchToPerspective() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.cameraManager.activeCamera.changeType("perspective");
-					},
-					switchToOrthographic() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.cameraManager.activeCamera.changeType("orthographic");
-					},
-					toggleFullScreen() {
-						const elem = document.documentElement;
-						if (!document.fullscreenElement) {
-							elem.requestFullscreen().catch((err) => {
-								alert(
-									`Error attempting to enable full-screen mode: ${err.message} (${err.name})`
-								);
-							});
-						} else {
-							document.exitFullscreen();
-						}
-					},
-					takeScreenshot() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						// Example screenshot functionality
-						const dataURL =
-							this.renderer.renderManager.renderer.domElement.toDataURL(
-								"image/png"
-							);
-						const link = document.createElement("a");
-						link.href = dataURL;
-						link.download = "screenshot.png";
-						link.click();
-					},
-				};
-			}
-		</script>
-	</body>
+  // Load resource packs
+  this.updateResourcePacksList();
+
+            // Update schematic visibility when changed externally
+            this.renderer.schematicManager.eventEmitter.on("schematicPropertyChanged", ({ schematic, property, value }) => {
+              if (property === "visible") {
+                const schematicItem = this.schematics.find((s) => s.id === schematic.id);
+                if (schematicItem) {
+                  schematicItem.visible = value;
+                }
+              }
+            });
+          });
+        },
+		updateResourcePacksList() {
+			this.resourcePackManager.listPacks().then((packs) => {
+			  this.resourcePacks = packs;
+			});
+		  },
+		  downloadSchematic(schematic) {
+  // Assume the schematic object has a reference to the file Blob
+  this.renderer.schematicManager.exportSchematic(schematic.id).then((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = `${schematic.name}.schematic`; // or .schem/.litematic based on the format
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }).catch((error) => {
+    console.error("Failed to download schematic:", error);
+  });
+},
+
+		  addResourcePack() {
+			// Create an input element dynamically
+			const input = document.createElement("input");
+			input.type = "file";
+			input.accept = ".zip";
+		  
+			input.onchange = async (event) => {
+			  const file = event.target.files[0];
+			  if (file) {
+				try {
+				  await this.resourcePackManager.uploadPack(file);
+				  this.updateResourcePacksList();
+				} catch (error) {
+				  console.error("Failed to upload resource pack:", error);
+				}
+			  }
+			};
+		  
+			// Trigger the file dialog
+			input.click();
+		  },
+		  
+		  toggleResourcePackEnabled(pack) {
+			this.resourcePackManager
+			  .togglePackEnabled(pack.name, !pack.enabled)
+			  .then(() => {
+				pack.enabled = !pack.enabled;
+				// Reload resources if needed
+			  })
+			  .catch((error) => {
+				console.error("Failed to toggle resource pack:", error);
+			  });
+		  },
+		  
+		  removeResourcePack(pack) {
+			this.resourcePackManager
+			  .removePack(pack.name)
+			  .then(() => {
+				this.updateResourcePacksList();
+				// Reload resources if needed
+			  })
+			  .catch((error) => {
+				console.error("Failed to remove resource pack:", error);
+			  });
+		  },
+        updateSchematicsList() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          const schematicObjects = Array.from(this.renderer.schematicManager.schematics.values());
+          this.schematics = schematicObjects.map((schematic) => ({
+            id: schematic.id,
+            name: schematic.name,
+            visible: schematic.visible,
+          }));
+        },
+        toggleSchematicVisibility(schematic) {
+          const rendererSchematic = this.renderer.schematicManager.schematics.get(schematic.id);
+          if (rendererSchematic) {
+            rendererSchematic.visible = !rendererSchematic.visible;
+            schematic.visible = rendererSchematic.visible;
+          }
+        },
+        addSchematic() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+
+          // Create an input element dynamically
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".schematic,.schem,.litematic";
+
+          input.onchange = async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+              try {
+                await this.renderer.schematicManager.loadSchematicFromFile(file);
+                // Update the schematics list
+                this.updateSchematicsList();
+              } catch (error) {
+                console.error("Failed to load schematic:", error);
+              }
+            }
+          };
+
+          // Trigger the file dialog
+          input.click();
+        },
+        toggleGrid() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.sceneManager.showGrid = !this.renderer.sceneManager.showGrid;
+        },
+        toggleAxes() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.sceneManager.showAxes = !this.renderer.sceneManager.showAxes;
+        },
+        resetScene() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          // Implement scene reset logic here
+          this.renderer.resetScene();
+        },
+        toggleWireframe() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.toggleWireframeMode();
+        },
+        toggleShadows() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.toggleShadows();
+        },
+        openBackgroundColorPicker() {
+          // Create an input element dynamically
+          const input = document.createElement("input");
+          input.type = "color";
+          input.value = "#1f2937";
+
+          input.onchange = (event) => {
+            const color = event.target.value;
+            this.renderer.sceneManager.setBackgroundColor(color);
+          };
+
+          // Trigger the color picker
+          input.click();
+        },
+        updateLightingIntensity() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.sceneManager.setLightingIntensity(this.lightingIntensity);
+        },
+        updateGridSize() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.sceneManager.setGridSize(this.gridSize);
+        },
+        resetCamera() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.cameraManager.focusOnSchematics();
+        },
+        switchToPerspective() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.cameraManager.activeCamera.changeType("perspective");
+        },
+        switchToOrthographic() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          this.renderer.cameraManager.activeCamera.changeType("orthographic");
+        },
+        toggleFullScreen() {
+          const elem = document.documentElement;
+          if (!document.fullscreenElement) {
+            elem.requestFullscreen().catch((err) => {
+              alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+          } else {
+            document.exitFullscreen();
+          }
+        },
+        takeScreenshot() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+
+          this.renderer.captureScreenshot({
+            format: 'image/png',
+            quality: 1,
+            callback: (blob) => {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none';
+              a.href = url;
+              a.download = 'screenshot.png';
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+            },
+          });
+        },
+        startVideoRecording() {
+          if (!this.renderer) {
+            console.warn('Renderer not initialized');
+            return;
+          }
+
+          if (this.isRecording) {
+            console.warn('Recording is already in progress.');
+            return;
+          }
+
+          // Browser compatibility check
+          if (!('MediaRecorder' in window)) {
+            alert('Your browser does not support the MediaRecorder API.');
+            return;
+          }
+
+          if (!this.renderer.renderManager.renderer.domElement.captureStream) {
+            alert('Your browser does not support canvas.captureStream().');
+            return;
+          }
+
+          this.isRecording = true;
+          const duration = this.cameraPathParams.orbitTime || 10; // Use orbitTime or default to 10 seconds
+
+          this.renderer.recordAnimation({
+            mimeType: 'video/webm; codecs=vp9',
+            frameRate: 30,
+            duration: duration,
+            quality: 'high',
+
+            onProgress: (progress) => {
+              this.recordingProgress = Math.round(progress * 100);
+            },
+            callback: (blob) => {
+              this.isRecording = false;
+              this.recordingProgress = 0;
+
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none';
+              a.href = url;
+              a.download = 'animation.webm';
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+            },
+          });
+        },
+        updateCameraPathParameters() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          // Call the renderer method to update camera path parameters
+          this.renderer.updateCameraPathParameters('circularPath', {
+            height: this.cameraPathParams.height,
+            radius: this.cameraPathParams.radius,
+            target: [
+              this.cameraPathParams.targetX,
+              this.cameraPathParams.targetY,
+              this.cameraPathParams.targetZ,
+            ],
+          });
+        },
+        toggleCameraAnimation() {
+          if (!this.renderer) {
+            console.warn("Renderer not initialized");
+            return;
+          }
+          if (this.isAnimating) {
+            // Stop the animation
+            this.renderer.cameraManager.stopAnimation();
+            this.isAnimating = false;
+          } else {
+            // Start the animation
+            this.renderer.startCameraAnimation('circularPath', this.cameraPathParams.orbitTime);
+            this.isAnimating = true;
+          }
+        },
+        toggleDarkMode() {
+          this.isDarkMode = !this.isDarkMode;
+          document.documentElement.setAttribute('data-theme', this.isDarkMode ? 'dark' : 'light');
+        },
+        showControlsInfo() {
+          alert("Use mouse or touch gestures to navigate the scene.\n\n- Left Click + Drag: Rotate Camera\n- Right Click + Drag: Pan Camera\n- Scroll Wheel: Zoom In/Out");
+        },
+        showAbout() {
+          alert("Schematic Renderer Pro\nVersion 1.0.0\n\nDeveloped by Your Name");
+        },
+      };
+    }
+  </script>
+</body>
 </html>

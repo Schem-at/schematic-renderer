@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 
 import { SchematicRenderer } from "../SchematicRenderer";
 import { CameraWrapper } from "./CameraWrapper";
-
+import { CameraPath } from '../camera/CameraPath';
 type CameraType = "perspective" | "orthographic";
 type ControlType = "orbit" | "pointerLock" | "none";
 
@@ -15,7 +15,7 @@ export class CameraManager extends EventEmitter {
 	public controls: Map<string, any> = new Map();
 	private activeControlKey: string;
 	private rendererDomElement: HTMLCanvasElement;
-
+	private animationRequestId: number | null = null;
 	constructor(
 		schematicRenderer: SchematicRenderer,
 		defaultCameraParams: any = {}
@@ -61,6 +61,43 @@ export class CameraManager extends EventEmitter {
 		}
 		return camera;
 	}
+	
+
+	public animateCameraAlongPath(
+		cameraPath: CameraPath,
+		duration: number,
+		onComplete?: () => void
+	  ): void {
+		const startTime = performance.now();
+		const animate = () => {
+		  const elapsed = (performance.now() - startTime) / 1000; // Convert to seconds
+		  const t = (elapsed % duration) / duration; // Loop the animation
+	
+		  // Get position and rotation from the path
+		  const { position, rotation, target } = cameraPath.getPoint(t);
+	
+		  // Update the camera
+		  this.activeCamera.position = position;
+		  this.activeCamera.rotation = rotation;
+	
+			// Look at the target
+			this.activeCamera.lookAt(target);
+		  // Continue animation
+		  if (elapsed < duration) {
+			requestAnimationFrame(animate);
+		  } else if (onComplete) {
+			onComplete();
+		  }
+		};
+		animate();
+	}
+	
+	public stopAnimation(): void {
+		if (this.animationRequestId !== null) {
+		  cancelAnimationFrame(this.animationRequestId);
+		  this.animationRequestId = null;
+		}
+	  }
 
 	addCamera(key: string, type: CameraType, params: any = {}) {
 		if (this.cameras.has(key)) {

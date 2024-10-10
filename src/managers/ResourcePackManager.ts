@@ -36,6 +36,8 @@ export class ResourcePackManager {
 		});
 	}
 
+	
+
 	private async ensureDbInitialized(): Promise<void> {
 		await this.initPromise;
 	}
@@ -45,6 +47,24 @@ export class ResourcePackManager {
 		const pack = await this.readFileToPack(file);
 		await this.savePack(pack);
 	}
+
+	async removePack(name: string): Promise<void> {
+		await this.ensureDbInitialized();
+		return new Promise((resolve, reject) => {
+		  if (!this.db) {
+			reject("Database not initialized");
+			return;
+		  }
+	  
+		  const transaction = this.db.transaction(["packs"], "readwrite");
+		  const store = transaction.objectStore("packs");
+		  const request = store.delete(name);
+	  
+		  request.onerror = () => reject("Error removing pack");
+		  request.onsuccess = () => resolve();
+		});
+	  }
+	  
 
 	private async readFileToPack(file: File): Promise<StoredResourcePack> {
 		const name = file.name;
@@ -101,32 +121,37 @@ export class ResourcePackManager {
 	}
 
 	async listPacks(): Promise<
-		{ name: string; enabled: boolean; order: number }[]
-	> {
-		await this.ensureDbInitialized();
-		return new Promise((resolve, reject) => {
-			if (!this.db) {
-				reject("Database not initialized");
-				return;
-			}
-
-			const transaction = this.db.transaction(["packs"], "readwrite");
-			const store = transaction.objectStore("packs");
-			const request = store.getAll();
-
-			request.onerror = () => reject("Error getting packs");
-			request.onsuccess = () => {
-				const packs = request.result as StoredResourcePack[];
-				resolve(
-					packs.map((pack) => ({
-						name: pack.name,
-						enabled: pack.enabled,
-						order: pack.order,
-					}))
-				);
-			};
-		});
-	}
+	{ name: string; enabled: boolean; order: number }[]
+  > {
+	await this.ensureDbInitialized();
+	return new Promise((resolve, reject) => {
+	  if (!this.db) {
+		reject("Database not initialized");
+		return;
+	  }
+  
+	  const transaction = this.db.transaction(["packs"], "readonly");
+	  const store = transaction.objectStore("packs");
+	  const request = store.getAll();
+  
+	  request.onerror = () => {
+		console.error("Error getting packs:", request.error);
+		reject("Error getting packs");
+	  };
+	  request.onsuccess = () => {
+		const packs = request.result as StoredResourcePack[];
+		console.log("Retrieved packs:", packs);
+		resolve(
+		  packs.map((pack) => ({
+			name: pack.name,
+			enabled: pack.enabled,
+			order: pack.order,
+		  }))
+		);
+	  };
+	});
+  }
+  
 
 	async getResourcePackBlobs(
 		defaultPacks: Record<string, DefaultPackCallback>

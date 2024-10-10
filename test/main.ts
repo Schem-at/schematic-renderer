@@ -76,7 +76,7 @@ const renderer = new SchematicRenderer(canvas, {
 	// storageSystemThingy: () =>
 	// 	Promise.resolve(base64ToArrayBuffer(storageSystemThingy)),
 	// complexTest: () => Promise.resolve(base64ToArrayBuffer(complexTest)),
-	// chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+	chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
 	// redstoneTest: () => Promise.resolve(base64ToArrayBuffer(redstoneDustTest)),
 	// pistonTestBase64String: () =>
 	// 	Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),

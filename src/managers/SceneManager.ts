@@ -56,6 +56,64 @@ export class SceneManager extends EventEmitter {
 		this.toggleAxes(this._showAxes);
 	}
 
+	public addCameraHelper(camera: THREE.Camera, name: string): void {
+		const helper = new THREE.CameraHelper(camera);
+		helper.name = name;
+		this.scene.add(helper);
+	  }
+	  
+	  public removeCameraHelper(name: string): void {
+		const helper = this.scene.getObjectByName(name);
+		if (helper) {
+		  this.scene.remove(helper);
+		}
+	  }
+	
+	  // Method to add a target indicator
+	  public addTargetIndicator(position: THREE.Vector3, name: string = 'targetIndicator'): void {
+		// Remove existing target indicator if any
+		this.removeTargetIndicator(name);
+	
+		// Create a visual representation of the target (e.g., a sphere)
+		const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+		const material = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow color
+		const sphere = new THREE.Mesh(geometry, material);
+		sphere.position.copy(position);
+		sphere.name = name;
+	
+		// Add the sphere to the scene
+		this.scene.add(sphere);
+	  }
+	
+	  // Method to remove the target indicator
+	  public removeTargetIndicator(name: string = 'targetIndicator'): void {
+		const object = this.scene.getObjectByName(name);
+		if (object) {
+		  this.scene.remove(object);
+		}
+	  }
+	
+	  // Optional: Method to update the target indicator position
+	  public updateTargetIndicatorPosition(position: THREE.Vector3, name: string = 'targetIndicator'): void {
+		const object = this.scene.getObjectByName(name);
+		if (object) {
+		  object.position.copy(position);
+		}
+	  }
+	
+
+	  public addPathVisualization(group: THREE.Group, name: string): void {
+		group.name = name;
+		this.scene.add(group);
+	  }
+	
+	  public removePathVisualization(name: string): void {
+		const object = this.scene.getObjectByName(name);
+		if (object) {
+		  this.scene.remove(object);
+		}
+	  }
+	
 	// Light Management Methods
 	public addLight(name: string, light: THREE.Light): void {
 		if (this.lights.has(name)) {
