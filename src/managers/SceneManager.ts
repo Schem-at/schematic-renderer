@@ -19,7 +19,7 @@ export class SceneManager extends EventEmitter {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.scene = new THREE.Scene();
-		this.updateHelpers();
+
 
 		// Add ambient light
 		const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
@@ -51,7 +51,7 @@ export class SceneManager extends EventEmitter {
 		this.updateHelpers();
 	}
 
-	private updateHelpers() {
+	public updateHelpers() {
 		this.toggleGrid(this._showGrid);
 		this.toggleAxes(this._showAxes);
 	}

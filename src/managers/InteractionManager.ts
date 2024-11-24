@@ -3,8 +3,14 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
 import { SchematicObject } from "./SchematicObject";
 
+export interface InteractionManagerOptions {
+	enableSelection?: boolean;
+	enableMovingSchematics?: boolean;
+}
+  
 export class InteractionManager {
 	private schematicRenderer: SchematicRenderer;
+	private options: InteractionManagerOptions;
 	private raycaster: THREE.Raycaster;
 	private mouse: THREE.Vector2;
 	private camera: THREE.Camera;
@@ -12,52 +18,62 @@ export class InteractionManager {
 	private canvas: HTMLCanvasElement;
 	private selectedObject: SelectableObject | null = null;
 	private boundingBoxHelper: THREE.BoxHelper | null = null;
-
-	constructor(schematicRenderer: SchematicRenderer) {
-		this.schematicRenderer = schematicRenderer;
-		this.raycaster = new THREE.Raycaster();
-		this.mouse = new THREE.Vector2();
-		this.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
-		this.canvas = this.schematicRenderer.canvas;
-
-		this.addEventListeners();
+  
+	constructor(schematicRenderer: SchematicRenderer, options: InteractionManagerOptions) {
+	  this.schematicRenderer = schematicRenderer;
+	  this.options = options;
+  
+	  this.raycaster = new THREE.Raycaster();
+	  this.mouse = new THREE.Vector2();
+	  this.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+	  this.canvas = this.schematicRenderer.canvas;
+  
+	  this.addEventListeners();
 	}
 
 	private addEventListeners() {
-		this.canvas.addEventListener("mousemove", this.onMouseMove.bind(this));
-		this.canvas.addEventListener("mousedown", this.onMouseDown.bind(this));
-		window.addEventListener("keydown", this.onKeyDown.bind(this));
-	}
+		// Only add event listeners if the corresponding functionality is enabled
+		if (this.options.enableSelection) {
+		  this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+		  this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
+		  window.addEventListener('keydown', this.onKeyDown.bind(this));
+		}
+	  }
 
-	private onMouseMove(event: MouseEvent) {
+	  private onMouseMove(event: MouseEvent) {
+		if (!this.options.enableSelection) return;
+	  
 		this.updateMousePosition(event);
+		// Uncomment if hover functionality is needed
 		// this.checkHover();
-	}
-
-	private onMouseDown(event: MouseEvent) {
+	  }
+	  
+	  private onMouseDown(event: MouseEvent) {
+		if (!this.options.enableSelection) return;
+	  
 		this.updateMousePosition(event);
 		this.checkSelection();
-	}
+	  }
 
-	private onKeyDown(event: KeyboardEvent) {
-		// if (event.key === "Escape") {
-		// console.log("Escape key pressed");
-		// 	this.deselectObject();
-		// }
+	  private onKeyDown(event: KeyboardEvent) {
+		if (!this.options.enableMovingSchematics) return;
+	  
 		switch (event.key) {
-			case "g": // Press 'g' for translate mode
-				this.schematicRenderer.gizmoManager.setMode("translate");
-				break;
-			case "r": // Press 'r' for rotate mode
-				this.schematicRenderer.gizmoManager.setMode("rotate");
-				break;
-			case "s": // Press 's' for scale mode
-				this.schematicRenderer.gizmoManager.setMode("scale");
-				break;
-			case "Escape": // Press 'Escape' to deselect object
-				this.deselectObject();
+		  case 'g': // Press 'g' for translate mode
+			this.schematicRenderer.gizmoManager.setMode('translate');
+			break;
+		  case 'r': // Press 'r' for rotate mode
+			this.schematicRenderer.gizmoManager.setMode('rotate');
+			break;
+		  case 's': // Press 's' for scale mode
+			this.schematicRenderer.gizmoManager.setMode('scale');
+			break;
+		  case 'Escape': // Press 'Escape' to deselect object
+			this.deselectObject();
+			break;
 		}
-	}
+	  }
+	  
 
 	private updateMousePosition(event: MouseEvent) {
 		const rect = this.canvas.getBoundingClientRect();

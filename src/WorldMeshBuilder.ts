@@ -32,6 +32,8 @@ export interface BlockData extends BlockPosition {
 	properties: Record<string, string>;
 }
 
+
+
 export class WorldMeshBuilder {
 	private schematicRenderer: SchematicRenderer;
 	private blockMeshBuilder: BlockMeshBuilder;
@@ -44,7 +46,7 @@ export class WorldMeshBuilder {
 		chunk: BlockData[],
 		schematic: SchematicWrapper
 	): Promise<THREE.Mesh[]> {
-		const maxBlocksAllowed = 1000000;
+		const maxBlocksAllowed = 100000000;
 		let count = 0;
 		const components: Record<string, any[]> = {};
 
@@ -131,7 +133,7 @@ export class WorldMeshBuilder {
 		const schematicMeshes: THREE.Mesh[] = [];
 		const chunkMap: Map<string, THREE.Mesh[]> = new Map();
 
-		const maxChunksAllowed = 1000;
+		const maxChunksAllowed = 100000;
 		let chunkCount = 0;
 		for (const chunkData of chunks) {
 			if (chunkCount > maxChunksAllowed) {

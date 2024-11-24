@@ -296,8 +296,10 @@ export class BlockMeshBuilder {
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
 				let faceData;
-				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}`;
-				if (this.faceDataCache.has(faceDataCacheKey)) {
+				const blockPropertyHash = JSON.stringify(block.properties);
+				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}-${blockPropertyHash}`;
+
+				if (this.faceDataCache.has(faceDataCacheKey) ) {
 					faceData = this.faceDataCache.get(faceDataCacheKey);
 				} else {
 					try {

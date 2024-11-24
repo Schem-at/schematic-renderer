@@ -4,21 +4,26 @@ import { SchematicWrapper } from "../wasm/minecraft_schematic_utils"; // Adjust 
 import { WorldMeshBuilder } from "./WorldMeshBuilder"; // Adjust the import path
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
+import { SchematicRenderer } from "../SchematicRenderer";
 
 export class SchematicManager {
 	public schematics: Map<string, SchematicObject> = new Map();
+	public schematicRenderer: SchematicRenderer;
 	public eventEmitter: EventEmitter;
 	private worldMeshBuilder: WorldMeshBuilder;
 	private sceneManager: SceneManager;
+	private singleSchematicMode: boolean;
 
 	constructor(
-		worldMeshBuilder: WorldMeshBuilder,
-		eventEmitter: EventEmitter,
-		sceneManager: SceneManager
+		schematicRenderer: SchematicRenderer,
+		options: { singleSchematicMode?: boolean } = {}
+
 	) {
-		this.worldMeshBuilder = worldMeshBuilder;
-		this.eventEmitter = eventEmitter;
-		this.sceneManager = sceneManager;
+		this.schematicRenderer = schematicRenderer;
+		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder;
+		this.eventEmitter = schematicRenderer.eventEmitter;
+		this.sceneManager = schematicRenderer.sceneManager;
+		this.singleSchematicMode = options.singleSchematicMode || false;
 	}
 
 	public async loadSchematic(
@@ -32,6 +37,10 @@ export class SchematicManager {
 			visible: boolean;
 		}>
 	): Promise<void> {
+		if (this.singleSchematicMode) {
+			// Remove existing schematics
+			this.removeAllSchematics();
+		  }
 		// Create a SchematicWrapper from the data
 		const schematicWrapper = new SchematicWrapper();
 		schematicWrapper.from_data(new Uint8Array(schematicData));
@@ -51,6 +60,12 @@ export class SchematicManager {
 		// Emit an event to notify that a schematic has been added
 		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
 	}
+
+	public removeAllSchematics() {
+		for (const name of this.schematics.keys()) {
+		  this.removeSchematic(name);
+		}
+	  }
 
 	public async loadSchematics(
 		schematicDataMap: { [key: string]: () => Promise<ArrayBuffer> },
@@ -77,24 +92,31 @@ export class SchematicManager {
 		const arrayBuffer = await file.arrayBuffer();
 		const id = file.name;
 		await this.loadSchematic(id, arrayBuffer);
-		console.log(`Loaded schematic: ${id}`);
-		console.log(`Schematics count: ${this.schematics.size}`);
-		console.log(this.getGlobalBoundingBox());
+	  
+		// Adjust the camera to focus on schematics, if desired
 		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
-	}
+	  
+		// Emit an event to notify that a schematic has been loaded
+		this.eventEmitter.emit('schematicLoaded', { id });
+	  }
 
 	public removeSchematic(name: string) {
 		const schematicObject = this.schematics.get(name);
 		if (schematicObject) {
 			// Dispose meshes and other resources if necessary
-			schematicObject.getMeshes().forEach((mesh) => {
+			 schematicObject.getMeshes().then((meshes) => {
+				meshes.forEach((mesh) => {
 				mesh.geometry.dispose();
 				if (Array.isArray(mesh.material)) {
 					mesh.material.forEach((material) => material.dispose());
 				} else {
 					mesh.material.dispose();
 				}
-			});
+				this.sceneManager.scene.remove(mesh);
+				}
+				);
+			 }
+			);
 			this.schematics.delete(name);
 
 			// Emit an event to notify that a schematic has been removed
@@ -125,7 +147,12 @@ export class SchematicManager {
 		return null;
 	}
 
+	public isEmpty(): boolean {
+		return this.schematics.size === 0;
+	}
+
 	public getSchematicsAveragePosition(): THREE.Vector3 {
+		if (this.isEmpty()) return new THREE.Vector3();
 		const averagePosition = new THREE.Vector3();
 		const schematics = this.getAllSchematics();
 		if (schematics.length === 0) return averagePosition;
@@ -137,6 +164,7 @@ export class SchematicManager {
 	}
 
 	public getMaxSchematicDimensions(): THREE.Vector3 {
+		if (this.isEmpty()) return new THREE.Vector3();
 		const maxDimensions = new THREE.Vector3();
 		const schematics = this.getAllSchematics();
 		for (const schematic of schematics) {

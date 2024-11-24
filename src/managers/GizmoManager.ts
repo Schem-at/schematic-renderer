@@ -4,6 +4,14 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
 import { SchematicObject } from "./SchematicObject";
 
+
+export interface GizmoManagerOptions {
+	enableRotation?: boolean;   // Enables rotation gizmo
+	enableScaling?: boolean;    // Enables scaling gizmo
+	// Add other gizmo-related options as needed
+  }
+
+  
 export class GizmoManager {
 	private transformControls: TransformControls;
 	private schematicRenderer: SchematicRenderer;
