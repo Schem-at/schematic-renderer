@@ -853,65 +853,96 @@
 							},
 						});
 					},
-					startVideoRecording() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-
-						if (this.isRecording) {
-							console.warn("Recording is already in progress.");
-							return;
-						}
-
-						// Browser compatibility check
-						if (!("MediaRecorder" in window)) {
-							alert("Your browser does not support the MediaRecorder API.");
-							return;
-						}
-
-						if (
-							!this.renderer.renderManager.renderer.domElement.captureStream
-						) {
-							alert("Your browser does not support canvas.captureStream().");
-							return;
-						}
-
-						this.isRecording = true;
-						const duration = this.cameraPathParams.orbitTime || 10; // Use orbitTime or default to 10 seconds
-						this.renderer.cameraManager.animateCameraAlongPath({ duration: duration });
-						//hide the camera path visualization
-
-						this.renderer.cameraManager.cameraPathManager.hidePathVisualization("circularPath");
-						this.renderer.sceneManager.showAxes = false;
-						this.renderer.sceneManager.showGrid = false;
-
-						//hide the camera path controls
-						this.showCameraControls = false;
-						this.renderer.recordAnimation({
-							mimeType: "video/webm; codecs=vp9",
-							frameRate: 30,
-							duration: duration,
-							quality: "high",
-
-							onProgress: (progress) => {
-								this.recordingProgress = Math.round(progress * 100);
-							},
-							callback: (blob) => {
-								this.isRecording = false;
-								this.recordingProgress = 0;
-
-								const url = URL.createObjectURL(blob);
-								const a = document.createElement("a");
-								a.style.display = "none";
-								a.href = url;
-								a.download = "animation.webm";
-								document.body.appendChild(a);
-								a.click();
-								window.URL.revokeObjectURL(url);
-							},
-						});
-					},
+          startVideoRecording() {
+            if (!this.renderer) {
+                console.warn("Renderer not initialized");
+                return;
+            }
+        
+            if (this.isRecording) {
+                console.warn("Recording is already in progress.");
+                return;
+            }
+        
+            this.isRecording = true;
+            const duration = this.cameraPathParams.orbitTime || 10;
+        
+            // Hide UI elements during recording
+            this.renderer.cameraManager.cameraPathManager.hidePathVisualization("circularPath");
+            this.renderer.sceneManager.showAxes = false;
+            this.renderer.sceneManager.showGrid = false;
+            this.showCameraControls = false;
+        
+            // Start recording
+            this.renderer.cameraManager.recordingManager.startRecording(duration, {
+                width: 3840,
+                height: 2160,
+                frameRate: 60,
+                onProgress: (progress) => {
+                    this.recordingProgress = Math.round(progress * 100);
+                },
+                onComplete: (blob) => {
+                    this.isRecording = false;
+                    this.recordingProgress = 0;
+        
+                    // Download the recorded video
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.style.display = "none";
+                    a.href = url;
+                    a.download = "animation.webm";
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+        
+                    // Restore UI elements
+                    if (this.showCameraControls) {
+                        this.renderer.cameraManager.cameraPathManager.showPathVisualization("circularPath");
+                    }
+                }
+            }).catch((error) => {
+                console.error("Recording failed:", error);
+                this.isRecording = false;
+                this.recordingProgress = 0;
+                
+                // Restore UI elements
+                if (this.showCameraControls) {
+                    this.renderer.cameraManager.cameraPathManager.showPathVisualization("circularPath");
+                }
+                
+                // Show error to user
+                alert(`Recording failed: ${error.message}`);
+            });
+        },
+        
+        // Optional: You can also update the toggleCameraAnimation function to show how to animate without recording
+        toggleCameraAnimation() {
+            if (!this.renderer) {
+                console.warn("Renderer not initialized");
+                return;
+            }
+        
+            if (this.isAnimating) {
+                // Stop the animation
+                this.renderer.cameraManager.stopAnimation();
+                this.isAnimating = false;
+            } else {
+                // Start the animation without recording
+                this.renderer.cameraManager.animateCameraAlongPath({
+                    duration: this.cameraPathParams.orbitTime,
+                    lookAtTarget: true,
+                    updateControls: true,
+                    onUpdate: (progress) => {
+                        // Optional: Add any progress updates for the animation
+                    },
+                    onComplete: () => {
+                        this.isAnimating = false;
+                    }
+                });
+                this.isAnimating = true;
+            }
+        },
 					updateCameraPathParameters() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
@@ -928,23 +959,7 @@
 							],
 						});
 					},
-					toggleCameraAnimation() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						if (this.isAnimating) {
-							// Stop the animation
-							this.renderer.cameraManager.stopAnimation();
-							this.isAnimating = false;
-						} else {
-							// Start the animation
-							this.renderer.cameraManager.animateCameraAlongPath({
-								duration: this.cameraPathParams.orbitTime,
-							});
-							this.isAnimating = true;
-						}
-					},
+					
 					toggleDarkMode() {
 						this.isDarkMode = !this.isDarkMode;
 						document.documentElement.setAttribute(

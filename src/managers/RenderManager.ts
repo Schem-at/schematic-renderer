@@ -81,32 +81,27 @@ export class RenderManager {
 	}
 
 	private setupEventListeners() {
-		// listen to the browser window resize event
 		window.addEventListener("resize", () => {
-			//resize the canvas to fit its container
-
 			const canvas = this.schematicRenderer.canvas;
 			const parent = canvas.parentElement;
+			
 			if (parent) {
-				const width = parent.clientWidth;
-				const height = parent.clientHeight;
-
-				canvas.width = width;
-				canvas.height = height;
-				canvas.style.width = width + "px";
-				canvas.style.height = height + "px";
-				this.renderer.setSize(width, height);
-				this.composer.setSize(width, height);
-
-				// Update the camera aspect ratio
-				const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
-				camera.aspect = width / height;
-				camera.updateProjectionMatrix();
+				// Only resize if we're not currently recording
+				if (!this.schematicRenderer.cameraManager.recordingManager.isRecording) {
+					const width = parent.clientWidth;
+					const height = parent.clientHeight;
+	
+					canvas.style.width = width + "px";
+					canvas.style.height = height + "px";
+					this.renderer.setSize(width, height, false);
+					this.composer.setSize(width, height);
+	
+					// Update the camera aspect ratio
+					const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+					camera.aspect = width / height;
+					camera.updateProjectionMatrix();
+				}
 			}
-		});
-
-		this.eventEmitter.on("cameraUpdated", (camera: THREE.Camera) => {
-			this.updateCamera(camera);
 		});
 	}
 
@@ -138,9 +133,18 @@ export class RenderManager {
 		}
 	}
 
-	public render() {
-		this.composer.render();
-	}
+	private isRendering: boolean = false;
+
+public render(): void {
+    if (this.isRendering) return;
+    
+    try {
+        this.isRendering = true;
+        this.composer.render();
+    } finally {
+        this.isRendering = false;
+    }
+}
 
 	public resize(width: number, height: number) {
 		this.renderer.setSize(width, height);
