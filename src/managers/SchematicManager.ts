@@ -197,4 +197,26 @@ export class SchematicManager {
 			(schematic) => schematic.group
 		);
 	}
+
+
+	public createEmptySchematic(
+		name: string
+	): SchematicObject {
+		const schematicWrapper = new SchematicWrapper();
+		const schematicObject = new SchematicObject(
+			name,
+			schematicWrapper,
+			this.worldMeshBuilder,
+			this.eventEmitter,
+			this.sceneManager
+		);
+		this.addSchematic(schematicObject);
+		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+	  
+		// Emit an event to notify that a schematic has been loaded
+		this.eventEmitter.emit('schematicLoaded', { id: name });
+
+		return schematicObject;
+	}
+	
 }

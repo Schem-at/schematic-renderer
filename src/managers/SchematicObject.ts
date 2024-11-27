@@ -321,6 +321,34 @@ export class SchematicObject extends EventEmitter {
 		console.log("Chunks rebuilt in", performance.now() - startTime + "ms");
 	}
 
+	public getBlock(position: THREE.Vector3 | number[]): string | undefined {
+		if (Array.isArray(position)) {
+			position = new THREE.Vector3(position[0], position[1], position[2]);
+		}
+		return this.schematicWrapper.get_block(
+			position.x,
+			position.y,
+			position.z
+		);
+	}
+
+
+	public async replaceBlock(replaceBlock: string, newBlock: string) {
+		const blocks: [THREE.Vector3, string][] = [];
+		const dimensions = this.schematicWrapper.get_dimensions();
+		for (let x = 0; x < dimensions[0]; x++) {
+			for (let y = 0; y < dimensions[1]; y++) {
+				for (let z = 0; z < dimensions[2]; z++) {
+					const block = this.schematicWrapper.get_block(x, y, z);
+					if (block === replaceBlock) {
+						blocks.push([new THREE.Vector3(x, y, z), newBlock]);
+					}
+				}
+			}
+		}
+		await this.setBlocks(blocks);
+	}
+
 	public async addCube(
 		position: THREE.Vector3 | number[],
 		size: THREE.Vector3 | number[],

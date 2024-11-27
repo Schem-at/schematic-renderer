@@ -37,9 +37,26 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 const renderer = new SchematicRenderer(canvas, {
+	// purplersDoorThingy: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(purplersDoorThingy)),
+	// storageSystemThingy: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(storageSystemThingy)),
+	// complexTest: () => Promise.resolve(base64ToArrayBuffer(complexTest)),
 	// chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+	// redstoneTest: () => Promise.resolve(base64ToArrayBuffer(redstoneDustTest)),
+	// pistonTestBase64String: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
+	// redstoneTestBase64String: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(redstoneDustTest)),
+	// longRedstoneTest: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(longRedstoneTest)),
+	// hozRedstone: () => Promise.resolve(base64ToArrayBuffer(hozRedstone)),
+	// fenceTestBase64String: () =>
+	// 	Promise.resolve(base64ToArrayBuffer(fenceTestBase64String)),
+	// newChestTest: () => Promise.resolve(base64ToArrayBuffer(newChestTest)),
 },
 	{},
+	
 	{
 		showCameraPathVisualization: true,
 		enableInteraction: false,
@@ -74,10 +91,7 @@ const renderer = new SchematicRenderer(canvas, {
 			console.log('Object deselected:', object);
 		  },
 		},
-	}
-);
-
-new SchematicRenderer(canvas);
+	  });
 
 // setTimeout(() => {
 // 	renderer.updateSchematic("diagonalCCA", () =>
