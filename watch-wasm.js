@@ -2,9 +2,19 @@ const chokidar = require('chokidar');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
+// current path
+///Users/harrisonbastian/Documents/GitHub/schematic-renderer
 
-const rustProjectPath = path.resolve(__dirname, '../minecraft_schematic_utils');
 const wasmDestPath = path.resolve(__dirname, 'src/wasm');
+
+// Rust project path
+///Users/harrisonbastian/RustroverProjects/schematic_utils
+
+const rustProjectPath = path.resolve(__dirname, '../../../RustroverProjects/schematic_utils');
+
+//check if the path is correct
+console.log(rustProjectPath);
+console.log(wasmDestPath);
 
 // Watch Rust project files
 chokidar.watch(path.join(rustProjectPath, 'src'), {

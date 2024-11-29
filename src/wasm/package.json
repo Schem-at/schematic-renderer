@@ -1,13 +1,12 @@
 {
   "name": "minecraft_schematic_utils",
-  "type": "module",
   "version": "0.1.0",
   "files": [
     "minecraft_schematic_utils_bg.wasm",
     "minecraft_schematic_utils.js",
     "minecraft_schematic_utils.d.ts"
   ],
-  "main": "minecraft_schematic_utils.js",
+  "module": "minecraft_schematic_utils.js",
   "types": "minecraft_schematic_utils.d.ts",
   "sideEffects": [
     "./snippets/*"
