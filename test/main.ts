@@ -59,9 +59,9 @@ const renderer = new SchematicRenderer(canvas, {
 	
 	{
 		showCameraPathVisualization: true,
-		enableInteraction: false,
+		enableInteraction: true,
 		enableDragAndDrop: true,
-		enableGizmos: true,
+		enableGizmos: false,
 		interactionOptions: {
 		  enableSelection: true,
 		  enableMovingSchematics: true,
