@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { EffectComposer, RenderPass, EffectPass } from "postprocessing";
 import { SMAAEffect } from "postprocessing";
+// @ts-ignore
 import { SSAOEffect } from "realism-effects";
 import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
 import { EventEmitter } from "events";
@@ -12,6 +13,7 @@ export class RenderManager {
 	public renderer: THREE.WebGLRenderer;
 	private composer: EffectComposer;
 	private passes: Map<string, any> = new Map();
+	// @ts-ignore
 	private eventEmitter: EventEmitter;
 
 	constructor(schematicRenderer: SchematicRenderer) {
@@ -20,8 +22,8 @@ export class RenderManager {
 
 		this.renderer = new THREE.WebGLRenderer({
 			canvas: this.schematicRenderer.canvas,
-			alpha: this.schematicRenderer.options.alpha ?? true,
-			antialias: this.schematicRenderer.options.antialias ?? true,
+			alpha: true,
+			antialias: true,
 		});
 		this.renderer.setSize(
 			this.schematicRenderer.canvas.clientWidth,
@@ -97,7 +99,7 @@ export class RenderManager {
 					this.composer.setSize(width, height);
 	
 					// Update the camera aspect ratio
-					const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+					const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
 					camera.aspect = width / height;
 					camera.updateProjectionMatrix();
 				}

@@ -42,7 +42,7 @@ export class CameraManager extends EventEmitter {
   private animationStartTime: number = 0;
   private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
   private animationStartRotation: THREE.Euler = new THREE.Euler();
-  private recordingManager: RecordingManager;
+  public recordingManager: RecordingManager;
 
   public cameraPathManager: CameraPathManager;
 

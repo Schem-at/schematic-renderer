@@ -10,8 +10,11 @@ export class AnnotationHighlight implements Highlight {
 		[key: string]: { mesh: THREE.Mesh; label: THREE.Sprite };
 	} = {};
 	private annotationInput: HTMLDivElement;
+	// @ts-ignore
 	private raycaster: THREE.Raycaster;
+	// @ts-ignore
 	private mouse: THREE.Vector2;
+	// @ts-ignore
 	private hoverPosition: THREE.Vector3 | null = null;
 
 	constructor(schematicRenderer: SchematicRenderer) {

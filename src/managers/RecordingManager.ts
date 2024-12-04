@@ -1,6 +1,6 @@
 // RecordingManager.ts
 import * as THREE from 'three';
-import { SchematicRenderer } from './SchematicRenderer';
+import { SchematicRenderer } from '../SchematicRenderer';
 
 export interface RecordingOptions {
     width?: number;
@@ -38,8 +38,11 @@ export class RecordingManager {
     }
 
     private async setupRecording(width: number, height: number): Promise<void> {
-        const renderer = this.schematicRenderer.renderManager.renderer;
-        const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+        const renderer = this.schematicRenderer.renderManager?.renderer;
+        if (!renderer) {
+            throw new Error('Renderer not found');
+        }
+        const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
 
         // Store original settings
         this.originalSettings = {
@@ -147,8 +150,11 @@ export class RecordingManager {
     }
 
     private startRenderLoop(duration: number, onProgress?: (progress: number) => void): void {
-        const mainCanvas = this.schematicRenderer.renderManager.renderer.domElement;
+        const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
 
+        if (!mainCanvas) {
+            throw new Error('Main canvas not found');
+        }
         const captureFrame = () => {
             if (!this.isRecording || !this.ctx2d) return;
 
@@ -182,8 +188,11 @@ export class RecordingManager {
 
     private cleanup(): void {
         if (this.originalSettings) {
-            const renderer = this.schematicRenderer.renderManager.renderer;
-            const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+            const renderer = this.schematicRenderer.renderManager?.renderer;
+            if (!renderer) {
+                throw new Error('Renderer not found');
+            }
+            const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
 
             // Reset renderer settings
             renderer.setSize(this.originalSettings.width, this.originalSettings.height, false);

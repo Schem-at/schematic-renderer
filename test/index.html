@@ -210,34 +210,7 @@
 										>Change Background Color</a
 									>
 								</li>
-								<li>
-									<div class="px-2 py-1">
-										<label class="text-white text-sm">Lighting Intensity</label>
-										<input
-											type="range"
-											min="0"
-											max="2"
-											step="0.1"
-											x-model="lightingIntensity"
-											@input="updateLightingIntensity()"
-											class="w-full"
-										/>
-									</div>
-								</li>
-								<li>
-									<div class="px-2 py-1">
-										<label class="text-white text-sm">Grid Size</label>
-										<input
-											type="range"
-											min="10"
-											max="100"
-											step="5"
-											x-model="gridSize"
-											@input="updateGridSize()"
-											class="w-full"
-										/>
-									</div>
-								</li>
+								
 							</ul>
 						</div>
 						<!-- Camera Dropdown -->
@@ -782,22 +755,8 @@
 						// Trigger the color picker
 						input.click();
 					},
-					updateLightingIntensity() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.sceneManager.setLightingIntensity(
-							this.lightingIntensity
-						);
-					},
-					updateGridSize() {
-						if (!this.renderer) {
-							console.warn("Renderer not initialized");
-							return;
-						}
-						this.renderer.sceneManager.setGridSize(this.gridSize);
-					},
+
+
 					resetCamera() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");

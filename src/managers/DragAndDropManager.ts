@@ -19,7 +19,7 @@ export class DragAndDropManager {
     this.renderer = renderer;
     this.options = options;
     this.canvas = this.renderer.canvas;
-    this.uiManager = this.renderer.uiManager;
+    this.uiManager = this.renderer.uiManager as UIManager;
 
     this.initialize();
   }
@@ -64,7 +64,8 @@ export class DragAndDropManager {
             // Hide loading indicator and show error message
             console.error(error);
             this.uiManager.hideLoadingIndicator();
-            this.uiManager.showMessage(`Error loading ${file.name}: ${error.message}`);
+            const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
+            this.uiManager.showMessage(`Error loading ${file.name}: ${errorMessage}`);
           }
         } else {
           // Show error message
@@ -84,7 +85,7 @@ export class DragAndDropManager {
 
   private async loadSchematicFromFile(file: File) {
     try {
-      await this.renderer.schematicManager.loadSchematicFromFile(file);
+      await this.renderer.schematicManager?.loadSchematicFromFile(file);
   
       // Call the callback if provided
       const callback = this.options.callbacks?.onSchematicLoaded;

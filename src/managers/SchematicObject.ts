@@ -7,7 +7,6 @@ import { SceneManager } from "./SceneManager";
 import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
 import { castToEuler, castToVector3 } from "../utils/Casts";
 import {
-	displayPerformanceMetrics,
 	resetPerformanceMetrics,
 } from "../monitoring";
 
@@ -78,7 +77,7 @@ export class SchematicObject extends EventEmitter {
 		this.sceneManager.add(this.group);
 
 		// Define property configurations
-		const propertyConfigs: Partial<Record<keyof this, PropertyConfig<any>>> = {
+		const propertyConfigs: Partial<Record<keyof SchematicObject, PropertyConfig<any>>> = {
 			position: {
 				cast: castToVector3,
 				afterSet: () => {
@@ -115,7 +114,7 @@ export class SchematicObject extends EventEmitter {
 		};
 
 		// Create the reactive proxy
-		return createReactiveProxy(this, propertyConfigs);
+		return createReactiveProxy(this as SchematicObject, propertyConfigs);
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -312,7 +311,6 @@ export class SchematicObject extends EventEmitter {
 
 		startTime = performance.now();
 		console.log("Rebuilding chunks");
-		console.log(this.worldMeshBuilder.blockMeshCache);
 
 		for (let chunk of affectedChunks) {
 			const [chunkX, chunkY, chunkZ] = chunk.split(",").map((v) => parseInt(v));

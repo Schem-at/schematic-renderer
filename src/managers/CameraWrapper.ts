@@ -63,7 +63,7 @@ export class CameraWrapper extends EventEmitter {
 
 	// Expose the underlying camera
 	get camera() {
-		return this._camera;
+		return this._camera
 	}
 
 	// FOV

@@ -80,6 +80,7 @@ export class InteractionManager {
 		this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 	}
 
+	// @ts-ignore
 	private checkHover() {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
 
@@ -160,9 +161,14 @@ export class InteractionManager {
 		return null;
 	}
 
+	// @ts-ignore
 	private visualizeBoundingBoxes() {
 		const selectableObjects =
 			this.schematicRenderer.schematicManager?.getSelectableObjects();
+		if (!selectableObjects) {
+			console.warn("No selectable objects found");
+			return;
+		}
 		selectableObjects.forEach((object) => {
 			const box = new THREE.Box3().setFromObject(object);
 			const helper = new THREE.Box3Helper(box, new THREE.Color(0xffff00));

@@ -30,8 +30,11 @@ export class GizmoManager {
 		this.schematicRenderer.sceneManager.scene.add(this.transformControls);
 
 		// Disable camera controls when transforming
-		this.transformControls.addEventListener("dragging-changed", (event) => {
-			this.schematicRenderer.cameraManager.controls.enabled = !event.value;
+		this.transformControls.addEventListener("dragging-changed", (event : any) => {
+			const controls = this.schematicRenderer.cameraManager.controls.get("orbit");
+			if (controls) {
+				controls.enabled = !event.value;
+			}
 		});
 
 		// Update bounding box helper when transforming

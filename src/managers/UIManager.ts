@@ -1,3 +1,5 @@
+import { SchematicRenderer } from '../SchematicRenderer';
+
 export class UIManager {
     private renderer: SchematicRenderer;
     private overlay: HTMLDivElement;
@@ -7,6 +9,11 @@ export class UIManager {
     
     constructor(renderer: SchematicRenderer) {
       this.renderer = renderer;
+      this.overlay = document.createElement('div');
+      this.loadingIndicator = document.createElement('div');
+      this.messageBox = document.createElement('div');
+      this.progressBar = document.createElement('div');
+      
       this.createOverlay();
     }
   
@@ -14,7 +21,6 @@ export class UIManager {
       const container = this.renderer.canvas.parentElement || document.body;
   
       // Create overlay
-      this.overlay = document.createElement('div');
       this.overlay.style.position = 'absolute';
       this.overlay.style.top = '0';
       this.overlay.style.left = '0';
@@ -24,7 +30,6 @@ export class UIManager {
       this.overlay.style.display = 'none'; // Hidden by default
   
       // Create loading indicator
-      this.loadingIndicator = document.createElement('div');
       this.loadingIndicator.style.position = 'absolute';
       this.loadingIndicator.style.top = '50%';
       this.loadingIndicator.style.left = '50%';
@@ -36,7 +41,6 @@ export class UIManager {
       this.loadingIndicator.style.display = 'none';
   
       // Create message box
-      this.messageBox = document.createElement('div');
       this.messageBox.style.position = 'absolute';
       this.messageBox.style.bottom = '10px';
       this.messageBox.style.left = '50%';
@@ -52,7 +56,6 @@ export class UIManager {
       this.overlay.appendChild(this.messageBox);
       container.appendChild(this.overlay);
     
-      this.progressBar = document.createElement('div');
       this.progressBar.style.position = 'absolute';
       this.progressBar.style.bottom = '0';
       this.progressBar.style.left = '0';
