@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
 	"module": "dist/schematic-renderer.es.js",
@@ -21,6 +21,7 @@
 		"@esbuild/linux-x64": "^0.23.0",
 		"@originjs/vite-plugin-commonjs": "^1.0.3",
 		"@types/gzip-js": "^0.3.5",
+		"@types/lodash": "^4.17.13",
 		"@types/pako": "^2.0.3",
 		"@types/three": "^0.161.2",
 		"cors-anywhere": "^0.4.4",

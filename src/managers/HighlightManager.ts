@@ -1,11 +1,7 @@
 // managers/HighlightManager.ts
-import * as THREE from "three";
 import { Highlight } from "./highlight/Highlight";
 import { HoverHighlight } from "./highlight/HoverHighlight";
 import { AnnotationHighlight } from "./highlight/AnnotationHighlight";
-import { EventEmitter } from "events";
-import { BlockPlacementHandler } from "./highlight/BlockPlacementHandler";
-import { BlockInteractionHandler } from "./highlight/BlockInteractionHandler";
 import { SchematicRenderer } from "../SchematicRenderer";
 
 export class HighlightManager {

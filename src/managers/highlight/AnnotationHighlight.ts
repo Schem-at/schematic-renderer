@@ -1,6 +1,7 @@
 // AnnotationHighlight.ts
 import * as THREE from "three";
-import { Highlight } from "../managers/highlight/Highlight";
+import { Highlight } from "../highlight/Highlight";
+
 import { SchematicRenderer } from "../../SchematicRenderer";
 
 export class AnnotationHighlight implements Highlight {
@@ -41,6 +42,7 @@ export class AnnotationHighlight implements Highlight {
 		);
 	}
 
+	// @ts-ignore
 	update(deltaTime: number) {
 		this.updateAnnotationVisibility();
 	}
@@ -72,6 +74,7 @@ export class AnnotationHighlight implements Highlight {
 	}
 
 	private showAnnotationInput(position: THREE.Vector3) {
+		if(!this.schematicRenderer.renderManager) return;
 		// Convert world position to screen coordinates
 		const screenPosition = position
 			.clone()
@@ -203,7 +206,7 @@ export class AnnotationHighlight implements Highlight {
 
 	private updateAnnotationVisibility() {
 		const cameraPosition =
-			this.schematicRenderer.cameraManager.activeCamera.position;
+			this.schematicRenderer.cameraManager.activeCamera.position as THREE.Vector3;
 		for (const key in this.annotations) {
 			const annotation = this.annotations[key];
 			if (annotation && annotation.label && annotation.label.position) {

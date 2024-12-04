@@ -36,7 +36,6 @@
 						},
 					},
 				},
-				plugins: [daisyui],
 				daisyui: {
 					themes: ["dark", "light"],
 				},
@@ -568,9 +567,9 @@
 								// Initialize with current camera position
 								const initialPosition = this.renderer.cameraManager.position;
 								this.cameraPosition = {
-									x: initialPosition.x.toFixed(2),
-									y: initialPosition.y.toFixed(2),
-									z: initialPosition.z.toFixed(2),
+									x: initialPosition?.x.toFixed(2),
+									y: initialPosition?.y.toFixed(2),
+									z: initialPosition?.z.toFixed(2),
 								};
 
 								// Initialize schematics list

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { SchematicObject } from "./SchematicObject";
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils"; // Adjust the import path
-import { WorldMeshBuilder } from "./WorldMeshBuilder"; // Adjust the import path
+import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import path
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
 import { SchematicRenderer } from "../SchematicRenderer";
@@ -20,7 +20,13 @@ export class SchematicManager {
 
 	) {
 		this.schematicRenderer = schematicRenderer;
-		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder;
+		if (!this.schematicRenderer) {
+			throw new Error("SchematicRenderer is required.");
+		}
+		if (!this.schematicRenderer.worldMeshBuilder) {
+			throw new Error("WorldMeshBuilder is required.");
+		}
+		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 		this.singleSchematicMode = options.singleSchematicMode || false;

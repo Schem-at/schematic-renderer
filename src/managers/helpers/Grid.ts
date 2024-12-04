@@ -7,7 +7,6 @@ export class Grid extends THREE.Object3D {
 	private labels: THREE.Sprite[] = [];
 	private camera: THREE.Camera;
 	private majorStep: number;
-	private minorStep: number;
 	private gridSize: number;
 
 	constructor(
@@ -22,7 +21,6 @@ export class Grid extends THREE.Object3D {
 		this.camera = camera;
 		this.gridSize = gridSize;
 		this.majorStep = majorStep;
-		this.minorStep = minorStep;
 
 		// Create minor grid
 		this.minorGrid = this.createGridLines(minorStep, minorColor, 1);

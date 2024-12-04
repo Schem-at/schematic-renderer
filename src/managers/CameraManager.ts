@@ -42,7 +42,6 @@ export class CameraManager extends EventEmitter {
   private animationStartTime: number = 0;
   private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
   private animationStartRotation: THREE.Euler = new THREE.Euler();
-  private tempQuaternion: THREE.Quaternion = new THREE.Quaternion();
   private recordingManager: RecordingManager;
 
   public cameraPathManager: CameraPathManager;
@@ -155,13 +154,13 @@ export class CameraManager extends EventEmitter {
         await this.recordingManager.startRecording(duration, recording.options);
       }
 
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve, _) => {
         this.isAnimating = true;
         this.animationStartTime = performance.now();
         
         // Store initial camera state
-        this.animationStartPosition.copy(this.activeCamera.position);
-        this.animationStartRotation.copy(this.activeCamera.rotation);
+        this.animationStartPosition.copy(this.activeCamera.position as THREE.Vector3);
+        this.animationStartRotation.copy(this.activeCamera.rotation as THREE.Euler);
 
         // Temporarily disable controls if they exist
         if (updateControls) {
@@ -183,20 +182,20 @@ export class CameraManager extends EventEmitter {
           const { position, rotation, target } = cameraPath!.getPoint(t);
         
           // Set camera position directly
-          this.activeCamera.position.copy(position);
+          (this.activeCamera.position as THREE.Vector3).copy(position);
         
           if (lookAtTarget) {
             // Look at the target point
             this.activeCamera.lookAt(target);
           } else {
             // Set camera rotation directly
-            this.activeCamera.rotation.copy(rotation);
+            (this.activeCamera.rotation as THREE.Euler).copy(rotation);
           }
 
           // Emit camera movement event
           this.emit("cameraMove", {
-            position: this.activeCamera.position.clone(),
-            rotation: this.activeCamera.rotation.clone(),
+            position: (this.activeCamera.position as THREE.Vector3).clone(),
+            rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
             progress: t,
           });
         
@@ -231,11 +230,6 @@ export class CameraManager extends EventEmitter {
             }
         
             resolve();
-          }
-
-          // Render for recording if needed
-          if (recording?.enabled) {
-            this.recordingManager.render();
           }
         };
 
@@ -310,12 +304,12 @@ export class CameraManager extends EventEmitter {
     controls.addEventListener("change", () => {
       this.emit("propertyChanged", {
         property: "position",
-        value: this.activeCamera.position.clone(),
+        value: (this.activeCamera.position as THREE.Vector3).clone(),
       });
 
       this.emit("propertyChanged", {
         property: "rotation",
-        value: this.activeCamera.rotation.clone(),
+        value: (this.activeCamera.rotation as THREE.Euler).clone(),
       });
     });
   }
@@ -360,6 +354,9 @@ export class CameraManager extends EventEmitter {
   }
 
   public focusOnSchematics() {
+    if (!this.schematicRenderer.schematicManager) {
+      return;
+    }
     if (this.schematicRenderer.schematicManager.isEmpty()) {
       return;
     }
@@ -367,7 +364,7 @@ export class CameraManager extends EventEmitter {
     const maxDimensions = this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
 
     this.activeCamera.lookAt(averagePosition);
-    this.activeCamera.position.set(
+    (this.activeCamera.position as THREE.Vector3).set(
       averagePosition.x + maxDimensions.x,
       averagePosition.y + maxDimensions.y,
       averagePosition.z + maxDimensions.z

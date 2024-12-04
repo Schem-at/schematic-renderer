@@ -11,7 +11,7 @@ export type DefaultPackCallback = () => Promise<Blob>;
 
 export class ResourcePackManager {
 	private db: IDBDatabase | null = null;
-	private initPromise: Promise<void>;
+	public initPromise: Promise<void>;
 
 	constructor() {
 		this.initPromise = this.initDB();

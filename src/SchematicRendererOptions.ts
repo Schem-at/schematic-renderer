@@ -7,6 +7,7 @@ import { CameraManagerOptions } from './managers/CameraManager';
 import { SelectableObject } from './managers/SelectableObject';
 
 export interface SchematicRendererOptions {
+  resourcePackBlobs: any;
   // Global toggles for enabling/disabling functionalities
   enableInteraction?: boolean;
   enableDragAndDrop?: boolean;

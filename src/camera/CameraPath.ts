@@ -5,7 +5,15 @@ import * as THREE from 'three';
 export abstract class CameraPath {
   protected pathFunction: (t: number) => { position: THREE.Vector3; rotation: THREE.Euler, target: THREE.Vector3 };
 
-  constructor() {}
+  constructor() {
+    this.pathFunction = (_: number) => {
+      return {
+        position: new THREE.Vector3(),
+        rotation: new THREE.Euler(),
+        target: new THREE.Vector3(),
+      };
+    };
+  }
 
   public getPoint(t: number): { position: THREE.Vector3; rotation: THREE.Euler, target: THREE.Vector3 } {
     return this.pathFunction(t);

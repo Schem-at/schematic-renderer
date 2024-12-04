@@ -3,7 +3,6 @@ import * as THREE from "three";
 import { BlockMeshBuilder } from "./BlockMeshBuilder";
 import {
 	INVISIBLE_BLOCKS,
-	faceToFacingVector,
 	facingvectorToFace,
 	getDegreeRotationMatrix,
 	occludedFacesIntToList,
@@ -12,7 +11,6 @@ import {
 import { Vector } from "./types";
 // @ts-ignore
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
-import { ResourceLoader } from "./ResourceLoader";
 import { SchematicRenderer } from "./SchematicRenderer";
 
 export interface ChunkDimensions {
@@ -82,7 +80,7 @@ export class WorldMeshBuilder {
 
 				// Check for rotation with model holder
 				const holder = (
-					await this.schematicRenderer.resourceLoader.getBlockMeta({
+					await this.schematicRenderer.resourceLoader?.getBlockMeta({
 						name,
 						properties,
 					})
@@ -112,8 +110,8 @@ export class WorldMeshBuilder {
 		}
 		// Create meshes from block components
 		const meshes =
-			this.schematicRenderer.resourceLoader.createMeshesFromBlocks(components);
-		return meshes;
+			this.schematicRenderer.resourceLoader?.createMeshesFromBlocks(components);
+		return meshes as THREE.Mesh[];
 	}
 
 	public async buildSchematicMeshes(

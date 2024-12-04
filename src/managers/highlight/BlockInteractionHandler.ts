@@ -3,26 +3,17 @@ import * as THREE from "three";
 import { EventEmitter } from "events";
 // @ts-ignore
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
-import { SceneManager } from "../SceneManager";
 import { SchematicManager } from "../SchematicManager";
 
 export class BlockInteractionHandler {
 	private eventEmitter: EventEmitter;
-	private sceneManager: SceneManager;
 	private schematicManager: SchematicManager;
-	private chunkDimensions = {
-		chunkWidth: 64,
-		chunkHeight: 64,
-		chunkLength: 64,
-	};
 
 	constructor(
 		eventEmitter: EventEmitter,
-		sceneManager: SceneManager,
 		schematicManager: SchematicManager
 	) {
 		this.eventEmitter = eventEmitter;
-		this.sceneManager = sceneManager;
 		this.schematicManager = schematicManager;
 
 		this.eventEmitter.on("interactBlock", this.onInteractBlock);

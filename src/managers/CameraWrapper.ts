@@ -1,12 +1,14 @@
 // managers/CameraWrapper.ts
 import * as THREE from "three";
 import { EventEmitter } from "events";
+// @ts-ignore
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+// @ts-ignore
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls";
-import { CreativeControls } from "../controls/CreativeControls";
 
 export class CameraWrapper extends EventEmitter {
 	private _camera: THREE.Camera;
+	// @ts-ignore
 	private _type: "perspective" | "orthographic";
 	private rendererDomElement: HTMLCanvasElement;
 
@@ -69,7 +71,7 @@ export class CameraWrapper extends EventEmitter {
 		if (this._camera instanceof THREE.PerspectiveCamera) {
 			return this._camera.fov;
 		}
-		return null;
+		return 75;
 	}
 
 	set fov(value: number) {
@@ -107,7 +109,7 @@ export class CameraWrapper extends EventEmitter {
 		return this._camera.rotation;
 	}
 
-	set rotation(value: THREE.Euler | THREE.EulerTuple) {
+	set rotation(value: THREE.Euler | [number, number, number]) {
 		if (Array.isArray(value)) {
 			this._camera.rotation.set(value[0], value[1], value[2]);
 		} else {
@@ -171,10 +173,9 @@ export class CameraWrapper extends EventEmitter {
 		this._type = type;
 		if (type === "perspective") {
 			const currentCamera = this._camera as THREE.OrthographicCamera;
-			const d = 20;
 			const aspect = window.innerWidth / window.innerHeight;
 			this._camera = new THREE.PerspectiveCamera(
-				currentCamera.fov,
+				75,
 				aspect,
 				currentCamera.near,
 				currentCamera.far

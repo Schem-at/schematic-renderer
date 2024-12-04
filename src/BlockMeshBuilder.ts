@@ -50,11 +50,20 @@ export class BlockMeshBuilder {
 		this.blockMeshCache = new Map();
 		this.base64MaterialMap = new Map();
 		this.faceDataCache = new Map();
+		if (!this.schematicRenderer) {
+			throw new Error("SchematicRenderer is required.");
+		}
+		if (!this.schematicRenderer.resourceLoader) {
+			throw new Error("ResourceLoader is required.");
+		}
 	}
 
 	@Monitor
 	public getMaterialId(model: BlockModel, faceData: any, color: THREE.Color) {
 		// console.log("getMaterialId", model, faceData, color);
+		if (!this.schematicRenderer.resourceLoader) {
+			throw new Error("ResourceLoader is not set");
+		}
 		const textureName =
 			this.schematicRenderer.resourceLoader.resolveTextureName(
 				faceData.texture,
@@ -88,7 +97,7 @@ export class BlockMeshBuilder {
 		block: any
 	) {
 		const subMaterials: { [key: string]: string | null } = {};
-		const uvs: { [key: string]: [number, number][] } = {};
+		const uvs: { [key: string]: [number, number, number, number] } = {};
 		if (!element.faces) {
 			return { subMaterials, uvs };
 		}
@@ -97,7 +106,6 @@ export class BlockMeshBuilder {
 			if (!faceData || faceData.texture == "#overlay") {
 				subMaterials[face] = null;
 				// Use default UVs
-				const defaultUv: [number, number, number, number] = [0, 0, 16, 16];
 				// Convert to per-vertex UVs
 				uvs[face] = DEFAULT_UV.map((u) => u / 16) as [
 					number,
@@ -107,16 +115,17 @@ export class BlockMeshBuilder {
 				];
 				continue;
 			}
+			
 			const textureName =
-				this.schematicRenderer.resourceLoader.resolveTextureName(
+				this.schematicRenderer.resourceLoader?.resolveTextureName(
 					faceData.texture,
 					model
 				);
 
 			const materialColor =
-				this.schematicRenderer.resourceLoader.getColorForElement(
+				this.schematicRenderer.resourceLoader?.getColorForElement(
 					faceData,
-					textureName,
+					textureName as string,
 					block
 				);
 			const materialId = this.getMaterialId(
@@ -126,7 +135,7 @@ export class BlockMeshBuilder {
 			);
 			if (!this.schematicRenderer.materialMap.has(materialId)) {
 				const material =
-					await this.schematicRenderer.resourceLoader.getTextureMaterial(
+					await this.schematicRenderer.resourceLoader?.getTextureMaterial(
 						model,
 						faceData,
 						TRANSPARENT_BLOCKS.has(block.name) ||
@@ -139,7 +148,7 @@ export class BlockMeshBuilder {
 					material ?? new THREE.MeshBasicMaterial()
 				);
 				const base64Material =
-					await this.schematicRenderer.resourceLoader.getBase64Image(
+					await this.schematicRenderer.resourceLoader?.getBase64Image(
 						model,
 						faceData
 					);
@@ -273,7 +282,7 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
-		const { modelOptions } = await this.schematicRenderer.resourceLoader.getBlockMeta(block);
+		const { modelOptions } = await this.schematicRenderer.resourceLoader?.getBlockMeta(block);
 		let modelIndex = 0;
 		let start = performance.now();
 		for (const modelHolder of modelOptions.holders) {
@@ -285,7 +294,7 @@ export class BlockMeshBuilder {
 				z: modelHolder.z ?? 0,
 			};
 
-			const model = await this.schematicRenderer.resourceLoader.loadModel(modelHolder.model, block.properties);
+			const model = await this.schematicRenderer.resourceLoader?.loadModel(modelHolder.model, block.properties);
 
 			const elements = model?.elements;
 

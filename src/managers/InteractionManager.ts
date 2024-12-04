@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
-import { SchematicObject } from "./SchematicObject";
+
 
 export interface InteractionManagerOptions {
 	enableSelection?: boolean;
@@ -17,7 +17,6 @@ export class InteractionManager {
 	private hoveredObject: SelectableObject | null = null;
 	private canvas: HTMLCanvasElement;
 	private selectedObject: SelectableObject | null = null;
-	private boundingBoxHelper: THREE.BoxHelper | null = null;
   
 	constructor(schematicRenderer: SchematicRenderer, options: InteractionManagerOptions) {
 	  this.schematicRenderer = schematicRenderer;
@@ -60,13 +59,13 @@ export class InteractionManager {
 	  
 		switch (event.key) {
 		  case 'g': // Press 'g' for translate mode
-			this.schematicRenderer.gizmoManager.setMode('translate');
+			this.schematicRenderer.gizmoManager?.setMode('translate');
 			break;
 		  case 'r': // Press 'r' for rotate mode
-			this.schematicRenderer.gizmoManager.setMode('rotate');
+			this.schematicRenderer.gizmoManager?.setMode('rotate');
 			break;
 		  case 's': // Press 's' for scale mode
-			this.schematicRenderer.gizmoManager.setMode('scale');
+			this.schematicRenderer.gizmoManager?.setMode('scale');
 			break;
 		  case 'Escape': // Press 'Escape' to deselect object
 			this.deselectObject();
@@ -85,7 +84,7 @@ export class InteractionManager {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
 
 		const selectableObjects =
-			this.schematicRenderer.schematicManager.getSelectableObjects();
+			this.schematicRenderer.schematicManager?.getSelectableObjects();
 
 		if (!selectableObjects || selectableObjects.length === 0) {
 			console.warn("No selectable objects found");
@@ -147,7 +146,7 @@ export class InteractionManager {
 		while (current) {
 			console.log("Checking object:", current.name, current.type);
 			if (current instanceof THREE.Group && current.name) {
-				const schematic = this.schematicRenderer.schematicManager.getSchematic(
+				const schematic = this.schematicRenderer.schematicManager?.getSchematic(
 					current.name
 				);
 				if (schematic) {
@@ -163,7 +162,7 @@ export class InteractionManager {
 
 	private visualizeBoundingBoxes() {
 		const selectableObjects =
-			this.schematicRenderer.schematicManager.getSelectableObjects();
+			this.schematicRenderer.schematicManager?.getSelectableObjects();
 		selectableObjects.forEach((object) => {
 			const box = new THREE.Box3().setFromObject(object);
 			const helper = new THREE.Box3Helper(box, new THREE.Color(0xffff00));
@@ -183,9 +182,9 @@ export class InteractionManager {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
 
 		const selectableObjects =
-			this.schematicRenderer.schematicManager.getSelectableObjects();
+			this.schematicRenderer.schematicManager?.getSelectableObjects();
 
-		const intersects = this.raycaster.intersectObjects(selectableObjects, true);
+		const intersects = this.raycaster.intersectObjects(selectableObjects as THREE.Object3D[], true);
 
 		if (intersects.length > 0) {
 			const intersectedObject = intersects[0].object;

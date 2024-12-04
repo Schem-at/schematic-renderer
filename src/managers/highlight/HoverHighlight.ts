@@ -1,15 +1,17 @@
 // HoverHighlight.ts
 import * as THREE from "three";
 import { Highlight } from "./Highlight";
-import { EventEmitter } from "events";
 import { BlockData } from "./types";
 import { SchematicRenderer } from "../../SchematicRenderer";
-import { SelectableObject } from "../SelectableObject";
+import { SelectableObject } from "../../managers/SelectableObject";
+
 
 export class HoverHighlight implements Highlight {
 	private schematicRenderer: SchematicRenderer;
 	private hoverMesh: THREE.Mesh | null = null;
+	// @ts-ignore
 	private raycaster: THREE.Raycaster;
+	// @ts-ignore
 	private mouse: THREE.Vector2;
 	private lastHoveredObject: SelectableObject | null = null;
 
@@ -36,6 +38,7 @@ export class HoverHighlight implements Highlight {
 		this.removeHoverMesh();
 	}
 
+	// @ts-ignore
 	update(deltaTime: number) {
 		// No periodic update needed for hover effect
 	}
@@ -88,8 +91,12 @@ export class HoverHighlight implements Highlight {
 		}
 	}
 
+
+
+	// @ts-ignore
 	private getBlockData(position: THREE.Vector3): BlockData | null {
 		// Access the schematic to get block data
+		if (!this.schematicRenderer.schematicManager) return null;
 		const firstSchematic =
 			this.schematicRenderer.schematicManager.getAllSchematics()[0];
 		if (!firstSchematic) return null;

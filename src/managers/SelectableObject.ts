@@ -1,4 +1,4 @@
-interface SelectableObject {
+export interface SelectableObject {
 	id: string;
 	position: THREE.Vector3;
 	rotation: THREE.Euler;

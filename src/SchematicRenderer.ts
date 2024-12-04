@@ -47,6 +47,7 @@ const DEFAULT_OPTIONS: SchematicRendererOptions = {
     cameraOptions: {
         position: [5, 5, 5],
     },
+    resourcePackBlobs: {},
 };
 
 export class SchematicRenderer {
@@ -56,17 +57,18 @@ export class SchematicRenderer {
     public eventEmitter: EventEmitter;
     public cameraManager: CameraManager;
     public sceneManager: SceneManager;
-    public uiManager: UIManager;
-    public renderManager: RenderManager;
-    public interactionManager: InteractionManager;
+    public uiManager: UIManager | undefined;
+    public renderManager: RenderManager | undefined;
+    public interactionManager: InteractionManager | undefined;
     public dragAndDropManager?: DragAndDropManager;
-    public highlightManager: HighlightManager;
-    public schematicManager: SchematicManager;
-    public worldMeshBuilder: WorldMeshBuilder;
-    public gizmoManager: GizmoManager;
-    public resourceLoader: ResourceLoader;
+    public highlightManager: HighlightManager | undefined;
+    public schematicManager: SchematicManager | undefined;
+    public worldMeshBuilder: WorldMeshBuilder | undefined;
+    public gizmoManager: GizmoManager | undefined;
+    public resourceLoader: ResourceLoader | undefined;
     public materialMap: Map<string, THREE.Material>;
     private resourcePackManager: ResourcePackManager;
+    // @ts-ignore
     private wasmModule: any;
     public state: {
         cameraPosition: THREE.Vector3;
@@ -76,7 +78,9 @@ export class SchematicRenderer {
         canvas: HTMLCanvasElement,
         schematicData: { [key: string]: () => Promise<ArrayBuffer> } = {},
         defaultResourcePacks: Record<string, DefaultPackCallback> = {},
-        options: SchematicRendererOptions = {}
+        options: SchematicRendererOptions = {
+            resourcePackBlobs: undefined
+        }
     ) {
         this.canvas = canvas;
         this.options = merge({}, DEFAULT_OPTIONS, options);
@@ -108,12 +112,11 @@ export class SchematicRenderer {
 
         // Start the initialization process
         this.initialize(schematicData, defaultResourcePacks);
-
         this.uiManager = new UIManager(this);
     }
 
     public updateCameraPosition(): void {
-        this.state.cameraPosition.copy(this.cameraManager.activeCamera.position);
+        this.state.cameraPosition.copy(this.cameraManager.activeCamera.position as THREE.Vector3);
     }
 
     private async initialize(
@@ -141,8 +144,7 @@ export class SchematicRenderer {
             // Initialize optional components
             if (this.options.enableGizmos) {
                 this.gizmoManager = new GizmoManager(
-                    this,
-                    this.options.gizmoOptions || {}
+                    this
                 );
             }
 
@@ -166,11 +168,14 @@ export class SchematicRenderer {
     }
 
     private adjustCameraToSchematics(): void {
+        if (!this.schematicManager) {
+            return;
+        }
         const averagePosition = this.schematicManager.getSchematicsAveragePosition();
         const maxDimensions = this.schematicManager.getMaxSchematicDimensions();
 
         this.cameraManager.activeCamera.lookAt(averagePosition);
-        this.cameraManager.activeCamera.position.set(
+        (this.cameraManager.activeCamera.position as THREE.Vector3).set(
             averagePosition.x + maxDimensions.x,
             averagePosition.y + maxDimensions.y,
             averagePosition.z + maxDimensions.z
@@ -218,7 +223,12 @@ export class SchematicRenderer {
     private animate(): void {
         requestAnimationFrame(() => this.animate());
         const deltaTime = this.clock.getDelta();
-
+        if (!this.highlightManager) {
+            return;
+        }
+        if (!this.renderManager) {
+            return;
+        }
         this.highlightManager.update(deltaTime);
         this.gizmoManager?.update();
         this.renderManager.render();
@@ -253,16 +263,24 @@ export class SchematicRenderer {
         await this.resourceLoader.initialize();
         
         this.materialMap.clear();
-        await this.worldMeshBuilder.rebuildWorldMesh();
-        this.sceneManager.updateScene();
     }
 
     public dispose(): void {
+        if (!this.renderManager) {
+            return;
+        }
+        if (!this.highlightManager) {
+            return;
+        }
+        if (!this.uiManager) {
+            return;
+        }
         this.highlightManager.dispose();
+        this.renderManager.renderer.dispose();
+
         this.dragAndDropManager?.dispose();
         this.uiManager.dispose();
         this.cameraManager.dispose();
-        this.renderManager.renderer.dispose();
         // Cleanup event listeners
         this.eventEmitter.removeAllListeners();
     }

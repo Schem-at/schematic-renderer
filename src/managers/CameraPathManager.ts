@@ -2,7 +2,6 @@
 import { CameraPath } from '../camera/CameraPath';
 import { CircularCameraPath } from '../camera/CircularCameraPath';
 import * as THREE from 'three';
-import { SceneManager } from './SceneManager';
 import { SchematicRenderer } from '../SchematicRenderer';
 
 export interface CameraPathManagerOptions {

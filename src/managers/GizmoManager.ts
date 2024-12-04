@@ -1,4 +1,5 @@
 import * as THREE from "three";
+// @ts-ignore
 import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
@@ -19,9 +20,12 @@ export class GizmoManager {
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
+		if (!this.schematicRenderer.sceneManager) {
+			throw new Error("SceneManager is required to use GizmoManager");
+		}
 		this.transformControls = new TransformControls(
 			this.schematicRenderer.cameraManager.activeCamera.camera,
-			this.schematicRenderer.renderManager.renderer.domElement
+			this.schematicRenderer.renderManager?.renderer.domElement
 		);
 		this.schematicRenderer.sceneManager.scene.add(this.transformControls);
 
@@ -41,7 +45,7 @@ export class GizmoManager {
 		this.transformControls.addEventListener("objectChange", () => {
 			const object = this.transformControls.object;
 			if (object && object instanceof THREE.Object3D) {
-				const schematic = this.schematicRenderer.schematicManager.getSchematic(
+				const schematic = this.schematicRenderer.schematicManager?.getSchematic(
 					object.name
 				);
 				if (schematic) {
@@ -50,7 +54,7 @@ export class GizmoManager {
 			}
 		});
 
-		this.transformControls.addEventListener("dragging-changed", (event) => {
+		this.transformControls.addEventListener("dragging-changed", (event : any) => {
 			const controls =
 				this.schematicRenderer.cameraManager.controls.get("orbit");
 			console.log(controls);

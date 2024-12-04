@@ -1,21 +1,17 @@
 // managers/BlockPlacementHandler.ts
 import * as THREE from "three";
-import { EventEmitter } from "./EventEmitter";
-import { SceneManager } from "./SceneManager";
-import { SchematicManager } from "./SchematicManager";
+import { EventEmitter } from "events";
+import { SchematicManager } from "../SchematicManager";
 
 export class BlockPlacementHandler {
 	private eventEmitter: EventEmitter;
-	private sceneManager: SceneManager;
 	private schematicManager: SchematicManager;
 
 	constructor(
 		eventEmitter: EventEmitter,
-		sceneManager: SceneManager,
 		schematicManager: SchematicManager
 	) {
 		this.eventEmitter = eventEmitter;
-		this.sceneManager = sceneManager;
 		this.schematicManager = schematicManager;
 
 		this.eventEmitter.on("placeBlock", this.onPlaceBlock);
