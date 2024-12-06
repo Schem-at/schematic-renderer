@@ -1,160 +1,180 @@
-// managers/WorldMeshBuilder.ts
 import * as THREE from "three";
 import { BlockMeshBuilder } from "./BlockMeshBuilder";
 import {
-	INVISIBLE_BLOCKS,
-	facingvectorToFace,
-	getDegreeRotationMatrix,
-	occludedFacesIntToList,
-	rotateVectorMatrix,
+    INVISIBLE_BLOCKS,
+    facingvectorToFace,
+    getDegreeRotationMatrix,
+    occludedFacesIntToList,
+    rotateVectorMatrix,
 } from "./utils";
 import { Vector } from "./types";
-// @ts-ignore
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
 import { SchematicRenderer } from "./SchematicRenderer";
 
-export interface ChunkDimensions {
-	chunkWidth: number;
-	chunkHeight: number;
-	chunkLength: number;
-}
-
-export interface BlockPosition {
-	x: number;
-	y: number;
-	z: number;
-}
-
-export interface BlockData extends BlockPosition {
-	name: string;
-	properties: Record<string, string>;
-}
-
-
+// Pre-allocated reusable objects
+const REUSABLE_VECTOR = new THREE.Vector3();
 
 export class WorldMeshBuilder {
-	private schematicRenderer: SchematicRenderer;
-	private blockMeshBuilder: BlockMeshBuilder;
+    private schematicRenderer: SchematicRenderer;
+    private blockMeshBuilder: BlockMeshBuilder;
+    private blockCache: Map<string, any>;
+    private metaCache: Map<string, any>;
 
-	constructor(schematicRenderer: SchematicRenderer) {
-		this.schematicRenderer = schematicRenderer;
-		this.blockMeshBuilder = new BlockMeshBuilder(this.schematicRenderer);
-	}
-	public async getChunkMesh(
-		chunk: BlockData[],
-		schematic: SchematicWrapper
-	): Promise<THREE.Mesh[]> {
-		const maxBlocksAllowed = 100000000;
-		let count = 0;
-		const components: Record<string, any[]> = {};
+    constructor(schematicRenderer: SchematicRenderer) {
+        this.schematicRenderer = schematicRenderer;
+        this.blockMeshBuilder = new BlockMeshBuilder(this.schematicRenderer);
+        this.blockCache = new Map();
+        this.metaCache = new Map();
+    }
 
-		for (const blockData of chunk) {
-			if (count > maxBlocksAllowed) {
-				break;
-			}
+    private async getBlockMeta(name: string, properties: Record<string, string>) {
+        const cacheKey = `${name}-${JSON.stringify(properties)}`;
+        if (!this.metaCache.has(cacheKey)) {
+            const meta = await this.schematicRenderer.resourceLoader?.getBlockMeta({
+                name,
+                properties,
+            });
+            this.metaCache.set(cacheKey, meta);
+            return meta;
+        }
+        return this.metaCache.get(cacheKey);
+    }
 
-			const { x, y, z, name, properties } = blockData;
+    private async processBatch(
+        batch: BlockData[],
+        schematic: SchematicWrapper,
+        components: Record<string, any[]>
+    ): Promise<void> {
+        for (const blockData of batch) {
+            const { x, y, z, name, properties } = blockData;
 
-			if (INVISIBLE_BLOCKS.has(name)) {
-				continue;
-			}
+            if (INVISIBLE_BLOCKS.has(name)) continue;
 
-			// Get occluded faces for the block
-			const occludedFaces = occludedFacesIntToList(
-				this.blockMeshBuilder.getOccludedFacesForBlock(
-					schematic,
-					blockData,
-					new THREE.Vector3(x, y, z)
-				)
-			);
+            // Reuse vector for position
+            REUSABLE_VECTOR.set(x, y, z);
+            
+            const occludedFaces = occludedFacesIntToList(
+                this.blockMeshBuilder.getOccludedFacesForBlock(
+                    schematic,
+                    blockData,
+                    REUSABLE_VECTOR
+                )
+            );
 
-			// Get block components (meshes) from cache or build new
-			const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
-				{ name, properties },
-				{ x, y, z }
-			);
+            const cacheKey = `${name}-${JSON.stringify(properties)}`;
+            let blockComponents = this.blockCache.get(cacheKey);
 
-			for (const key in blockComponents) {
-				const materialId = blockComponents[key].materialId;
-				const blockComponent = blockComponents[key];
+            if (!blockComponents) {
+                blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
+                    { name, properties },
+                    { x, y, z }
+                );
+                this.blockCache.set(cacheKey, blockComponents);
+            }
 
-				// Check for rotation with model holder
-				const holder = (
-					await this.schematicRenderer.resourceLoader?.getBlockMeta({
-						name,
-						properties,
-					})
-				).modelOptions.holders[0];
-				const rotationMatrix = getDegreeRotationMatrix(
-					-(holder.x ?? 0),
-					-(holder.y ?? 0),
-					-(holder.z ?? 0)
-				);
-				const newNormal = rotateVectorMatrix(
-					blockComponent.normals.slice(0, 3),
-					rotationMatrix
-				) as Vector;
-				const newFace = facingvectorToFace(newNormal);
+            for (const key in blockComponents) {
+                const component = blockComponents[key];
+                if (!component || !component.normals || component.normals.length < 3) {
+                    continue;
+                }
 
-				if (occludedFaces[newFace]) {
-					continue;
-				}
+                const materialId = component.materialId;
+                const blockMeta = await this.getBlockMeta(name, properties);
+                const holder = blockMeta?.modelOptions?.holders?.[0] || { x: 0, y: 0, z: 0 };
 
-				if (!components[materialId]) {
-					components[materialId] = [];
-				}
-				components[materialId].push([blockComponents[key], [x, y, z]]);
-			}
+                // Get rotation matrix safely
+                const rotationMatrix = getDegreeRotationMatrix(
+                    -(holder.x || 0),
+                    -(holder.y || 0),
+                    -(holder.z || 0)
+                );
 
-			count++;
-		}
-		// Create meshes from block components
-		const meshes =
-			this.schematicRenderer.resourceLoader?.createMeshesFromBlocks(components);
-		return meshes as THREE.Mesh[];
-	}
+                // Ensure we have valid normals before rotating
+                const normalVector = component.normals.slice(0, 3);
+                if (!normalVector || normalVector.length !== 3) {
+                    continue;
+                }
 
-	public async buildSchematicMeshes(
-		schematic: SchematicWrapper,
-		chunkDimensions: ChunkDimensions = {
-			chunkWidth: 16,
-			chunkHeight: 16,
-			chunkLength: 16,
-		}
-	): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
-		const chunks = schematic.chunks(
-			chunkDimensions.chunkWidth,
-			chunkDimensions.chunkHeight,
-			chunkDimensions.chunkLength
-		);
+                const newNormal = rotateVectorMatrix(normalVector, rotationMatrix) as Vector;
+                if (!newNormal) {
+                    continue;
+                }
 
-		const schematicMeshes: THREE.Mesh[] = [];
-		const chunkMap: Map<string, THREE.Mesh[]> = new Map();
+                const newFace = facingvectorToFace(newNormal);
+                if (occludedFaces[newFace]) {
+                    continue;
+                }
 
-		const maxChunksAllowed = 100000;
-		let chunkCount = 0;
-		for (const chunkData of chunks) {
-			if (chunkCount > maxChunksAllowed) {
-				break;
-			}
+                if (!components[materialId]) {
+                    components[materialId] = [];
+                }
+                components[materialId].push([component, [x, y, z]]);
+            }
+        }
+    }
 
-			chunkCount++;
-			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
+    public async getChunkMesh(
+        chunk: BlockData[],
+        schematic: SchematicWrapper
+    ): Promise<THREE.Mesh[]> {
+        const components: Record<string, any[]> = {};
+        const BATCH_SIZE = 100; // Reduced batch size for better stability
 
-			const chunkMeshes = await this.getChunkMesh(
-				blocks as BlockData[],
-				schematic
-			);
-			if (chunkMeshes.length === 0) {
-				continue;
-			}
+        for (let i = 0; i < chunk.length; i += BATCH_SIZE) {
+            const batch = chunk.slice(i, i + BATCH_SIZE);
+            await this.processBatch(batch, schematic, components);
+            // Small delay to prevent blocking
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
 
-			// Create a key for the chunk position
-			const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
-			chunkMap.set(chunkKey, chunkMeshes);
+        const meshes = await this.schematicRenderer.resourceLoader?.createMeshesFromBlocks(components);
+        return meshes as THREE.Mesh[];
+    }
 
-			schematicMeshes.push(...chunkMeshes);
-		}
-		return { meshes: schematicMeshes, chunkMap };
-	}
+    public async buildSchematicMeshes(
+        schematic: SchematicWrapper,
+        chunkDimensions: ChunkDimensions = {
+            chunkWidth: 16,
+            chunkHeight: 16,
+            chunkLength: 16,
+        }
+    ): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
+        const chunks = schematic.chunks(
+            chunkDimensions.chunkWidth,
+            chunkDimensions.chunkHeight,
+            chunkDimensions.chunkLength
+        );
+
+        const schematicMeshes: THREE.Mesh[] = [];
+        const chunkMap: Map<string, THREE.Mesh[]> = new Map();
+        
+        // Process chunks sequentially to prevent memory issues
+        for (const chunkData of chunks) {
+            const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
+            
+            try {
+                const chunkMeshes = await this.getChunkMesh(
+                    blocks as BlockData[],
+                    schematic
+                );
+                
+                if (chunkMeshes && chunkMeshes.length > 0) {
+                    const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
+                    chunkMap.set(chunkKey, chunkMeshes);
+                    schematicMeshes.push(...chunkMeshes);
+                }
+            } catch (error) {
+                console.error(`Error processing chunk at ${chunk_x},${chunk_y},${chunk_z}:`, error);
+                continue;
+            }
+        }
+
+        return { meshes: schematicMeshes, chunkMap };
+    }
+
+    // Cleanup method
+    public dispose(): void {
+        this.blockCache.clear();
+        this.metaCache.clear();
+    }
 }

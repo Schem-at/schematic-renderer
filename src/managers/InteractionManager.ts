@@ -133,10 +133,10 @@ export class InteractionManager {
 				this.hoveredObject = null;
 			}
 		} catch (error) {
-			console.error("Error in checkHover:", error);
-			console.log("Camera:", this.camera);
-			console.log("Mouse:", this.mouse);
-			console.log("Valid objects:", validObjects);
+			// console.error("Error in checkHover:", error);
+			// console.log("Camera:", this.camera);
+			// console.log("Mouse:", this.mouse);
+			// console.log("Valid objects:", validObjects);
 		}
 	}
 
@@ -145,7 +145,6 @@ export class InteractionManager {
 	): SelectableObject | null {
 		let current: THREE.Object3D | null = object;
 		while (current) {
-			console.log("Checking object:", current.name, current.type);
 			if (current instanceof THREE.Group && current.name) {
 				const schematic = this.schematicRenderer.schematicManager?.getSchematic(
 					current.name

@@ -23,32 +23,11 @@ import {
 // @ts-ignore
 import init from "./wasm/minecraft_schematic_utils";
 import { GizmoManager } from "./managers/GizmoManager";
-import { SchematicRendererOptions } from "./SchematicRendererOptions";
+import { SchematicRendererOptions, DEFAULT_OPTIONS } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
 
-const DEFAULT_OPTIONS: SchematicRendererOptions = {
-    showCameraPathVisualization: false,
-    enableInteraction: false,
-    enableDragAndDrop: false,
-    enableGizmos: false,
-    callbacks: {},
-    interactionOptions: {
-        enableSelection: false,
-        enableMovingSchematics: false,
-    },
-    dragAndDropOptions: {
-        acceptedFileTypes: [],
-    },
-    gizmoOptions: {
-        enableRotation: false,
-        enableScaling: false,
-    },
-    cameraOptions: {
-        position: [5, 5, 5],
-    },
-    resourcePackBlobs: {},
-};
+
 
 export class SchematicRenderer {
     public canvas: HTMLCanvasElement;
@@ -78,9 +57,7 @@ export class SchematicRenderer {
         canvas: HTMLCanvasElement,
         schematicData: { [key: string]: () => Promise<ArrayBuffer> } = {},
         defaultResourcePacks: Record<string, DefaultPackCallback> = {},
-        options: SchematicRendererOptions = {
-            resourcePackBlobs: undefined
-        }
+        options: SchematicRendererOptions = {}
     ) {
         this.canvas = canvas;
         this.options = merge({}, DEFAULT_OPTIONS, options);

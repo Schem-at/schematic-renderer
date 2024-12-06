@@ -11,14 +11,16 @@ export class SceneManager extends EventEmitter {
 	public scene: THREE.Scene;
 	private gridHelper: Grid | null = null;
 	private axesHelper: Axes | null = null;
-	private _showGrid: boolean = true;
-	private _showAxes: boolean = true;
+	private _showGrid: boolean;
+	private _showAxes: boolean;
 	private lights: Map<string, THREE.Light> = new Map();
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.scene = new THREE.Scene();
+		this._showGrid = this.schematicRenderer.options.showGrid ?? false;
+		this._showAxes = this.schematicRenderer.options.showAxes ?? false;
 
 
 		// Add ambient light

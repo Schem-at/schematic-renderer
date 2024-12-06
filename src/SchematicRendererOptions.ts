@@ -7,11 +7,14 @@ import { CameraManagerOptions } from './managers/CameraManager';
 import { SelectableObject } from './managers/SelectableObject';
 
 export interface SchematicRendererOptions {
-  resourcePackBlobs: any;
+  hdri?: string;
+  resourcePackBlobs?: any;
   // Global toggles for enabling/disabling functionalities
   enableInteraction?: boolean;
   enableDragAndDrop?: boolean;
   enableGizmos?: boolean;
+  showGrid?: boolean;
+  showAxes?: boolean;
   showCameraPathVisualization?: boolean;
   // Enable single schematic mode (only one schematic can be loaded at a time)
   singleSchematicMode?: boolean;
@@ -24,6 +27,32 @@ export interface SchematicRendererOptions {
   callbacks?: Callbacks;
   // Additional options can be added here
 }
+
+export const DEFAULT_OPTIONS: SchematicRendererOptions = {
+  hdri: '',
+  showCameraPathVisualization: false,
+  enableInteraction: false,
+  enableDragAndDrop: false,
+  enableGizmos: false,
+  showGrid: false,
+  showAxes: false,
+  callbacks: {},
+  interactionOptions: {
+      enableSelection: false,
+      enableMovingSchematics: false,
+  },
+  dragAndDropOptions: {
+      acceptedFileTypes: [],
+  },
+  gizmoOptions: {
+      enableRotation: false,
+      enableScaling: false,
+  },
+  cameraOptions: {
+      position: [5, 5, 5],
+  },
+  resourcePackBlobs: {},
+};
 
 export interface Callbacks {
   onRendererInitialized?: () => void;

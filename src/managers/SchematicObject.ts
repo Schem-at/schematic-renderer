@@ -68,6 +68,15 @@ export class SchematicObject extends EventEmitter {
 		// Set initial properties if provided
 		Object.assign(this, properties);
 
+		const schematicDimensions = this.schematicWrapper.get_dimensions();
+		this.position = new THREE.Vector3(
+			Math.round(-schematicDimensions[0] / 2),
+			0,
+			Math.round(-schematicDimensions[2] / 2)
+		);
+		console.log("Initial position:", this.position);
+
+
 		this.group = new THREE.Group();
 		this.group.name = name;
 
@@ -131,33 +140,6 @@ export class SchematicObject extends EventEmitter {
 		this.group.scale.copy(this.scale);
 	}
 
-	public checkMeshValidity() {
-		console.log(`Checking mesh validity for SchematicObject: ${this.id}`);
-		console.log(`  Group children count: ${this.group.children.length}`);
-
-		this.group.children.forEach((child, index) => {
-			if (child instanceof THREE.Mesh) {
-				console.log(`  Mesh ${index}:`);
-				console.log(`    Geometry type: ${child.geometry.type}`);
-				console.log(
-					`    Vertex count: ${
-						child.geometry.attributes.position?.count || "N/A"
-					}`
-				);
-				console.log(`    Material type: ${child.material.type}`);
-				console.log(`    Visible: ${child.visible}`);
-				console.log(`    Frustum culled: ${child.frustumCulled}`);
-
-				const box = new THREE.Box3().setFromObject(child);
-				console.log(
-					`    Bounding box min: ${box.min.x}, ${box.min.y}, ${box.min.z}`
-				);
-				console.log(
-					`    Bounding box max: ${box.max.x}, ${box.max.y}, ${box.max.z}`
-				);
-			}
-		});
-	}
 
 	public syncTransformFromGroup() {
 		this.position.copy(this.group.position);
@@ -182,7 +164,7 @@ export class SchematicObject extends EventEmitter {
 
 		meshes.forEach((mesh) => {
 			// Adjust the mesh position relative to the group
-			mesh.position.sub(this.position);
+			// mesh.position.sub(this.position);
 
 			const material = mesh.material as THREE.Material;
 			material.opacity = this.opacity;

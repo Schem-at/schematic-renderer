@@ -65,6 +65,8 @@ export class SchematicManager {
 
 		// Emit an event to notify that a schematic has been added
 		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
+		// Adjust the camera to focus on schematics, if desired
+		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
 	}
 
 	public removeAllSchematics() {
@@ -87,6 +89,8 @@ export class SchematicManager {
 	): Promise<void> {
 		for (const key in schematicDataMap) {
 			if (schematicDataMap.hasOwnProperty(key)) {
+				console.log("Loading schematic", key);
+				console.log(schematicDataMap);
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
 				await this.loadSchematic(key, arrayBuffer, properties);
@@ -99,8 +103,7 @@ export class SchematicManager {
 		const id = file.name;
 		await this.loadSchematic(id, arrayBuffer);
 	  
-		// Adjust the camera to focus on schematics, if desired
-		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+
 	  
 		// Emit an event to notify that a schematic has been loaded
 		this.eventEmitter.emit('schematicLoaded', { id });

@@ -7,6 +7,7 @@ import { SSAOEffect } from "realism-effects";
 import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 export class RenderManager {
 	private schematicRenderer: SchematicRenderer;
@@ -15,6 +16,8 @@ export class RenderManager {
 	private passes: Map<string, any> = new Map();
 	// @ts-ignore
 	private eventEmitter: EventEmitter;
+
+	private pmremGenerator: THREE.PMREMGenerator;
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
@@ -25,6 +28,7 @@ export class RenderManager {
 			alpha: true,
 			antialias: true,
 		});
+		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 		this.renderer.setSize(
 			this.schematicRenderer.canvas.clientWidth,
 			this.schematicRenderer.canvas.clientHeight
@@ -46,9 +50,41 @@ export class RenderManager {
 
 		// Initialize default post-processing passes
 		this.initDefaultPasses(this.schematicRenderer.options);
-
+			
 		// Listen for camera changes
 		this.setupEventListeners();
+		if (this.schematicRenderer.options?.hdri !== undefined && this.schematicRenderer.options.hdri !== "") {
+			this.setupHDRIBackground(this.schematicRenderer.options.hdri);
+		}
+	}
+
+	setupHDRIBackground(hdriPath: string, backgroundOnly: boolean = true) {
+		const hdriLoader = new RGBELoader();
+		hdriLoader.load(
+			hdriPath,
+			(texture) => {
+				const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
+				texture.dispose();
+
+				if (backgroundOnly) {
+					// Use HDRI as background only
+					const backgroundTexture = new THREE.WebGLCubeRenderTarget(
+						1024
+					).fromEquirectangularTexture(this.renderer, texture);
+					this.schematicRenderer.sceneManager.scene.background = backgroundTexture.texture;
+				} else {
+					// Use HDRI for both background and environment lighting
+					this.schematicRenderer.sceneManager.scene.environment = envMap;
+					this.schematicRenderer.sceneManager.scene.background = envMap;
+				}
+
+				this.pmremGenerator.dispose();
+			},
+			undefined,
+			(error) => {
+				console.error("An error occurred while loading the HDRI:", error);
+			}
+		);
 	}
 
 	private initDefaultPasses(options: any) {

@@ -15,7 +15,7 @@ export class Grid extends THREE.Object3D {
 		majorStep: number = 16,
 		minorStep: number = 1,
 		majorColor: number = 0x888888,
-		minorColor: number = 0x444444
+		minorColor: number = 0x777777
 	) {
 		super();
 		this.camera = camera;

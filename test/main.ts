@@ -37,31 +37,15 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 const renderer = new SchematicRenderer(canvas, {
-	// purplersDoorThingy: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(purplersDoorThingy)),
-	// storageSystemThingy: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(storageSystemThingy)),
-	// complexTest: () => Promise.resolve(base64ToArrayBuffer(complexTest)),
-	// chest_test: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
-	// redstoneTest: () => Promise.resolve(base64ToArrayBuffer(redstoneDustTest)),
-	// pistonTestBase64String: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
-	// redstoneTestBase64String: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(redstoneDustTest)),
-	// longRedstoneTest: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(longRedstoneTest)),
-	// hozRedstone: () => Promise.resolve(base64ToArrayBuffer(hozRedstone)),
-	// fenceTestBase64String: () =>
-	// 	Promise.resolve(base64ToArrayBuffer(fenceTestBase64String)),
-	// newChestTest: () => Promise.resolve(base64ToArrayBuffer(newChestTest)),
+	
 },
 	{},
 	
 	{
-		showCameraPathVisualization: true,
+		showCameraPathVisualization: false,
 		enableInteraction: true,
 		enableDragAndDrop: true,
-		enableGizmos: false,
+		enableGizmos: true,
 		interactionOptions: {
 		  enableSelection: true,
 		  enableMovingSchematics: true,
@@ -69,6 +53,8 @@ const renderer = new SchematicRenderer(canvas, {
 		dragAndDropOptions: {
 		  acceptedFileTypes: ['schematic', 'nbt', 'schem', 'litematic'],
 		},
+		showAxes: false,
+		showGrid: true,
 		gizmoOptions: {
 		  enableRotation: true,
 		  enableScaling: true,
