@@ -25,7 +25,6 @@ interface Block {
 export class BlockMeshBuilder {
 	private schematicRenderer: SchematicRenderer;
 	public blockMeshCache: Map<any, any>;
-	base64MaterialMap: Map<string, string>;
 	schematic: any;
 	faceDataCache: Map<string, any>;
 	DIRECTION_OFFSETS = [
@@ -36,7 +35,7 @@ export class BlockMeshBuilder {
 		{ face: "south", x: 0, y: 0, z: 1 },
 		{ face: "north", x: 0, y: 0, z: -1 },
 	];
-
+	DEBUG = false;
 	FACE_BITMASKS = {
 		east: 0b000001,
 		west: 0b000010,
@@ -48,7 +47,6 @@ export class BlockMeshBuilder {
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 		this.blockMeshCache = new Map();
-		this.base64MaterialMap = new Map();
 		this.faceDataCache = new Map();
 		if (!this.schematicRenderer) {
 			throw new Error("SchematicRenderer is required.");
@@ -102,6 +100,7 @@ export class BlockMeshBuilder {
 			return { subMaterials, uvs };
 		}
 		for (const face of POSSIBLE_FACES) {
+			console.log("Processing face: ", face);
 			const faceData: any = element.faces[face];
 			if (!faceData || faceData.texture == "#overlay") {
 				subMaterials[face] = null;
@@ -139,55 +138,76 @@ export class BlockMeshBuilder {
 						model,
 						faceData,
 						TRANSPARENT_BLOCKS.has(block.name) ||
-							faceData.texture.includes("overlay"),
+						faceData.texture.includes("overlay"),
 						materialColor
-					);
-
+					) ?? {
+						"material": new THREE.MeshBasicMaterial(),
+						"base64Png": null
+					};
 				this.schematicRenderer.materialMap.set(
 					materialId,
 					material ?? new THREE.MeshBasicMaterial()
 				);
-				const base64Material =
-					await this.schematicRenderer.resourceLoader?.getBase64Image(
-						model,
-						faceData
-					);
-				this.base64MaterialMap.set(materialId, base64Material ?? "");
+			
 			}
-
 			subMaterials[face] = materialId;
-			const faceRotation = faceData.rotation || 0;
+			let faceRotation = faceData.rotation || 0;
+			console.log(faceData);
+			faceData.uv = faceData.uv || DEFAULT_UV;
+			
+
+		
+
+			console.log("Before rotation: ", uvs[face]);
 			uvs[face] = this.rotateUv(
-				(faceData.uv || DEFAULT_UV).map((u: number) => u / 16),
+				faceData.uv.map((u: number) => u / 16),
 				faceRotation
 			) as [number, number, number, number];
+			console.log("After rotation: ", uvs[face]);
+			if (this.DEBUG) {
+				let textureName = faceData.texture;
+
+				// Resolve texture references
+				textureName = this.schematicRenderer.resourceLoader?.resolveTextureName(textureName, model);
+
+				// Remove "minecraft:" prefix if present
+				if (textureName.startsWith("minecraft:")) {
+					textureName = textureName.substring("minecraft:".length);
+				}
+
+				// Get the base64 image
+				const base64Resource = await this.schematicRenderer.resourceLoader?.getResourceBase64(
+					`textures/${textureName}.png`
+				);
+				const base64Png = "data:image/png;base64," + base64Resource;
+				this.showTextureOverlay(
+					base64Png,
+					uvs[face]
+				);	
+
+			}
 		}
 		return { subMaterials, uvs };
 	}
 
 	@Monitor
-	public rotateUv(uv: [number, number, number, number], rotation: number) {
-		rotation = (rotation * Math.PI) / 180;
-		const center = [0.5, 0.5];
-		const uvCentered = [
-			uv[0] - center[0],
-			uv[1] - center[1],
-			uv[2] - center[0],
-			uv[3] - center[1],
-		];
-		const uvRotated = [
-			uvCentered[0] * Math.cos(rotation) - uvCentered[1] * Math.sin(rotation),
-			uvCentered[0] * Math.sin(rotation) + uvCentered[1] * Math.cos(rotation),
-			uvCentered[2] * Math.cos(rotation) - uvCentered[3] * Math.sin(rotation),
-			uvCentered[2] * Math.sin(rotation) + uvCentered[3] * Math.cos(rotation),
-		];
-		const uvFinal = [
-			uvRotated[0] + center[0],
-			uvRotated[1] + center[1],
-			uvRotated[2] + center[0],
-			uvRotated[3] + center[1],
-		];
-		return uvFinal;
+	public rotateUv(uv: [number, number, number, number], rotation: number): [number, number, number, number] {
+		// Normalize rotation to 0, 90, 180, or 270
+		const r = ((rotation % 360 + 360) % 360) / 90;
+		
+		if (r === 0) return uv;
+		
+		// For 90° rotations, we just need to swap and flip coordinates
+		switch (r) {
+			case 1: // 90° clockwise
+				return [uv[1], 1 - uv[0], uv[3], 1 - uv[2]];
+			case 2: // 180°
+				return [1 - uv[0], 1 - uv[1], 1 - uv[2], 1 - uv[3]];
+			case 3: // 270° clockwise
+				return [1 - uv[1], uv[0], 1 - uv[3], uv[2]];
+			default:
+				return uv;
+		}
 	}
 
 	private popupWindow: Window | null = null;
@@ -199,7 +219,11 @@ export class BlockMeshBuilder {
 		name: string = ""
 	) {
 		if (!this.popupWindow || this.popupWindow.closed) {
-			this.popupWindow = window.open("", "_blank", "width=200,height=400");
+			this.popupWindow = window.open(
+				"",
+				"_blank",
+				"width=200,height=400,toolbar=no,location=no,menubar=no"
+			);
 		}
 
 		if (!this.popupWindow) {
@@ -250,11 +274,11 @@ export class BlockMeshBuilder {
 
 		const rect = popupDocument.createElement("div");
 		rect.style.position = "absolute";
-		rect.style.width = `${((uv[2] - uv[0]) / 16) * 100 - 1}px`;
-		rect.style.height = `${((uv[3] - uv[1]) / 16) * 100 - 1}px`;
+		rect.style.width = `${((uv[2] - uv[0])) * 100 - 1}px`;
+		rect.style.height = `${((uv[3] - uv[1])) * 100 - 1}px`;
 		rect.style.border = "1px solid blue";
-		rect.style.left = `${(uv[0] / 16) * 100}px`;
-		rect.style.top = `${(uv[1] / 16) * 100}px`;
+		rect.style.left = `${(uv[0]) * 100}px`;
+		rect.style.top = `${(uv[1]) * 100}px`;
 		imageContainer.appendChild(rect);
 
 		allImagesContainer.appendChild(imageContainer);
@@ -282,6 +306,7 @@ export class BlockMeshBuilder {
 			};
 		} = {};
 		const faces = ["east", "west", "up", "down", "south", "north"];
+		const allowedFaces = faces;
 		const { modelOptions } = await this.schematicRenderer.resourceLoader?.getBlockMeta(block);
 		let modelIndex = 0;
 		let start = performance.now();
@@ -327,6 +352,7 @@ export class BlockMeshBuilder {
 				const directionData = getDirectionData(faceData.uvs);
 				let faceIndex = 0;
 				for (const dir of faces) {
+					if (!allowedFaces.includes(dir)) continue;
 					faceIndex++;
 					const materialId = faceData.subMaterials[dir];
 					if (!materialId) continue;
@@ -345,7 +371,7 @@ export class BlockMeshBuilder {
 
 					const dirData = directionData[dir];
 
-					for (const { pos, uv } of dirData.corners) {
+					for (let { pos, uv } of dirData.corners) {
 						if (!from || !size || !pos || !uv) continue;
 						let cornerPos = [
 							from[0] + size[0] * pos[0],
@@ -361,11 +387,7 @@ export class BlockMeshBuilder {
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
 						blockComponents[uniqueKey].positions.push(...cornerPos);
-						if (block.name === "redstone_wire" || block.name === "chest") {
 							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
-						} else {
-							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
-						}
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
 				}

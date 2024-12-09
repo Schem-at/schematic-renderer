@@ -256,7 +256,17 @@ export class SchematicObject extends EventEmitter {
 		return this.schematicWrapper;
 	}
 
-	private async setBlockNoRebuild(position: THREE.Vector3, blockType: string) {
+	private async setBlockNoRebuild(position: THREE.Vector3, blockType: string, properties?: any) {
+		if (properties) {
+			this.schematicWrapper.set_block_with_properties(
+				position.x,
+				position.y,
+				position.z,
+				blockType,
+				properties
+			);
+			return;
+		}
 		this.schematicWrapper.set_block(
 			position.x,
 			position.y,
@@ -265,11 +275,11 @@ export class SchematicObject extends EventEmitter {
 		);
 	}
 
-	public async setBlock(position: THREE.Vector3 | number[], blockType: string) {
+	public async setBlock(position: THREE.Vector3 | number[], blockType: string, properties?: any) {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
-		await this.setBlockNoRebuild(position, blockType);
+		await this.setBlockNoRebuild(position, blockType, properties);
 
 		await this.rebuildChunkAtPosition(position);
 	}

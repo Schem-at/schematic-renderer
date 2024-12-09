@@ -179,19 +179,20 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 			corners: [
 				{
 					pos: cornerDictionary["west"]["corners"][0]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][3]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][1]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][1]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][2]["pos"],
 					uv: [faceUVs["west"][2], faceUVs["west"][3]],
 				},
 				{
-					pos: cornerDictionary["west"]["corners"][3]["pos"],
+					pos: cornerDictionary["west"]["corners"][1]["pos"],
 					uv: [faceUVs["west"][2], faceUVs["west"][1]],
+				},
+				{
+					pos: cornerDictionary["west"]["corners"][2]["pos"],
+					uv: [faceUVs["west"][0], faceUVs["west"][3]],
+
+				},
+				{
+					pos: cornerDictionary["west"]["corners"][3]["pos"],
+					uv: [faceUVs["west"][0], faceUVs["west"][1]],
 				},
 			],
 		},
@@ -221,19 +222,22 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 			corners: [
 				{
 					pos: cornerDictionary["down"]["corners"][0]["pos"],
-					uv: [faceUVs["down"][0], faceUVs["down"][1]],
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][1]["pos"],
-					uv: [faceUVs["down"][2], faceUVs["down"][1]],
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][2]["pos"],
 					uv: [faceUVs["down"][0], faceUVs["down"][3]],
 				},
 				{
-					pos: cornerDictionary["down"]["corners"][3]["pos"],
+					pos: cornerDictionary["down"]["corners"][1]["pos"],
 					uv: [faceUVs["down"][2], faceUVs["down"][3]],
+					
+				},
+				{
+					pos: cornerDictionary["down"]["corners"][2]["pos"],
+					uv: [faceUVs["down"][0], faceUVs["down"][1]],
+					
+				},
+				{
+					pos: cornerDictionary["down"]["corners"][3]["pos"],
+					uv: [faceUVs["down"][2], faceUVs["down"][1]],
+
 				},
 			],
 		},

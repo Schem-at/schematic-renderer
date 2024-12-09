@@ -39,7 +39,6 @@ export class ResourceLoader {
 	faceDataCache: Map<string, any>;
 	blockStateDefinitionCache: Map<string, BlockStateDefinition>;
 
-	base64MaterialMap: Map<string, string>;
 	resourcePackBlobs: any;
 	zips: any;
 	textureLoader = new THREE.TextureLoader();
@@ -68,7 +67,6 @@ export class ResourceLoader {
 		this.blockModelCache = new Map();
 		this.faceDataCache = new Map();
 		this.blockStateDefinitionCache = new Map();
-		this.base64MaterialMap = new Map();
 		this.resourcePackBlobs = resourcePackBlobs;
 		this.textureLoader = new THREE.TextureLoader();
 	}
@@ -172,7 +170,7 @@ export class ResourceLoader {
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
-
+		
 		// Load the texture
 		const texture = this.textureLoader.load(base64Png, () => {
 			texture.minFilter = THREE.NearestFilter;
