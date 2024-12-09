@@ -1,7 +1,7 @@
 // managers/SchematicObject.ts
 import * as THREE from "three";
 import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
-import { WorldMeshBuilder, ChunkDimensions } from "../WorldMeshBuilder";
+import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
 import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
@@ -18,7 +18,7 @@ export class SchematicObject extends EventEmitter {
 	private eventEmitter: EventEmitter;
 	private sceneManager: SceneManager;
 	private chunkMeshes: Map<string, THREE.Mesh[]> = new Map();
-	private chunkDimensions: ChunkDimensions = {
+	private chunkDimensions: any = {
 		chunkWidth: 16,
 		chunkHeight: 16,
 		chunkLength: 16,

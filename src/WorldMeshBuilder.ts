@@ -7,8 +7,9 @@ import {
     occludedFacesIntToList,
     rotateVectorMatrix,
 } from "./utils";
+
 import { Vector } from "./types";
-import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
+import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 import { SchematicRenderer } from "./SchematicRenderer";
 
 // Pre-allocated reusable objects
@@ -41,7 +42,7 @@ export class WorldMeshBuilder {
     }
 
     private async processBatch(
-        batch: BlockData[],
+        batch: any[],
         schematic: SchematicWrapper,
         components: Record<string, any[]>
     ): Promise<void> {
@@ -114,7 +115,7 @@ export class WorldMeshBuilder {
     }
 
     public async getChunkMesh(
-        chunk: BlockData[],
+        chunk: any[],
         schematic: SchematicWrapper
     ): Promise<THREE.Mesh[]> {
         const components: Record<string, any[]> = {};
@@ -133,7 +134,7 @@ export class WorldMeshBuilder {
 
     public async buildSchematicMeshes(
         schematic: SchematicWrapper,
-        chunkDimensions: ChunkDimensions = {
+        chunkDimensions: any = {
             chunkWidth: 16,
             chunkHeight: 16,
             chunkLength: 16,
@@ -154,7 +155,7 @@ export class WorldMeshBuilder {
             
             try {
                 const chunkMeshes = await this.getChunkMesh(
-                    blocks as BlockData[],
+                    blocks as any[],
                     schematic
                 );
                 

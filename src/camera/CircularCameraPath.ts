@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CameraPath } from './CameraPath';
+import { SchematicRenderer } from '../SchematicRenderer';
 
 interface CircularPathParams {
   height: number;
@@ -16,9 +17,11 @@ export class CircularCameraPath extends CameraPath {
   private centerOffsetVec: THREE.Vector3;
   private startAngle: number;
   private endAngle: number;
+  private schematicRenderer: SchematicRenderer
 
-  constructor(params: CircularPathParams) {
+  constructor(schematicRenderer: SchematicRenderer, params: CircularPathParams) {
     super();
+    this.schematicRenderer = schematicRenderer;
     this.params = {
       ...params,
       centerOffset: params.centerOffset || [0, 0, 0]
@@ -63,6 +66,29 @@ export class CircularCameraPath extends CameraPath {
         target: this.targetVec.clone()
       };
     };
+  }
+
+
+  public fitToSchematics(): void {
+    // Calculate the center of the schematic
+    if (!this.schematicRenderer.schematicManager) {
+      return;
+    }
+    const schematicCenters = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+    const cameraPosition = this.schematicRenderer.cameraManager.activeCamera.position as THREE.Vector3;
+
+    // Set the target to the center of the schematic
+    this.params.target = schematicCenters;
+    this.targetVec = this.vectorFromInput(schematicCenters);
+    this.params.height = cameraPosition.y;
+    this.params.centerOffset = schematicCenters;
+
+    // Set the radius to fit the distance from the camera to the center of the schematic
+    const distance = cameraPosition.distanceTo(schematicCenters);
+    this.params.radius = distance;
+
+    this.updatePathFunction();
+
   }
 
   public updateParameters(params: Partial<CircularPathParams>): void {

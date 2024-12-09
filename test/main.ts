@@ -44,7 +44,7 @@ const renderer = new SchematicRenderer(canvas, {
 	
 	{
 		gamma: 0.65,
-		showCameraPathVisualization: false,
+		showCameraPathVisualization: true,
 		enableInteraction: true,
 		enableDragAndDrop: true,
 		enableGizmos: true,

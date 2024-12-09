@@ -21,7 +21,9 @@ export class CameraPathManager {
     this.showVisualization = options.showVisualization || false;
     
     // Create and add initial paths
-    const circularPath = new CircularCameraPath({
+    const circularPath = new CircularCameraPath(
+      this.schematicRenderer,
+      {
       height: 10,
       radius: 20,
       target: new THREE.Vector3(0, 0, 0),
@@ -45,6 +47,23 @@ export class CameraPathManager {
   public removePath(name: string): void {
     this.hidePathVisualization(name);
     this.paths.delete(name);
+  }
+
+  public fitCircularPathToSchematics(name: string): void {
+    const path = this.paths.get(name);
+    if (path instanceof CircularCameraPath) {
+      path.fitToSchematics();
+      if (this.displayedPaths.has(name)) {
+        // Update visualization
+        this.schematicRenderer.sceneManager.removePathVisualization(`${name}Visualization`);
+        const visualizationGroup = path.getVisualizationGroup();
+        this.schematicRenderer.sceneManager.addPathVisualization(visualizationGroup, `${name}Visualization`);
+
+        // Update target indicator
+        const targetPosition = path.getTargetPosition();
+        this.schematicRenderer.sceneManager.updateTargetIndicatorPosition(targetPosition, `${name}Target`);
+      }
+    }
   }
 
   public updatePathParameters(name: string, params: any): void {

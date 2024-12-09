@@ -316,7 +316,6 @@ export class BlockMeshBuilder {
 			};
 
 			const model = await this.schematicRenderer.resourceLoader?.loadModel(modelHolder.model, block.properties);
-			console.log("model", model);
 			const elements = model?.elements;
 
 			if (!elements) continue;
