@@ -43,6 +43,7 @@ const renderer = new SchematicRenderer(canvas, {
 	{},
 	
 	{
+		gamma: 0.65,
 		showCameraPathVisualization: false,
 		enableInteraction: true,
 		enableDragAndDrop: true,
@@ -67,70 +68,76 @@ const renderer = new SchematicRenderer(canvas, {
 		callbacks: {
 		  onRendererInitialized: () => {
 				console.log('Renderer has been initialized.');
-				// renderer.schematicManager?.createEmptySchematic("piston");
-				// // single normal piston
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 0], "minecraft:piston", {
-				// 	facing: "up",
-				// 	extended: "false",
-				// });
+				renderer.schematicManager?.createEmptySchematic("piston");
+				//oak sapling
+				renderer.schematicManager?.getSchematic("test")?.setBlock([0, 0, 0], "minecraft:oak_sapling", {
+					stage: "0",
+				});
 
 
-				// //north 
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -2], "minecraft:sticky_piston", {
-				// 	facing: "north",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -3], "minecraft:piston_head", {
-				// 	facing: "north",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-				// //east 
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([2, 0, 0], "minecraft:sticky_piston", {
-				// 	facing: "east",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([3, 0, 0], "minecraft:piston_head", {
-				// 	facing: "east",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
+				// single normal piston
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 0], "minecraft:piston", {
+					facing: "up",
+					extended: "false",
+				});
 
 
-				// // //up 
+				//north 
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -2], "minecraft:sticky_piston", {
+					facing: "north",
+					extended: "true",
+				});
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -3], "minecraft:piston_head", {
+					facing: "north",
+					short: "false",
+					type: "sticky",
+				});
 
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 2, 0], "minecraft:sticky_piston", {
-				// 	facing: "up",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 3, 0], "minecraft:piston_head", {
-				// 	facing: "up",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
+				//east 
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([2, 0, 0], "minecraft:sticky_piston", {
+					facing: "east",
+					extended: "true",
+				});
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([3, 0, 0], "minecraft:piston_head", {
+					facing: "east",
+					short: "false",
+					type: "sticky",
+				});
 
-				// //west
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([-2, 0, 0], "minecraft:sticky_piston", {
-				// 	facing: "west",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([-3, 0, 0], "minecraft:piston_head", {
-				// 	facing: "west",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
 
-				// //south
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 2], "minecraft:sticky_piston", {
-				// 	facing: "south",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 3], "minecraft:piston_head", {
-				// 	facing: "south",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
+				// //up 
+
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 2, 0], "minecraft:sticky_piston", {
+					facing: "up",
+					extended: "true",
+				});
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 3, 0], "minecraft:piston_head", {
+					facing: "up",
+					short: "false",
+					type: "sticky",
+				});
+
+				//west
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([-2, 0, 0], "minecraft:sticky_piston", {
+					facing: "west",
+					extended: "true",
+				});
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([-3, 0, 0], "minecraft:piston_head", {
+					facing: "west",
+					short: "false",
+					type: "sticky",
+				});
+
+				//south
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 2], "minecraft:sticky_piston", {
+					facing: "south",
+					extended: "true",
+				});
+				renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 3], "minecraft:piston_head", {
+					facing: "south",
+					short: "false",
+					type: "sticky",
+				});
 
 
 		  },

@@ -9,6 +9,7 @@ import { SelectableObject } from './managers/SelectableObject';
 export interface SchematicRendererOptions {
   hdri?: string;
   resourcePackBlobs?: any;
+  gamma?: number;
   // Global toggles for enabling/disabling functionalities
   enableInteraction?: boolean;
   enableDragAndDrop?: boolean;
@@ -30,6 +31,7 @@ export interface SchematicRendererOptions {
 
 export const DEFAULT_OPTIONS: SchematicRendererOptions = {
   hdri: '',
+  gamma: 0.5,
   showCameraPathVisualization: false,
   enableInteraction: false,
   enableDragAndDrop: false,

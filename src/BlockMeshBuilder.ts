@@ -100,7 +100,6 @@ export class BlockMeshBuilder {
 			return { subMaterials, uvs };
 		}
 		for (const face of POSSIBLE_FACES) {
-			console.log("Processing face: ", face);
 			const faceData: any = element.faces[face];
 			if (!faceData || faceData.texture == "#overlay") {
 				subMaterials[face] = null;
@@ -146,24 +145,21 @@ export class BlockMeshBuilder {
 					};
 				this.schematicRenderer.materialMap.set(
 					materialId,
-					material ?? new THREE.MeshBasicMaterial()
+					material as any
 				);
 			
 			}
 			subMaterials[face] = materialId;
 			let faceRotation = faceData.rotation || 0;
-			console.log(faceData);
 			faceData.uv = faceData.uv || DEFAULT_UV;
 			
 
 		
 
-			console.log("Before rotation: ", uvs[face]);
 			uvs[face] = this.rotateUv(
 				faceData.uv.map((u: number) => u / 16),
 				faceRotation
 			) as [number, number, number, number];
-			console.log("After rotation: ", uvs[face]);
 			if (this.DEBUG) {
 				let textureName = faceData.texture;
 
@@ -320,7 +316,7 @@ export class BlockMeshBuilder {
 			};
 
 			const model = await this.schematicRenderer.resourceLoader?.loadModel(modelHolder.model, block.properties);
-
+			console.log("model", model);
 			const elements = model?.elements;
 
 			if (!elements) continue;
@@ -444,57 +440,95 @@ export class BlockMeshBuilder {
 
 	private applyElementRotation(
 		position: number[],
-		rotation: { origin: number[]; axis: string; angle: number }
+		rotation: { origin: number[]; axis: string; angle: number; rescale?: boolean }
 	) {
-		let { origin, axis, angle } = rotation;
-		//convert angle to radians
-		angle = (angle * Math.PI) / 180;
+		let { origin, axis, angle, rescale } = rotation;
+		// Convert angle to radians
+		const angleRad = (angle * Math.PI) / 180;
+		
+		// Calculate rescale factor if needed
+		let rescaleFactor = 1;
+		if (rescale) {
+			// The original formula was incorrect. For a 45-degree angle, we want to scale
+			// the width by approximately 1.4142 (sqrt(2)) to maintain the same perceived size
+			rescaleFactor = 1 / Math.cos(angleRad);
+			console.log('Rescale factor:', rescaleFactor, 'for angle:', angle);
+		}
+	
+		// Translate position to origin
 		const translatedPosition = [
 			position[0] - origin[0],
 			position[1] - origin[1],
-			position[2] - origin[2],
+			position[2] - origin[2]
 		];
-
+	
+		// Store original translated position for debugging
+		const originalTranslated = [...translatedPosition];
+	
+		// Apply rescaling before rotation
+		if (axis === "x" && rescale) {
+			translatedPosition[1] *= rescaleFactor;
+			translatedPosition[2] *= rescaleFactor;
+		} else if (axis === "y" && rescale) {
+			translatedPosition[0] *= rescaleFactor;
+			translatedPosition[2] *= rescaleFactor;
+		} else if (axis === "z" && rescale) {
+			translatedPosition[0] *= rescaleFactor;
+			translatedPosition[1] *= rescaleFactor;
+		}
+	
+		// Create rotation matrix based on axis
 		let rotationMatrix = [
 			[1, 0, 0],
 			[0, 1, 0],
-			[0, 0, 1],
+			[0, 0, 1]
 		];
-
+	
 		if (axis === "x") {
 			rotationMatrix = [
 				[1, 0, 0],
-				[0, Math.cos(angle), -Math.sin(angle)],
-				[0, Math.sin(angle), Math.cos(angle)],
+				[0, Math.cos(angleRad), -Math.sin(angleRad)],
+				[0, Math.sin(angleRad), Math.cos(angleRad)]
 			];
 		} else if (axis === "y") {
 			rotationMatrix = [
-				[Math.cos(angle), 0, Math.sin(angle)],
+				[Math.cos(angleRad), 0, Math.sin(angleRad)],
 				[0, 1, 0],
-				[-Math.sin(angle), 0, Math.cos(angle)],
+				[-Math.sin(angleRad), 0, Math.cos(angleRad)]
 			];
 		} else if (axis === "z") {
 			rotationMatrix = [
-				[Math.cos(angle), -Math.sin(angle), 0],
-				[Math.sin(angle), Math.cos(angle), 0],
-				[0, 0, 1],
+				[Math.cos(angleRad), -Math.sin(angleRad), 0],
+				[Math.sin(angleRad), Math.cos(angleRad), 0],
+				[0, 0, 1]
 			];
 		}
-
+	
+		// Apply rotation
 		const rotatedPosition = [0, 0, 0];
-
 		for (let i = 0; i < 3; i++) {
 			for (let j = 0; j < 3; j++) {
 				rotatedPosition[i] += translatedPosition[j] * rotationMatrix[i][j];
 			}
 		}
-
+	
+		// Translate back from origin
 		const finalPosition = [
 			rotatedPosition[0] + origin[0],
 			rotatedPosition[1] + origin[1],
-			rotatedPosition[2] + origin[2],
+			rotatedPosition[2] + origin[2]
 		];
-
+	
+		if (rescale) {
+			console.log('Position transformation:', {
+				original: position,
+				translated: originalTranslated,
+				scaled: translatedPosition,
+				rotated: rotatedPosition,
+				final: finalPosition
+			});
+		}
+	
 		return finalPosition;
 	}
 	public occludedFacesListToInt(occludedFaces: { [key: string]: boolean }) {
