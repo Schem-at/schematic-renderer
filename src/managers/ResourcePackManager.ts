@@ -42,7 +42,7 @@ export class ResourcePackManager {
 		await this.initPromise;
 	}
 
-	async uploadPack(file: File): Promise<void> {
+	public async uploadPack(file: File): Promise<void> {
 		await this.ensureDbInitialized();
 		const pack = await this.readFileToPack(file);
 		await this.savePack(pack);

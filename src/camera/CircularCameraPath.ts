@@ -81,8 +81,8 @@ export class CircularCameraPath extends CameraPath {
     this.params.target = schematicCenters;
     this.targetVec = this.vectorFromInput(schematicCenters);
     this.params.height = cameraPosition.y;
-    this.params.centerOffset = schematicCenters;
 
+    console.log("schematicCenters", schematicCenters);
     // Set the radius to fit the distance from the camera to the center of the schematic
     const distance = cameraPosition.distanceTo(schematicCenters);
     this.params.radius = distance;

@@ -70,9 +70,9 @@ export class SchematicObject extends EventEmitter {
 
 		const schematicDimensions = this.schematicWrapper.get_dimensions();
 		this.position = new THREE.Vector3(
-			Math.round(-schematicDimensions[0] / 2),
+			-schematicDimensions[0] / 2,
 			0,
-			Math.round(-schematicDimensions[2] / 2)
+			-schematicDimensions[2] / 2
 		);
 		console.log("Initial position:", this.position);
 
@@ -474,9 +474,9 @@ export class SchematicObject extends EventEmitter {
 	public getSchematicCenter(): THREE.Vector3 {
 		const dimensions = this.schematicWrapper.get_dimensions();
 		return new THREE.Vector3(
-			dimensions[0] / 2 + this.position.x,
+			this.position.x + 0.5,
 			dimensions[1] / 2 + this.position.y,
-			dimensions[2] / 2 + this.position.z
+			this.position.z + 0.5
 		);
 	}
 

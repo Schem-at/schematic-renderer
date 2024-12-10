@@ -451,7 +451,6 @@ export class BlockMeshBuilder {
 			// The original formula was incorrect. For a 45-degree angle, we want to scale
 			// the width by approximately 1.4142 (sqrt(2)) to maintain the same perceived size
 			rescaleFactor = 1 / Math.cos(angleRad);
-			console.log('Rescale factor:', rescaleFactor, 'for angle:', angle);
 		}
 	
 		// Translate position to origin
@@ -518,15 +517,7 @@ export class BlockMeshBuilder {
 			rotatedPosition[2] + origin[2]
 		];
 	
-		if (rescale) {
-			console.log('Position transformation:', {
-				original: position,
-				translated: originalTranslated,
-				scaled: translatedPosition,
-				rotated: rotatedPosition,
-				final: finalPosition
-			});
-		}
+		
 	
 		return finalPosition;
 	}

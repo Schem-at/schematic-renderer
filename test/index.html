@@ -499,7 +499,7 @@
 					cameraPathParams: {
 						height: 10,
 						radius: 20,
-						orbitTime: 10,
+						orbitTime: 5,
 						targetX: 0,
 						targetY: 0,
 						targetZ: 0,
@@ -625,7 +625,7 @@
 							const file = event.target.files[0];
 							if (file) {
 								try {
-									await this.resourcePackManager.uploadPack(file);
+									await this.renderer.resourcePackManager.uploadPack(file);
 									this.updateResourcePacksList();
 								} catch (error) {
 									console.error("Failed to upload resource pack:", error);
@@ -829,9 +829,11 @@
                 console.warn("Recording is already in progress.");
                 return;
             }
+			this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics("circularPath")
+
         
             this.isRecording = true;
-            const duration = this.cameraPathParams.orbitTime || 10;
+            const duration = this.cameraPathParams.orbitTime || 5;
         
             // Hide UI elements during recording
             this.renderer.cameraManager.cameraPathManager.hidePathVisualization("circularPath");
@@ -841,9 +843,10 @@
         
             // Start recording
             this.renderer.cameraManager.recordingManager.startRecording(duration, {
-                width: 1920,
-                height: 1080,
-                frameRate: 60,
+                width: 1280,
+                height: 720,
+                frameRate: 24,
+				videoBitsPerSecond: 2500000,
                 onProgress: (progress) => {
                     this.recordingProgress = Math.round(progress * 100);
                 },

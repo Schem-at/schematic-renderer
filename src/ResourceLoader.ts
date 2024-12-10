@@ -586,7 +586,6 @@ export class ResourceLoader {
 					return this.CUSTOM_MODELS["block/chest_right"];
 				}
 			}
-			console.log("Returning custom model", modelRef);
 			return this.CUSTOM_MODELS[modelRef];
 		}
 		let model = JSON.parse(
