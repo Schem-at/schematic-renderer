@@ -228,12 +228,21 @@ export class SceneManager extends EventEmitter {
 	public removeObject(name: string): void {
 		const object = this.scene.getObjectByName(name);
 		if (object) {
-			this.scene.remove(object);
-			this.emit("objectRemoved", { name });
-		} else {
-			console.warn(`Object with name '${name}' does not exist.`);
+		  this.scene.remove(object);
+		  
+		  // Dispose resources
+		  if (object instanceof THREE.Mesh) {
+			if (object.geometry) object.geometry.dispose();
+			if (Array.isArray(object.material)) {
+			  object.material.forEach(m => m.dispose());
+			} else {
+			  object.material.dispose();
+			}
+		  }
+		  
+		  this.emit("objectRemoved", { name });
 		}
-	}
+	  }
 
 	public getObjectByName(name: string): THREE.Object3D | undefined {
 		return this.scene.getObjectByName(name);

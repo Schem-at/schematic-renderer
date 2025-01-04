@@ -843,10 +843,13 @@
         
             // Start recording
             this.renderer.cameraManager.recordingManager.startRecording(duration, {
-                width: 1280,
-                height: 720,
-                frameRate: 24,
-				videoBitsPerSecond: 2500000,
+                //width: 1280,
+                //height: 720,
+                //frameRate: 24,
+				//videoBitsPerSecond: 2500000,
+				width: 3840,
+				height: 2160,
+				frameRate: 60,
                 onProgress: (progress) => {
                     this.recordingProgress = Math.round(progress * 100);
                 },

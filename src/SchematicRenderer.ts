@@ -46,6 +46,7 @@ export class SchematicRenderer {
     public gizmoManager: GizmoManager | undefined;
     public resourceLoader: ResourceLoader | undefined;
     public materialMap: Map<string, THREE.Material>;
+    public timings: Map<string, number> = new Map();
     private resourcePackManager: ResourcePackManager;
     // @ts-ignore
     private wasmModule: any;
@@ -76,6 +77,7 @@ export class SchematicRenderer {
             position: options.cameraOptions?.position || [5, 5, 5],
             showCameraPathVisualization: this.options.showCameraPathVisualization,
         });
+
 
         this.sceneManager.updateHelpers();
         this.eventEmitter.emit("sceneReady");
@@ -145,7 +147,12 @@ export class SchematicRenderer {
     }
 
     private adjustCameraToSchematics(): void {
-        if (!this.schematicManager) {
+        if (!this.schematicManager ) {
+            return;
+        }
+
+        if (this.schematicManager.isEmpty()) {
+            this.uiManager?.showEmptyState();
             return;
         }
         const averagePosition = this.schematicManager.getSchematicsAveragePosition();
@@ -159,6 +166,7 @@ export class SchematicRenderer {
         );
         this.cameraManager.update();
     }
+    
 
     private initializeInteractionComponents(): void {
         if (this.options.enableInteraction) {
@@ -174,6 +182,10 @@ export class SchematicRenderer {
                 acceptedFileTypes: this.options.dragAndDropOptions?.acceptedFileTypes || [],
                 callbacks: {
                     onSchematicLoaded: this.options.callbacks?.onSchematicLoaded,
+                    onSchematicDropped: this.options.callbacks?.onSchematicDropped,
+                    onSchematicDropSuccess: this.options.callbacks?.onSchematicDropSuccess,
+                    onSchematicDropFailed: this.options.callbacks?.onSchematicDropFailed,
+                    onInvalidFileType: this.options.callbacks?.onInvalidFileType,
                 },
             };
             this.dragAndDropManager = new DragAndDropManager(this, dragAndDropOptions);

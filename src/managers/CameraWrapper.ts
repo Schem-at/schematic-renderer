@@ -28,6 +28,23 @@ export class CameraWrapper extends EventEmitter {
 				params.near ?? 0.1,
 				params.far ?? 1000
 			);
+			if (params.position) {
+				this.position = params.position;
+			} else {
+				this.position = [0, 0, 5];
+			}
+
+			if (params.rotation) {
+				this.rotation = params.rotation;
+			} else {
+				this.rotation = [0, 0, 0];
+			}
+
+			if (params.lookAt) {
+				this.lookAt(params.lookAt);
+			} else {
+				this.lookAt([0, 0, 0]);
+			}
 		} else {
 			const d = params.size ?? 20;
 			const aspect = params.aspect ?? window.innerWidth / window.innerHeight;
@@ -40,30 +57,11 @@ export class CameraWrapper extends EventEmitter {
 				params.far ?? 1000
 			);
 		}
-
-		// Set initial position and rotation if provided
-		if (params.position) {
-			this.position = params.position;
-		} else {
-			this.position = [0, 0, 5];
-		}
-
-		if (params.rotation) {
-			this.rotation = params.rotation;
-		} else {
-			this.rotation = [0, 0, 0];
-		}
-
-		if (params.lookAt) {
-			this.lookAt(params.lookAt);
-		} else {
-			this.lookAt([0, 0, 0]);
-		}
 	}
 
 	// Expose the underlying camera
 	get camera() {
-		return this._camera
+		return this._camera;
 	}
 
 	// FOV

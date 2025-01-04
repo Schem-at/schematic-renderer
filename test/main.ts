@@ -45,9 +45,9 @@ const renderer = new SchematicRenderer(canvas, {
 	{
 		gamma: 0.65,
 		showCameraPathVisualization: false,
-		enableInteraction: true,
+		enableInteraction: false,
 		enableDragAndDrop: true,
-		enableGizmos: true,
+		enableGizmos: false,
 		interactionOptions: {
 		  enableSelection: true,
 		  enableMovingSchematics: true,
@@ -62,10 +62,10 @@ const renderer = new SchematicRenderer(canvas, {
 		  enableScaling: true,
 		},
 		singleSchematicMode: true,
-		cameraOptions: {
-		  position: [10, 15, 20],
-		},
 		callbacks: {
+			onSchematicDropSuccess: async (file) => {
+				console.log('Schematic dropped successfully:', file);
+			},
 		  onRendererInitialized: () => {
 				// console.log('Renderer has been initialized.');
 				// renderer.schematicManager?.createEmptySchematic("piston");

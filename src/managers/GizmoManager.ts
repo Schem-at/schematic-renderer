@@ -5,14 +5,12 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
 import { SchematicObject } from "./SchematicObject";
 
-
 export interface GizmoManagerOptions {
-	enableRotation?: boolean;   // Enables rotation gizmo
-	enableScaling?: boolean;    // Enables scaling gizmo
+	enableRotation?: boolean; // Enables rotation gizmo
+	enableScaling?: boolean; // Enables scaling gizmo
 	// Add other gizmo-related options as needed
-  }
+}
 
-  
 export class GizmoManager {
 	private transformControls: TransformControls;
 	private schematicRenderer: SchematicRenderer;
@@ -30,12 +28,16 @@ export class GizmoManager {
 		this.schematicRenderer.sceneManager.scene.add(this.transformControls);
 
 		// Disable camera controls when transforming
-		this.transformControls.addEventListener("dragging-changed", (event : any) => {
-			const controls = this.schematicRenderer.cameraManager.controls.get("orbit");
-			if (controls) {
-				controls.enabled = !event.value;
+		this.transformControls.addEventListener(
+			"dragging-changed",
+			(event: any) => {
+				const controls =
+					this.schematicRenderer.cameraManager.controls.get("orbit");
+				if (controls) {
+					controls.enabled = !event.value;
+				}
 			}
-		});
+		);
 
 		// Update bounding box helper when transforming
 		this.transformControls.addEventListener("change", () => {
@@ -57,14 +59,17 @@ export class GizmoManager {
 			}
 		});
 
-		this.transformControls.addEventListener("dragging-changed", (event : any) => {
-			const controls =
-				this.schematicRenderer.cameraManager.controls.get("orbit");
-			console.log(controls);
-			if (controls) {
-				controls.enabled = !event.value;
+		this.transformControls.addEventListener(
+			"dragging-changed",
+			(event: any) => {
+				const controls =
+					this.schematicRenderer.cameraManager.controls.get("orbit");
+				console.log(controls);
+				if (controls) {
+					controls.enabled = !event.value;
+				}
 			}
-		});
+		);
 
 		this.setupEventListeners();
 	}
@@ -78,6 +83,15 @@ export class GizmoManager {
 			"objectDeselected",
 			this.onObjectDeselected.bind(this)
 		);
+	}
+
+	public detach() {
+		this.transformControls.detach();
+		if (this.boundingBoxHelper) {
+			this.schematicRenderer.sceneManager.scene.remove(this.boundingBoxHelper);
+			this.boundingBoxHelper.geometry.dispose();
+			this.boundingBoxHelper = null;
+		}
 	}
 
 	private onObjectSelected(object: SelectableObject) {
@@ -122,10 +136,25 @@ export class GizmoManager {
 		this.transformControls.setMode(mode);
 	}
 
+	private handleTransformError() {
+		if (
+			this.transformControls.object &&
+			!this.schematicRenderer.sceneManager.scene.getObjectById(
+				this.transformControls.object.id
+			)
+		) {
+			this.detach();
+		}
+	}
+
 	public update() {
-		// Update bounding box helper if it exists
-		if (this.boundingBoxHelper) {
-			this.boundingBoxHelper.update();
+		try {
+			this.handleTransformError();
+			if (this.boundingBoxHelper) {
+				this.boundingBoxHelper.update();
+			}
+		} catch (error) {
+			this.detach();
 		}
 	}
 

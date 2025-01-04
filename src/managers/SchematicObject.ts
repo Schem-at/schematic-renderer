@@ -69,12 +69,12 @@ export class SchematicObject extends EventEmitter {
 		Object.assign(this, properties);
 
 		const schematicDimensions = this.schematicWrapper.get_dimensions();
+		console.log("Schematic dimensions:", schematicDimensions);
 		this.position = new THREE.Vector3(
 			-schematicDimensions[0] / 2,
 			0,
 			-schematicDimensions[2] / 2
 		);
-		console.log("Initial position:", this.position);
 
 
 		this.group = new THREE.Group();
@@ -184,10 +184,10 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateMatrixWorld(true);
 		this.group.updateWorldMatrix(true, true);
 
-		const box = new THREE.Box3().setFromObject(this.group);
-		console.log("Updated bounding box min:", box.min);
-		console.log("Updated bounding box max:", box.max);
-		console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
+		// const box = new THREE.Box3().setFromObject(this.group);
+		// console.log("Updated bounding box min:", box.min);
+		// console.log("Updated bounding box max:", box.max);
+		// console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
 	}
 
 	public async getMeshes(): Promise<THREE.Mesh[]> {
@@ -248,6 +248,26 @@ export class SchematicObject extends EventEmitter {
 		// Clear chunk meshes
 		this.chunkMeshes.clear();
 
+		// Rebuild meshes
+		await this.buildMeshes();
+	}
+
+	public async rebuildMesh() {
+		// Remove old meshes from the scene
+		this.meshes.forEach((mesh) => {
+			this.group.remove(mesh as THREE.Object3D);
+			mesh.geometry.dispose();
+			if (Array.isArray(mesh.material)) {
+				mesh.material.forEach((material) => material.dispose());
+			} else {
+				mesh.material.dispose();
+			}
+		}
+		);
+
+	// Clear chunk meshes
+		this.chunkMeshes.clear();
+		
 		// Rebuild meshes
 		await this.buildMeshes();
 	}
@@ -474,9 +494,9 @@ export class SchematicObject extends EventEmitter {
 	public getSchematicCenter(): THREE.Vector3 {
 		const dimensions = this.schematicWrapper.get_dimensions();
 		return new THREE.Vector3(
-			this.position.x + 0.5,
+			this.position.x + Math.abs(dimensions[0] / 2),
 			dimensions[1] / 2 + this.position.y,
-			this.position.z + 0.5
+			this.position.z + Math.abs(dimensions[2] / 2)
 		);
 	}
 

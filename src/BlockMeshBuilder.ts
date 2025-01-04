@@ -442,28 +442,19 @@ export class BlockMeshBuilder {
 		rotation: { origin: number[]; axis: string; angle: number; rescale?: boolean }
 	) {
 		let { origin, axis, angle, rescale } = rotation;
-		// Convert angle to radians
 		const angleRad = (angle * Math.PI) / 180;
 		
-		// Calculate rescale factor if needed
 		let rescaleFactor = 1;
 		if (rescale) {
-			// The original formula was incorrect. For a 45-degree angle, we want to scale
-			// the width by approximately 1.4142 (sqrt(2)) to maintain the same perceived size
 			rescaleFactor = 1 / Math.cos(angleRad);
 		}
 	
-		// Translate position to origin
 		const translatedPosition = [
 			position[0] - origin[0],
 			position[1] - origin[1],
 			position[2] - origin[2]
 		];
 	
-		// Store original translated position for debugging
-		const originalTranslated = [...translatedPosition];
-	
-		// Apply rescaling before rotation
 		if (axis === "x" && rescale) {
 			translatedPosition[1] *= rescaleFactor;
 			translatedPosition[2] *= rescaleFactor;
@@ -475,7 +466,6 @@ export class BlockMeshBuilder {
 			translatedPosition[1] *= rescaleFactor;
 		}
 	
-		// Create rotation matrix based on axis
 		let rotationMatrix = [
 			[1, 0, 0],
 			[0, 1, 0],
@@ -694,7 +684,10 @@ export class BlockMeshBuilder {
 			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
 			// if over 100ms log the block
-			if (performance.now() - start > 100) {
+			const time = performance.now() - start;
+			const previousTimes = this.schematicRenderer.timings.get("getBlockMesh") || 0;
+			this.schematicRenderer.timings.set("getBlockMesh", previousTimes + time);
+			if (time > 100) {
 				console.error(
 					"Slow block",
 					pos,

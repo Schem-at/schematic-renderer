@@ -61,5 +61,9 @@ export interface Callbacks {
   onSchematicLoaded?: (schematicName: string) => void;
   onObjectSelected?: (object: SelectableObject) => void;
   onObjectDeselected?: (object: SelectableObject) => void;
+  onSchematicDropped?: (file: File) => void | Promise<void>;
+  onSchematicDropSuccess?: (file: File) => void | Promise<void>;
+  onSchematicDropFailed?: (file: File, error: Error) => void | Promise<void>;
+  onInvalidFileType?: (file: File) => void | Promise<void>;
   // Add other callbacks as needed
 }

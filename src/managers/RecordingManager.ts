@@ -151,37 +151,22 @@ export class RecordingManager {
 
     private startRenderLoop(duration: number, onProgress?: (progress: number) => void): void {
         const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
-
-        if (!mainCanvas) {
-            throw new Error('Main canvas not found');
-        }
-        const captureFrame = () => {
-            if (!this.isRecording || !this.ctx2d) return;
-
-            // Copy the main canvas to the recording canvas
-            this.ctx2d.drawImage(mainCanvas, 0, 0);
-
-            // Calculate progress
-            const elapsed = performance.now() - this.recordingStartTime;
-            const progress = Math.min(elapsed / (duration * 1000), 1);
-
-            if (onProgress) {
-                onProgress(progress);
-            }
-
-            if (progress < 1) {
-                this.animationFrameId = requestAnimationFrame(captureFrame);
-            } else {
-                this.stopRecording();
-            }
-        };
-
-        // Start camera animation
+        if (!mainCanvas) throw new Error('Main canvas not found');
+    
+        // Start camera animation first
         this.schematicRenderer.cameraManager.animateCameraAlongPath({
             duration: duration,
             lookAtTarget: true,
             onUpdate: () => {
-                captureFrame();
+                if (!this.isRecording || !this.ctx2d) return;
+                this.ctx2d.drawImage(mainCanvas, 0, 0);
+                
+                const elapsed = performance.now() - this.recordingStartTime;
+                const progress = Math.min(elapsed / (duration * 1000), 1);
+                
+                if (onProgress) onProgress(progress);
+                
+                if (progress >= 1) this.stopRecording();
             }
         });
     }

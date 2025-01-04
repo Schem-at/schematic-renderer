@@ -5,7 +5,11 @@ import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import pat
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
 import { SchematicRenderer } from "../SchematicRenderer";
-
+interface LoadingProgress {
+	stage: "file_reading" | "parsing" | "mesh_building" | "scene_setup";
+	progress: number; // 0-100
+	message: string;
+}
 export class SchematicManager {
 	public schematics: Map<string, SchematicObject> = new Map();
 	public schematicRenderer: SchematicRenderer;
@@ -17,7 +21,6 @@ export class SchematicManager {
 	constructor(
 		schematicRenderer: SchematicRenderer,
 		options: { singleSchematicMode?: boolean } = {}
-
 	) {
 		this.schematicRenderer = schematicRenderer;
 		if (!this.schematicRenderer) {
@@ -26,10 +29,32 @@ export class SchematicManager {
 		if (!this.schematicRenderer.worldMeshBuilder) {
 			throw new Error("WorldMeshBuilder is required.");
 		}
-		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.worldMeshBuilder =
+			schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 		this.singleSchematicMode = options.singleSchematicMode || false;
+	}
+
+	private readFileWithProgress(
+		file: File,
+		onProgress?: (progress: number) => void
+	): Promise<ArrayBuffer> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+
+			reader.onprogress = (event) => {
+				if (event.lengthComputable) {
+					const progress = (event.loaded / event.total) * 100;
+					onProgress?.(progress);
+				}
+			};
+
+			reader.onload = () => resolve(reader.result as ArrayBuffer);
+			reader.onerror = () => reject(reader.error);
+
+			reader.readAsArrayBuffer(file);
+		});
 	}
 
 	public async loadSchematic(
@@ -41,17 +66,38 @@ export class SchematicManager {
 			scale: THREE.Vector3 | number[] | number;
 			opacity: number;
 			visible: boolean;
-		}>
+		}>,
+		options?: {
+			onProgress?: (progress: LoadingProgress) => void;
+		}
 	): Promise<void> {
 		if (this.singleSchematicMode) {
-			// Remove existing schematics
-			this.removeAllSchematics();
-		  }
-		// Create a SchematicWrapper from the data
+			await this.removeAllSchematics();
+		}
+
+		// Parsing stage - 20% of total progress
+		options?.onProgress?.({
+			stage: "parsing",
+			progress: 0,
+			message: "Parsing schematic data...",
+		});
+
 		const schematicWrapper = new SchematicWrapper();
 		schematicWrapper.from_data(new Uint8Array(schematicData));
 
-		// Create a SchematicObject
+		options?.onProgress?.({
+			stage: "parsing",
+			progress: 20,
+			message: "Schematic parsed",
+		});
+
+		// Mesh building stage - 40% of total progress
+		options?.onProgress?.({
+			stage: "mesh_building",
+			progress: 20,
+			message: "Building meshes...",
+		});
+
 		const schematicObject = new SchematicObject(
 			name,
 			schematicWrapper,
@@ -61,19 +107,39 @@ export class SchematicManager {
 			properties
 		);
 
-		this.addSchematic(schematicObject);
+		options?.onProgress?.({
+			stage: "mesh_building",
+			progress: 60,
+			message: "Meshes built",
+		});
 
-		// Emit an event to notify that a schematic has been added
+		// Scene setup stage - final 40%
+		options?.onProgress?.({
+			stage: "scene_setup",
+			progress: 60,
+			message: "Setting up scene...",
+		});
+
+		if (this.schematicRenderer && this.schematicRenderer.uiManager) {
+			this.schematicRenderer.uiManager.hideEmptyState();
+		}
+		this.addSchematic(schematicObject);
 		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
-		// Adjust the camera to focus on schematics, if desired
 		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+
+		options?.onProgress?.({
+			stage: "scene_setup",
+			progress: 100,
+			message: "Complete",
+		});
 	}
 
-	public removeAllSchematics() {
-		for (const name of this.schematics.keys()) {
-		  this.removeSchematic(name);
-		}
-	  }
+	public async removeAllSchematics() {
+		const promises = Array.from(this.schematics.keys()).map((name) =>
+			this.removeSchematic(name)
+		);
+		await Promise.all(promises);
+	}
 
 	public async loadSchematics(
 		schematicDataMap: { [key: string]: () => Promise<ArrayBuffer> },
@@ -91,6 +157,7 @@ export class SchematicManager {
 			if (schematicDataMap.hasOwnProperty(key)) {
 				console.log("Loading schematic", key);
 				console.log(schematicDataMap);
+				console.log("sfd");
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
 				await this.loadSchematic(key, arrayBuffer, properties);
@@ -98,38 +165,68 @@ export class SchematicManager {
 		}
 	}
 
-	public async loadSchematicFromFile(file: File): Promise<void> {
-		const arrayBuffer = await file.arrayBuffer();
-		const id = file.name;
-		await this.loadSchematic(id, arrayBuffer);
-	  
+	public async loadSchematicFromFile(
+		file: File,
+		options?: {
+			onProgress?: (progress: LoadingProgress) => void;
+		}
+	): Promise<void> {
+		try {
+			// File reading stage
+			const arrayBuffer = await this.readFileWithProgress(file, (progress) => {
+				options?.onProgress?.({
+					stage: "file_reading",
+					progress,
+					message: "Reading file...",
+				});
+			});
 
-	  
-		// Emit an event to notify that a schematic has been loaded
-		this.eventEmitter.emit('schematicLoaded', { id });
-	  }
+			// Load the schematic with progress tracking
+			const id = file.name;
+			await this.loadSchematic(id, arrayBuffer, undefined, {
+				onProgress: (progress) => options?.onProgress?.(progress),
+			});
 
-	public removeSchematic(name: string) {
+			// Emit completion event
+			this.eventEmitter.emit("schematicLoaded", { id });
+		} catch (error) {
+			this.eventEmitter.emit("schematicLoadError", { error });
+			throw error;
+		}
+	}
+
+	// In SchematicManager
+	public async removeSchematic(name: string) {
 		const schematicObject = this.schematics.get(name);
 		if (schematicObject) {
-			// Dispose meshes and other resources if necessary
-			 schematicObject.getMeshes().then((meshes) => {
+			try {
+				// Get and dispose all meshes
+				const meshes = await schematicObject.getMeshes();
 				meshes.forEach((mesh) => {
-				mesh.geometry.dispose();
-				if (Array.isArray(mesh.material)) {
-					mesh.material.forEach((material) => material.dispose());
-				} else {
-					mesh.material.dispose();
-				}
-				this.sceneManager.scene.remove(mesh);
-				}
-				);
-			 }
-			);
-			this.schematics.delete(name);
+					// Remove from scene first
+					this.sceneManager.scene.remove(mesh);
 
-			// Emit an event to notify that a schematic has been removed
-			this.eventEmitter.emit("schematicRemoved", { id: name });
+					// Then dispose resources
+					if (mesh.geometry) mesh.geometry.dispose();
+					if (Array.isArray(mesh.material)) {
+						mesh.material.forEach((m) => m.dispose());
+					} else {
+						mesh.material.dispose();
+					}
+				});
+
+				// Remove the group itself
+				this.sceneManager.scene.remove(schematicObject.group);
+
+				// Only delete from map after cleanup
+				this.schematics.delete(name);
+				this.eventEmitter.emit("schematicRemoved", { id: name });
+			} catch (error) {
+				console.error("Error removing schematic:", error);
+			}
+		}
+		if (this.isEmpty() && this.schematicRenderer.uiManager) {
+			this.schematicRenderer.uiManager.showEmptyState();
 		}
 	}
 
@@ -207,10 +304,7 @@ export class SchematicManager {
 		);
 	}
 
-
-	public createEmptySchematic(
-		name: string
-	): SchematicObject {
+	public createEmptySchematic(name: string): SchematicObject {
 		const schematicWrapper = new SchematicWrapper();
 		const schematicObject = new SchematicObject(
 			name,
@@ -221,11 +315,10 @@ export class SchematicManager {
 		);
 		this.addSchematic(schematicObject);
 		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
-	  
+
 		// Emit an event to notify that a schematic has been loaded
-		this.eventEmitter.emit('schematicLoaded', { id: name });
+		this.eventEmitter.emit("schematicLoaded", { id: name });
 
 		return schematicObject;
 	}
-	
 }

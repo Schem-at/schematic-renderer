@@ -51,6 +51,7 @@ export class RenderManager {
 		// Initialize default post-processing passes
 		this.initDefaultPasses(this.schematicRenderer.options);
 			
+		this.updateCanvasSize();
 		// Listen for camera changes
 		this.setupEventListeners();
 		if (this.schematicRenderer.options?.hdri !== undefined && this.schematicRenderer.options.hdri !== "") {
@@ -120,27 +121,27 @@ export class RenderManager {
 
 	private setupEventListeners() {
 		window.addEventListener("resize", () => {
-			const canvas = this.schematicRenderer.canvas;
-			const parent = canvas.parentElement;
-			
-			if (parent) {
-				// Only resize if we're not currently recording
-				if (!this.schematicRenderer.cameraManager.recordingManager.isRecording) {
-					const width = parent.clientWidth;
-					const height = parent.clientHeight;
-	
-					canvas.style.width = width + "px";
-					canvas.style.height = height + "px";
-					this.renderer.setSize(width, height, false);
-					this.composer.setSize(width, height);
-	
-					// Update the camera aspect ratio
-					const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
-					camera.aspect = width / height;
-					camera.updateProjectionMatrix();
-				}
-			}
+			this.updateCanvasSize();
 		});
+	}
+
+	public updateCanvasSize() {
+		const canvas = this.schematicRenderer.canvas;
+		const parent = canvas.parentElement;
+		if (parent) {
+			const width = parent.clientWidth;
+			const height = parent.clientHeight;
+
+			canvas.style.width = width + "px";
+			canvas.style.height = height + "px";
+			this.renderer.setSize(width, height, false);
+			this.composer.setSize(width, height);
+
+			// Update the camera aspect ratio
+			const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
+			camera.aspect = width / height;
+			camera.updateProjectionMatrix();
+		}
 	}
 
 	public enableEffect(effectName: string) {

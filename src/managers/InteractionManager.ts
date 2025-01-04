@@ -185,11 +185,22 @@ export class InteractionManager {
 
 	private checkSelection() {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
-
-		const selectableObjects =
-			this.schematicRenderer.schematicManager?.getSelectableObjects();
-
-		const intersects = this.raycaster.intersectObjects(selectableObjects as THREE.Object3D[], true);
+		const selectableObjects = this.schematicRenderer.schematicManager?.getSelectableObjects();
+		
+		console.log("Selectable objects:", selectableObjects);
+		console.log("Objects in scene:", selectableObjects?.map(obj => this.schematicRenderer.sceneManager.scene.getObjectById(obj.id)));
+		
+		if (!selectableObjects?.length) {
+			console.warn("No selectable objects available");
+			return;
+		}
+	
+		// Verify objects are in scene
+		const validObjects = selectableObjects.filter(obj => 
+			this.schematicRenderer.sceneManager.scene.getObjectById(obj.id)
+		);
+	
+		const intersects = this.raycaster.intersectObjects(validObjects, true);
 
 		if (intersects.length > 0) {
 			const intersectedObject = intersects[0].object;
@@ -217,14 +228,11 @@ export class InteractionManager {
 
 	private deselectObject() {
 		if (this.selectedObject) {
-			this.schematicRenderer.eventEmitter.emit(
-				"objectDeselected",
-				this.selectedObject
-			);
-			this.selectedObject = null;
-			console.log("Deselected object");
+		  this.schematicRenderer.gizmoManager?.detach();
+		  this.schematicRenderer.eventEmitter.emit("objectDeselected", this.selectedObject);
+		  this.selectedObject = null;
 		}
-	}
+	  }
 
 	public update() {
 		// This method can be called in the render loop if continuous updates are needed

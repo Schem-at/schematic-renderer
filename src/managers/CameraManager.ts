@@ -3,388 +3,394 @@ import * as THREE from "three";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { CameraWrapper } from "./CameraWrapper";
-import { CameraPath } from '../camera/CameraPath';
+import { CameraPath } from "../camera/CameraPath";
 import { CameraPathManager } from "./CameraPathManager";
-import { EasingFunctions } from '../utils/EasingFunctions';
-import { RecordingManager, RecordingOptions } from './RecordingManager';
+import { EasingFunctions } from "../utils/EasingFunctions";
+import { RecordingManager, RecordingOptions } from "./RecordingManager";
 
 export interface CameraManagerOptions {
-  position?: [number, number, number];
-  showCameraPathVisualization?: boolean;
+	position?: [number, number, number];
+	showCameraPathVisualization?: boolean;
 }
 
 export interface CameraAnimationWithRecordingOptions {
-  pathName?: string;
-  duration?: number;
-  easing?: (t: number) => number;
-  lookAtTarget?: boolean;
-  updateControls?: boolean;
-  onUpdate?: (progress: number) => void;
-  onComplete?: () => void;
-  recording?: {
-    enabled: boolean;
-    options?: RecordingOptions;
-  };
+	pathName?: string;
+	duration?: number;
+	easing?: (t: number) => number;
+	lookAtTarget?: boolean;
+	updateControls?: boolean;
+	onUpdate?: (progress: number) => void;
+	onComplete?: () => void;
+	recording?: {
+		enabled: boolean;
+		options?: RecordingOptions;
+	};
 }
 
 type CameraType = "perspective" | "orthographic";
 type ControlType = "orbit" | "pointerLock" | "none";
 
 export class CameraManager extends EventEmitter {
-  private schematicRenderer: SchematicRenderer;
-  private cameras: Map<string, CameraWrapper> = new Map();
-  private activeCameraKey: string;
-  public controls: Map<string, any> = new Map();
-  private activeControlKey: string;
-  private rendererDomElement: HTMLCanvasElement;
-  private animationRequestId: number | null = null;
-  private isAnimating: boolean = false;
-  private animationStartTime: number = 0;
-  private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
-  private animationStartRotation: THREE.Euler = new THREE.Euler();
-  public recordingManager: RecordingManager;
+	private schematicRenderer: SchematicRenderer;
+	private cameras: Map<string, CameraWrapper> = new Map();
+	private activeCameraKey: string;
+	public controls: Map<string, any> = new Map();
+	private activeControlKey: string;
+	private rendererDomElement: HTMLCanvasElement;
+	private animationRequestId: number | null = null;
+	private isAnimating: boolean = false;
+	private animationStartTime: number = 0;
+	private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
+	private animationStartRotation: THREE.Euler = new THREE.Euler();
+	public recordingManager: RecordingManager;
 
-  public cameraPathManager: CameraPathManager;
+	public cameraPathManager: CameraPathManager;
 
-  constructor(
-    schematicRenderer: SchematicRenderer,
-    options: CameraManagerOptions = {}
-  ) {
-    super();
-    this.schematicRenderer = schematicRenderer;
-    this.rendererDomElement = this.schematicRenderer.canvas;
+	constructor(
+		schematicRenderer: SchematicRenderer,
+		options: CameraManagerOptions = {}
+	) {
+		super();
+		this.schematicRenderer = schematicRenderer;
+		this.rendererDomElement = this.schematicRenderer.canvas;
 
-    // Initialize RecordingManager
-    this.recordingManager = new RecordingManager(schematicRenderer);
+		// Initialize RecordingManager
+		this.recordingManager = new RecordingManager(schematicRenderer);
 
-    // Initialize with a default perspective camera
-    const defaultCamera = this.createCamera("perspective", {
-      position: options.position || [0, 0, 0],
-      rotation: [0, 0, 0],
-      lookAt: [0, 0, 0],
-    });
-    this.cameras.set("default", defaultCamera);
-    this.activeCameraKey = "default";
+		// Initialize with a default perspective camera
+		const defaultCamera = this.createCamera("perspective", {
+			position: options.position || [0, 20, 0],
+			rotation: [0, 0, 0],
+			lookAt: [0, 0, 0],
+		});
+		this.cameras.set("default", defaultCamera);
+		this.activeCameraKey = "default";
 
-    // Initialize with default controls (OrbitControls)
-    const defaultControls = defaultCamera.createControls("orbit");
-    this.controls.set("orbit", defaultControls);
-    this.activeControlKey = "orbit";
+		// Initialize with default controls (OrbitControls)
+		const defaultControls = defaultCamera.createControls("orbit");
+		this.controls.set("orbit", defaultControls);
+		this.activeControlKey = "orbit";
 
-    // Listen to control changes
-    this.setupControlEvents(defaultControls);
+		// Listen to control changes
+		this.setupControlEvents(defaultControls);
 
-    // Initialize CameraPathManager
-    this.cameraPathManager = new CameraPathManager(
-      this.schematicRenderer,
-      {
-        showVisualization: options.showCameraPathVisualization || false,
-      }
-    );
-  }
+		// Initialize CameraPathManager
+		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
+			showVisualization: options.showCameraPathVisualization || false,
+		});
+	}
 
-  private createCamera(type: CameraType, params: any): CameraWrapper {
-    let camera: CameraWrapper;
-    if (type === "perspective") {
-      camera = new CameraWrapper(
-        "perspective",
-        this.rendererDomElement,
-        params
-      );
-    } else {
-      camera = new CameraWrapper(
-        "orthographic",
-        this.rendererDomElement,
-        params
-      );
-    }
-    return camera;
-  }
+	private createCamera(type: CameraType, params: any): CameraWrapper {
+		let camera: CameraWrapper;
+		if (type === "perspective") {
+			camera = new CameraWrapper(
+				"perspective",
+				this.rendererDomElement,
+				params
+			);
+		} else {
+			camera = new CameraWrapper(
+				"orthographic",
+				this.rendererDomElement,
+				params
+			);
+		}
+		return camera;
+	}
 
-  private getDefaultCameraPath(): { path: CameraPath, name: string } | null {
-    const paths = Array.from(this.cameraPathManager['paths'].entries());
-    if (paths.length > 0) {
-      return { path: paths[0][1], name: paths[0][0] };
-    }
-    return null;
-  }
+	private getDefaultCameraPath(): { path: CameraPath; name: string } | null {
+		const paths = Array.from(this.cameraPathManager["paths"].entries());
+		if (paths.length > 0) {
+			return { path: paths[0][1], name: paths[0][0] };
+		}
+		return null;
+	}
 
-  public async animateCameraAlongPath(
-    pathOrOptions?: CameraPath | CameraAnimationWithRecordingOptions
-  ): Promise<void> {
-    let cameraPath: CameraPath | undefined;
-    let options: CameraAnimationWithRecordingOptions = {};
+	public async animateCameraAlongPath(
+		pathOrOptions?: CameraPath | CameraAnimationWithRecordingOptions
+	): Promise<void> {
+		let cameraPath: CameraPath | undefined;
+		let options: CameraAnimationWithRecordingOptions = {};
 
-    // Handle different input cases
-    if (pathOrOptions instanceof CameraPath) {
-      cameraPath = pathOrOptions;
-    } else if (typeof pathOrOptions === 'object') {
-      options = pathOrOptions;
-      if (options.pathName) {
-        cameraPath = this.cameraPathManager.getPath(options.pathName);
-      }
-    }
+		// Handle different input cases
+		if (pathOrOptions instanceof CameraPath) {
+			cameraPath = pathOrOptions;
+		} else if (typeof pathOrOptions === "object") {
+			options = pathOrOptions;
+			if (options.pathName) {
+				cameraPath = this.cameraPathManager.getPath(options.pathName);
+			}
+		}
 
-    // If no path is specified, try to get the default path
-    if (!cameraPath) {
-      const defaultPath = this.getDefaultCameraPath();
-      if (!defaultPath) {
-        return Promise.reject(new Error('No camera path available'));
-      }
-      cameraPath = defaultPath.path;
-      console.log(`Using default camera path: ${defaultPath.name}`);
-    }
+		// If no path is specified, try to get the default path
+		if (!cameraPath) {
+			const defaultPath = this.getDefaultCameraPath();
+			if (!defaultPath) {
+				return Promise.reject(new Error("No camera path available"));
+			}
+			cameraPath = defaultPath.path;
+			console.log(`Using default camera path: ${defaultPath.name}`);
+		}
 
-    const {
-      duration = 5,
-      easing = EasingFunctions.linear,
-      lookAtTarget = true,
-      updateControls = true,
-      onUpdate,
-      onComplete,
-      recording
-    } = options;
+		const {
+			duration = 5,
+			easing = EasingFunctions.linear,
+			lookAtTarget = true,
+			updateControls = true,
+			onUpdate,
+			onComplete,
+			recording,
+		} = options;
 
-    // Stop any existing animation
-    this.stopAnimation();
+		// Stop any existing animation
+		this.stopAnimation();
 
-    try {
-      // Start recording if enabled
-      if (recording?.enabled) {
-        await this.recordingManager.startRecording(duration, recording.options);
-      }
+		try {
+			// Start recording if enabled
+			if (recording?.enabled) {
+				await this.recordingManager.startRecording(duration, recording.options);
+			}
 
-      return new Promise((resolve, _) => {
-        this.isAnimating = true;
-        this.animationStartTime = performance.now();
-        
-        // Store initial camera state
-        this.animationStartPosition.copy(this.activeCamera.position as THREE.Vector3);
-        this.animationStartRotation.copy(this.activeCamera.rotation as THREE.Euler);
+			return new Promise((resolve, _) => {
+				this.isAnimating = true;
+				this.animationStartTime = performance.now();
 
-        // Temporarily disable controls if they exist
-        if (updateControls) {
-          const controls = this.controls.get(this.activeControlKey);
-          if (controls && controls.enabled) {
-            controls.enabled = false;
-          }
-        }
+				// Store initial camera state
+				this.animationStartPosition.copy(
+					this.activeCamera.position as THREE.Vector3
+				);
+				this.animationStartRotation.copy(
+					this.activeCamera.rotation as THREE.Euler
+				);
 
-        const animate = () => {
-          const currentTime = performance.now();
-          const elapsed = (currentTime - this.animationStartTime) / 1000;
-          let t = Math.min(elapsed / duration, 1);
-        
-          // Apply easing
-          t = easing(t);
-        
-          // Get position and rotation from the path
-          const { position, rotation, target } = cameraPath!.getPoint(t);
-        
-          // Set camera position directly
-          (this.activeCamera.position as THREE.Vector3).copy(position);
-        
-          if (lookAtTarget) {
-            // Look at the target point
-            this.activeCamera.lookAt(target);
-          } else {
-            // Set camera rotation directly
-            (this.activeCamera.rotation as THREE.Euler).copy(rotation);
-          }
+				// Temporarily disable controls if they exist
+				if (updateControls) {
+					const controls = this.controls.get(this.activeControlKey);
+					if (controls && controls.enabled) {
+						controls.enabled = false;
+					}
+				}
 
-          // Emit camera movement event
-          this.emit("cameraMove", {
-            position: (this.activeCamera.position as THREE.Vector3).clone(),
-            rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
-            progress: t,
-          });
-        
-          // Call update callback if provided
-          if (onUpdate) {
-            onUpdate(t);
-          }
-        
-          // Continue animation if not complete
-          if (t < 1) {
-            this.animationRequestId = requestAnimationFrame(animate);
-          } else {
-            // Animation complete
-            this.isAnimating = false;
-        
-            // Re-enable controls if they were disabled
-            if (updateControls) {
-              const controls = this.controls.get(this.activeControlKey);
-              if (controls) {
-                controls.enabled = true;
-              }
-            }
-        
-            // Stop recording if it was enabled
-            if (recording?.enabled) {
-              this.recordingManager.stopRecording();
-            }
+				const animate = () => {
+					const currentTime = performance.now();
+					const elapsed = (currentTime - this.animationStartTime) / 1000;
+					let t = Math.min(elapsed / duration, 1);
 
-            // Call complete callback if provided
-            if (onComplete) {
-              onComplete();
-            }
-        
-            resolve();
-          }
-        };
+					// Apply easing
+					t = easing(t);
 
-        this.animationRequestId = requestAnimationFrame(animate);
-      });
-    } catch (error) {
-      this.stopAnimation();
-      throw error;
-    }
-  }
+					// Get position and rotation from the path
+					const { position, rotation, target } = cameraPath!.getPoint(t);
 
-  public isCurrentlyAnimating(): boolean {
-    return this.isAnimating;
-  }
+					// Set camera position directly
+					(this.activeCamera.position as THREE.Vector3).copy(position);
 
-  public stopAnimation(): void {
-    if (this.animationRequestId !== null) {
-      cancelAnimationFrame(this.animationRequestId);
-      this.animationRequestId = null;
-      this.isAnimating = false;
+					if (lookAtTarget) {
+						// Look at the target point
+						this.activeCamera.lookAt(target);
+					} else {
+						// Set camera rotation directly
+						(this.activeCamera.rotation as THREE.Euler).copy(rotation);
+					}
 
-      // Re-enable controls if they exist
-      const controls = this.controls.get(this.activeControlKey);
-      if (controls) {
-        controls.enabled = true;
-      }
-    }
-  }
+					// Emit camera movement event
+					this.emit("cameraMove", {
+						position: (this.activeCamera.position as THREE.Vector3).clone(),
+						rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
+						progress: t,
+					});
 
-  // Methods to interact with CameraPathManager
-  public updatePathParameters(name: string, params: any): void {
-    this.cameraPathManager.updatePathParameters(name, params);
-  }
+					// Call update callback if provided
+					if (onUpdate) {
+						onUpdate(t);
+					}
 
-  public showPathVisualization(name: string): void {
-    this.cameraPathManager.showPathVisualization(name);
-  }
+					// Continue animation if not complete
+					if (t < 1) {
+						this.animationRequestId = requestAnimationFrame(animate);
+					} else {
+						// Animation complete
+						this.isAnimating = false;
 
-  public hidePathVisualization(name: string): void {
-    this.cameraPathManager.hidePathVisualization(name);
-  }
+						// Re-enable controls if they were disabled
+						if (updateControls) {
+							const controls = this.controls.get(this.activeControlKey);
+							if (controls) {
+								controls.enabled = true;
+							}
+						}
 
-  public getCameraPath(name: string): CameraPath | undefined {
-    return this.cameraPathManager.getPath(name);
-  }
+						// Stop recording if it was enabled
+						if (recording?.enabled) {
+							this.recordingManager.stopRecording();
+						}
 
-  // Control Management
-  private createControls(type: ControlType, camera: CameraWrapper): any {
-    return camera.createControls(type);
-  }
+						// Call complete callback if provided
+						if (onComplete) {
+							onComplete();
+						}
 
-  switchControls(type: ControlType) {
-    // Dispose of current controls
-    const currentControls = this.controls.get(this.activeControlKey);
-    if (currentControls && currentControls.dispose) {
-      currentControls.dispose();
-    }
+						resolve();
+					}
+				};
 
-    // Create new controls
-    const camera = this.activeCamera;
-    const newControls = this.createControls(type, camera);
-    this.controls.set(type, newControls);
-    this.activeControlKey = type;
+				this.animationRequestId = requestAnimationFrame(animate);
+			});
+		} catch (error) {
+			this.stopAnimation();
+			throw error;
+		}
+	}
 
-    // Listen to control events
-    if (newControls) {
-      this.setupControlEvents(newControls);
-    }
-  }
+	public isCurrentlyAnimating(): boolean {
+		return this.isAnimating;
+	}
 
-  private setupControlEvents(controls: any) {
-    controls.addEventListener("change", () => {
-      this.emit("propertyChanged", {
-        property: "position",
-        value: (this.activeCamera.position as THREE.Vector3).clone(),
-      });
+	public stopAnimation(): void {
+		if (this.animationRequestId !== null) {
+			cancelAnimationFrame(this.animationRequestId);
+			this.animationRequestId = null;
+			this.isAnimating = false;
 
-      this.emit("propertyChanged", {
-        property: "rotation",
-        value: (this.activeCamera.rotation as THREE.Euler).clone(),
-      });
-    });
-  }
+			// Re-enable controls if they exist
+			const controls = this.controls.get(this.activeControlKey);
+			if (controls) {
+				controls.enabled = true;
+			}
+		}
+	}
 
-  // Update loop for controls
-  public update(deltaTime: number = 0) {
-    const controls = this.controls.get(this.activeControlKey);
-    if (controls && controls.update) {
-      controls.update(deltaTime);
-    }
-  }
+	// Methods to interact with CameraPathManager
+	public updatePathParameters(name: string, params: any): void {
+		this.cameraPathManager.updatePathParameters(name, params);
+	}
 
-  // Camera properties
-  get activeCamera(): CameraWrapper {
-    return this.cameras.get(this.activeCameraKey)!;
-  }
+	public showPathVisualization(name: string): void {
+		this.cameraPathManager.showPathVisualization(name);
+	}
 
-  // Update aspect ratio on resize
-  updateAspectRatio(aspect: number) {
-    this.cameras.forEach((cameraWrapper) => {
-      if (cameraWrapper.camera instanceof THREE.PerspectiveCamera) {
-        cameraWrapper.camera.aspect = aspect;
-        cameraWrapper.camera.updateProjectionMatrix();
-      } else if (cameraWrapper.camera instanceof THREE.OrthographicCamera) {
-        const frustumSize = 10;
-        cameraWrapper.camera.left = (frustumSize * aspect) / -2;
-        cameraWrapper.camera.right = (frustumSize * aspect) / 2;
-        cameraWrapper.camera.top = frustumSize / 2;
-        cameraWrapper.camera.bottom = frustumSize / -2;
-        cameraWrapper.camera.updateProjectionMatrix();
-      }
-    });
-  }
+	public hidePathVisualization(name: string): void {
+		this.cameraPathManager.hidePathVisualization(name);
+	}
 
-  // Look at a target
-  public lookAt(target: THREE.Vector3 | THREE.Vector3Tuple) {
-    if (Array.isArray(target)) {
-      this.activeCamera.lookAt(new THREE.Vector3(...target));
-    } else {
-      this.activeCamera.lookAt(target);
-    }
-  }
+	public getCameraPath(name: string): CameraPath | undefined {
+		return this.cameraPathManager.getPath(name);
+	}
 
-  public focusOnSchematics() {
-    if (!this.schematicRenderer.schematicManager) {
-      return;
-    }
-    if (this.schematicRenderer.schematicManager.isEmpty()) {
-      return;
-    }
-    const averagePosition = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
-    const maxDimensions = this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+	// Control Management
+	private createControls(type: ControlType, camera: CameraWrapper): any {
+		return camera.createControls(type);
+	}
 
-    this.activeCamera.lookAt(averagePosition);
-    (this.activeCamera.position as THREE.Vector3).set(
-      averagePosition.x + maxDimensions.x,
-      averagePosition.y + maxDimensions.y,
-      averagePosition.z + maxDimensions.z
-    );
-    this.update();
-  }
+	switchControls(type: ControlType) {
+		// Dispose of current controls
+		const currentControls = this.controls.get(this.activeControlKey);
+		if (currentControls && currentControls.dispose) {
+			currentControls.dispose();
+		}
 
-  public dispose(): void {
-    this.recordingManager.dispose();
-    this.stopAnimation();
-    
-    // Dispose of all controls
-    this.controls.forEach(control => {
-      if (control.dispose) {
-        control.dispose();
-      }
-    });
-    
-    // Clear all maps
-    this.controls.clear();
-    this.cameras.clear();
-  }
+		// Create new controls
+		const camera = this.activeCamera;
+		const newControls = this.createControls(type, camera);
+		this.controls.set(type, newControls);
+		this.activeControlKey = type;
+
+		// Listen to control events
+		if (newControls) {
+			this.setupControlEvents(newControls);
+		}
+	}
+
+	private setupControlEvents(controls: any) {
+		controls.addEventListener("change", () => {
+			this.emit("propertyChanged", {
+				property: "position",
+				value: (this.activeCamera.position as THREE.Vector3).clone(),
+			});
+
+			this.emit("propertyChanged", {
+				property: "rotation",
+				value: (this.activeCamera.rotation as THREE.Euler).clone(),
+			});
+		});
+
+	
+	}
+
+	// Update loop for controls
+	public update(deltaTime: number = 0) {
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls && controls.update) {
+			controls.update(deltaTime);
+		}
+	}
+
+	// Camera properties
+	get activeCamera(): CameraWrapper {
+		return this.cameras.get(this.activeCameraKey)!;
+	}
+
+	// Update aspect ratio on resize
+	updateAspectRatio(aspect: number) {
+		this.cameras.forEach((cameraWrapper) => {
+			if (cameraWrapper.camera instanceof THREE.PerspectiveCamera) {
+				cameraWrapper.camera.aspect = aspect;
+				cameraWrapper.camera.updateProjectionMatrix();
+			} else if (cameraWrapper.camera instanceof THREE.OrthographicCamera) {
+				const frustumSize = 10;
+				cameraWrapper.camera.left = (frustumSize * aspect) / -2;
+				cameraWrapper.camera.right = (frustumSize * aspect) / 2;
+				cameraWrapper.camera.top = frustumSize / 2;
+				cameraWrapper.camera.bottom = frustumSize / -2;
+				cameraWrapper.camera.updateProjectionMatrix();
+			}
+		});
+	}
+
+	// Look at a target
+	public lookAt(target: THREE.Vector3 | THREE.Vector3Tuple) {
+		if (Array.isArray(target)) {
+			this.activeCamera.lookAt(new THREE.Vector3(...target));
+		} else {
+			this.activeCamera.lookAt(target);
+		}
+	}
+
+	public focusOnSchematics() {
+		console.log("Focusing on schematics");
+		if (!this.schematicRenderer.schematicManager) {
+			return;
+		}
+		if (this.schematicRenderer.schematicManager.isEmpty()) {
+			return;
+		}
+		const averagePosition =
+			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		const maxDimensions =
+			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+
+		this.activeCamera.lookAt(averagePosition);
+		(this.activeCamera.position as THREE.Vector3).set(
+			averagePosition.x + maxDimensions.x,
+			averagePosition.y + maxDimensions.y,
+			averagePosition.z + maxDimensions.z
+		);
+		this.update();
+	}
+
+	public dispose(): void {
+		this.recordingManager.dispose();
+		this.stopAnimation();
+
+		// Dispose of all controls
+		this.controls.forEach((control) => {
+			if (control.dispose) {
+				control.dispose();
+			}
+		});
+
+		// Clear all maps
+		this.controls.clear();
+		this.cameras.clear();
+	}
 }
