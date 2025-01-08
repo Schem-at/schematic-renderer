@@ -242,6 +242,10 @@ export class SchematicManager {
 		return Array.from(this.schematics.values());
 	}
 
+	getFirstSchematic(): SchematicObject | undefined {
+		return this.getAllSchematics()[0];
+	}
+
 	public getSchematicAtPosition(
 		position: THREE.Vector3
 	): SchematicObject | null {

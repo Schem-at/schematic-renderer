@@ -24,7 +24,7 @@ const redstoneTest =
 	"H4sIAAAAAAAA/6WQTU/DMAyG3WRbaachTvwGDj1wRuoFMZgQE0hIjA+hKbTeGrGlI3E1xJnfTXHWscEBLkSKEr+OH79ODNF1VuBckc4kxFdqhkQ4VK8A0I4hXAsSzufaYGbVhI4s5o5Kg+OltviAylHqdI6JKS0VqeFMsiiXaNPDxJXVl7TE9btHRgsJvS1QactaIGF/q71UytLb+GlWZs+cBAmDfzioFj/7Swmnf+K4oIGtuL+NUy08rMXmwhu0TpfGzyagc4FmSgWIGHaGSCpXpCREo/7lZOKQbuu6/vgW3zUDbuJ7/xvAmAHqaUHQktA9YcSmxy6FEB37r/Eyvz7wBAj8EkIKEQRNwIvtrW8iEBBBb1XXN6RJo4t9nYD2SOfst92FTmPBG2KX73zu8T6DT5nRNOMpAgAA";
 const chestBase64 =
 	"H4sIAAAAAAAA/2VS227TQBCdeBPHdlRaKpD4Ax5II6QKSAt5qYhEJQoRSJSLULS2J7bltdfa3ZDyK/wM4o94QTzC2E5ip1lZ1p6zc87Mzo4H7vsgxoybJGDQ/4BKJzIHAIvB4CU3fMvcMR44V2h4SCwD93r6drHQaD7+o9XCn0gMLfyZYMcjLJUIp2FinCZN79nodPTEgcOST/JoJrhZSJXBEeZRkmO89M/9ZZomZgB2bVealxmhXqXzRqW9fZ0D3Tc8Qzi8qOAJmSRBwkWriOOqiEdPx+PHJ2Ofn4bjs9LZgt51EpoYmAX2K0yi2FTb15SCWOtWRX//UFG/aP+DgTfjAo3BK35DhOtBf00wuJ9ReYHiC3NeLFUhcL6SUtQte9Cc+YIH6TyQeaDQYHlPBvdax0qu8o2SXurhnquOlyJFNfflzZcFD6i3k2XxtUzD4EUTLTAwqPJNSC6ViYcx16ST6WTBhcZhIVeoMKxRadFl8LyxoOnRZtfAfC9wogkLHK44JRAyitoOPQYHjQNPFHE2g6PWDZEH1Rz2d3qmRZLh3BcySOmMHhHcixKUk0rEMXQs+li3R3/btvu248JBFTHNDY0Y0ozQBRywLsMd36ZdA2AzqasHWY9Y9a8ld/datxPe2Ya70Ls0mOmW9vBWz3aU1lZpw2DGC1SjdzyP8OfvughWDt43FLrx2+vWXuVr0/8kU5Gq5AMAAA==";
-
+const xor = "H4sIAAAAAAAA/21RX0vDMBC/NW3XdezZV1Ef++CLL0IRREHEOVFQocgI7bUNdslITqd+epO2dBssELjc/f7cXWIAD4I3UVANjMH4FbURSoJNTyC6lSRIoAF3puC/iD+0Edu5vgfhA8rK8n0G0xtOfNAIrqYQLsrSIPXo4VjWHYqqJucaP/EGiXDOf2wpHMPkulH5p9Oy77ORN2IOxnzw7TsYBSELByUWOOEYojkSLywlAv+RrxCi98XzccUJYQKzVnBvnBjGvS2Do5WQmGte0mWl+e8yVzLXSO2sDC621Qa/UWdrtUGNRVryxmBS8hzTDW8aFwlZpUZ9Uf3hdsPgZMu1DENK4rLhq3XWCOr4DugxmG2BXOh2sF3jgeyMlqR0Xme9nVSa6mRPz+7r/hBXaMxaeGpEgUk7R3qetA13KeSGumiDfeQE7Y5PDwh2fexZ24/5BzyRvq9UAgAA";
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
 	const binaryString = atob(base64);
@@ -39,12 +39,13 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 const renderer = new SchematicRenderer(canvas, {
 	// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
 	// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+	// "xor": () => Promise.resolve(base64ToArrayBuffer(xor)),
 },
 	{},
 	
 	{
 		gamma: 0.65,
-		showCameraPathVisualization: true,
+		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,
 		enableGizmos: false,
@@ -55,7 +56,7 @@ const renderer = new SchematicRenderer(canvas, {
 		dragAndDropOptions: {
 		  acceptedFileTypes: ['schematic', 'nbt', 'schem', 'litematic'],
 		},
-		hdri: '/public/minecraft_day.hdr',
+		hdri: '/minecraft_day.hdr',
 
 		showAxes: false,
 		showGrid: true,

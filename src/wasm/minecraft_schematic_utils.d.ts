@@ -1,218 +1,56 @@
 /* tslint:disable */
 /* eslint-disable */
-/**
-*/
 export function start(): void;
-/**
-* @param {SchematicWrapper} schematic
-* @returns {string}
-*/
 export function debug_schematic(schematic: SchematicWrapper): string;
-/**
-* @param {SchematicWrapper} schematic
-* @returns {string}
-*/
 export function debug_json_schematic(schematic: SchematicWrapper): string;
-/**
-*/
 export class BlockPosition {
   free(): void;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-*/
   constructor(x: number, y: number, z: number);
-/**
-*/
   x: number;
-/**
-*/
   y: number;
-/**
-*/
   z: number;
 }
-/**
-*/
 export class BlockStateWrapper {
   free(): void;
-/**
-* @param {string} name
-*/
   constructor(name: string);
-/**
-* @param {string} key
-* @param {string} value
-*/
   with_property(key: string, value: string): void;
-/**
-* @returns {string}
-*/
   name(): string;
-/**
-* @returns {any}
-*/
   properties(): any;
 }
-/**
-*/
 export class MchprsWorldWrapper {
   free(): void;
-/**
-* @param {SchematicWrapper} schematic
-*/
   constructor(schematic: SchematicWrapper);
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-*/
   on_use_block(x: number, y: number, z: number): void;
-/**
-* @param {number} number_of_ticks
-*/
   tick(number_of_ticks: number): void;
-/**
-*/
   flush(): void;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {boolean}
-*/
   is_lit(x: number, y: number, z: number): boolean;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {boolean}
-*/
   get_lever_power(x: number, y: number, z: number): boolean;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {number}
-*/
   get_redstone_power(x: number, y: number, z: number): number;
+  get_truth_table(): any;
 }
-/**
-*/
 export class SchematicWrapper {
   free(): void;
-/**
-*/
   constructor();
-/**
-* @returns {MchprsWorldWrapper}
-*/
   create_simulation_world(): MchprsWorldWrapper;
-/**
-* @param {Uint8Array} data
-*/
   from_data(data: Uint8Array): void;
-/**
-* @param {Uint8Array} data
-*/
   from_litematic(data: Uint8Array): void;
-/**
-* @returns {Uint8Array}
-*/
   to_litematic(): Uint8Array;
-/**
-* @param {Uint8Array} data
-*/
   from_schematic(data: Uint8Array): void;
-/**
-* @returns {Uint8Array}
-*/
   to_schematic(): Uint8Array;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @param {string} block_name
-*/
   set_block(x: number, y: number, z: number, block_name: string): void;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @param {string} block_name
-* @param {any} properties
-*/
   set_block_with_properties(x: number, y: number, z: number, block_name: string, properties: any): void;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {string | undefined}
-*/
   get_block(x: number, y: number, z: number): string | undefined;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {BlockStateWrapper | undefined}
-*/
   get_block_with_properties(x: number, y: number, z: number): BlockStateWrapper | undefined;
-/**
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @returns {any}
-*/
   get_block_entity(x: number, y: number, z: number): any;
-/**
-* @returns {any}
-*/
   get_all_block_entities(): any;
-/**
-* @returns {string}
-*/
   print_schematic(): string;
-/**
-* @returns {string}
-*/
   debug_info(): string;
-/**
-* @returns {Int32Array}
-*/
   get_dimensions(): Int32Array;
-/**
-* @returns {number}
-*/
   get_block_count(): number;
-/**
-* @returns {number}
-*/
   get_volume(): number;
-/**
-* @returns {(string)[]}
-*/
   get_region_names(): (string)[];
-/**
-* @returns {Array<any>}
-*/
   blocks(): Array<any>;
-/**
-* @param {number} chunk_width
-* @param {number} chunk_height
-* @param {number} chunk_length
-* @returns {Array<any>}
-*/
   chunks(chunk_width: number, chunk_height: number, chunk_length: number): Array<any>;
-/**
-* @param {number} offset_x
-* @param {number} offset_y
-* @param {number} offset_z
-* @param {number} width
-* @param {number} height
-* @param {number} length
-* @returns {Array<any>}
-*/
   get_chunk_blocks(offset_x: number, offset_y: number, offset_z: number, width: number, height: number, length: number): Array<any>;
 }
 
@@ -220,10 +58,19 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_blockposition_free: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_x: (a: number) => number;
+  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_y: (a: number) => number;
+  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_z: (a: number) => number;
+  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
+  readonly blockposition_new: (a: number, b: number, c: number) => number;
   readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_mchprsworldwrapper_free: (a: number, b: number) => void;
   readonly __wbg_blockstatewrapper_free: (a: number, b: number) => void;
   readonly schematicwrapper_new: () => number;
+  readonly schematicwrapper_create_simulation_world: (a: number) => number;
   readonly schematicwrapper_from_data: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_from_litematic: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_to_litematic: (a: number, b: number) => void;
@@ -244,34 +91,26 @@ export interface InitOutput {
   readonly schematicwrapper_blocks: (a: number) => number;
   readonly schematicwrapper_chunks: (a: number, b: number, c: number, d: number) => number;
   readonly schematicwrapper_get_chunk_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
-  readonly mchprsworldwrapper_new: (a: number) => number;
+  readonly mchprsworldwrapper_new: (a: number, b: number) => void;
   readonly mchprsworldwrapper_on_use_block: (a: number, b: number, c: number, d: number) => void;
   readonly mchprsworldwrapper_tick: (a: number, b: number) => void;
   readonly mchprsworldwrapper_flush: (a: number) => void;
   readonly mchprsworldwrapper_is_lit: (a: number, b: number, c: number, d: number) => number;
   readonly mchprsworldwrapper_get_lever_power: (a: number, b: number, c: number, d: number) => number;
   readonly mchprsworldwrapper_get_redstone_power: (a: number, b: number, c: number, d: number) => number;
+  readonly mchprsworldwrapper_get_truth_table: (a: number) => number;
   readonly blockstatewrapper_new: (a: number, b: number) => number;
   readonly blockstatewrapper_with_property: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly blockstatewrapper_name: (a: number, b: number) => void;
   readonly blockstatewrapper_properties: (a: number) => number;
   readonly debug_schematic: (a: number, b: number) => void;
   readonly debug_json_schematic: (a: number, b: number) => void;
-  readonly schematicwrapper_create_simulation_world: (a: number) => number;
   readonly start: () => void;
-  readonly __wbg_blockposition_free: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_x: (a: number) => number;
-  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_y: (a: number) => number;
-  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_z: (a: number) => number;
-  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
-  readonly blockposition_new: (a: number, b: number, c: number) => number;
+  readonly __wbindgen_exn_store: (a: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
-  readonly __wbindgen_exn_store: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

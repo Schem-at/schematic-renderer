@@ -32,6 +32,8 @@
 		"vite-plugin-node-polyfills": "^0.22.0"
 	},
 	"dependencies": {
+		"@ffmpeg/ffmpeg": "^0.12.15",
+		"@ffmpeg/util": "^0.12.2",
 		"chokidar": "^3.6.0",
 		"concurrently": "^8.2.2",
 		"deepmerge": "^4.3.1",
