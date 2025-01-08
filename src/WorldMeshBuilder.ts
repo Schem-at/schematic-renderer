@@ -245,7 +245,7 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
 
         // Track initial memory state
         this.trackMemory();
-
+        
         for (const chunkData of chunks) {
             index++;
             if(index > maxChunks && maxChunks > 0) {
@@ -274,7 +274,7 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
                 this.trackTiming(`chunk_${index}`, chunkTime);
                 
                 if (chunkMeshes && chunkMeshes.length > 0) {
-                    console.log(`${index}/${maxChunks} Processed chunk at ${chunk_x},${chunk_y},${chunk_z} (${chunkTime.toFixed(2)}ms)`);
+                    console.log(`${index}/${chunks.length} Processed chunk at ${chunk_x},${chunk_y},${chunk_z} (${chunkTime.toFixed(2)}ms)`);
                     const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
                     chunkMap.set(chunkKey, chunkMeshes);
                     schematicMeshes.push(...chunkMeshes);
@@ -285,7 +285,7 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
 
                 // Log progress metrics every 5 chunks
                 if (index % 5 === 0) {
-                    const progress = (index / Math.min(chunks.length, maxChunks)) * 100;
+                    const progress = (index / chunks.length) * 100;
                     console.log(`Progress: ${progress.toFixed(1)}%`);
                     this.trackMemory();
                 }

@@ -1,13 +1,14 @@
-// RecordingManager.ts
 import * as THREE from 'three';
 import { SchematicRenderer } from '../SchematicRenderer';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 
 export interface RecordingOptions {
     width?: number;
     height?: number;
     frameRate?: number;
-    videoBitsPerSecond?: number;
-    mimeType?: string;
+    quality?: number;
+    onStart?: () => void;
     onProgress?: (progress: number) => void;
     onComplete?: (blob: Blob) => void;
 }
@@ -17,10 +18,8 @@ export class RecordingManager {
     private schematicRenderer: SchematicRenderer;
     private recordingCanvas: HTMLCanvasElement;
     private ctx2d: CanvasRenderingContext2D | null = null;
-    private mediaRecorder: MediaRecorder | null = null;
-    private recordingStartTime: number = 0;
-    private animationFrameId: number | null = null;
-    private chunks: BlobPart[] = [];
+    private ffmpeg: FFmpeg;
+    private frameCount: number = 0;
     private originalSettings: {
         width: number;
         height: number;
@@ -35,113 +34,126 @@ export class RecordingManager {
             alpha: false,
             desynchronized: true
         });
+        this.ffmpeg = new FFmpeg();
+        
+        // Initialize FFmpeg early
+        const initFFmpeg = async () => {
+            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+            await this.ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+                // classWorkerURL: await toBlobURL(`https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js`, 'text/javascript')
+            });
+        };
+        initFFmpeg();
+     }
+
+    private async captureFrame(): Promise<Uint8Array> {
+        if (!this.ctx2d) throw new Error('Recording context not initialized');
+        const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
+        if (!mainCanvas) throw new Error('Main canvas not found');
+        
+        return new Promise<Uint8Array>((resolve) => {
+            this.ctx2d!.drawImage(mainCanvas, 0, 0);
+            this.recordingCanvas.toBlob((blob) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    resolve(new Uint8Array(reader.result as ArrayBuffer));
+                };
+                reader.readAsArrayBuffer(blob!);
+            }, 'image/png', 0.9);
+        });
     }
 
-    private async setupRecording(width: number, height: number): Promise<void> {
+     
+     private async setupRecording(width: number, height: number): Promise<void> {
         const renderer = this.schematicRenderer.renderManager?.renderer;
-        if (!renderer) {
-            throw new Error('Renderer not found');
-        }
+        if (!renderer) throw new Error('Renderer not found');
         const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
-
-        // Store original settings
+     
         this.originalSettings = {
             width: renderer.domElement.clientWidth,
             height: renderer.domElement.clientHeight,
             pixelRatio: renderer.getPixelRatio(),
             aspect: camera.aspect
         };
-
-        // Set up recording size
+     
         this.recordingCanvas.width = width;
         this.recordingCanvas.height = height;
-
-        // Update renderer for high-res recording
         renderer.setPixelRatio(1.0);
         renderer.setSize(width, height, false);
-
-        // Maintain display size
-        renderer.domElement.style.width = `${this.originalSettings.width}px`;
-        renderer.domElement.style.height = `${this.originalSettings.height}px`;
-
-        // Update camera for new aspect ratio
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-
-        // Wait for renderer to adjust
-        await new Promise(resolve => requestAnimationFrame(resolve));
-    }
+     }
+    
 
     public async startRecording(duration: number, options: RecordingOptions = {}): Promise<void> {
-        if (this.isRecording) {
-            throw new Error('Recording is already in progress');
-        }
+        if (this.isRecording) throw new Error('Recording already in progress');
+        console.log('Starting recording...');
 
         const {
             width = 3840,
             height = 2160,
             frameRate = 60,
-            videoBitsPerSecond = 20000000,
-            mimeType = 'video/webm;codecs=vp9',
+            onStart,
             onProgress,
             onComplete
         } = options;
 
         try {
-            // Setup recording
+            console.log('Setting up recording...');
             await this.setupRecording(width, height);
+            console.log('Recording setup complete');
+            this.frameCount = 0;
+            this.isRecording = true;
 
-            // Clear previous chunks
-            this.chunks = [];
+            if (onStart) onStart();
 
-            // Set up media recorder
-            const stream = this.recordingCanvas.captureStream(frameRate);
-            this.mediaRecorder = new MediaRecorder(stream, {
-                mimeType,
-                videoBitsPerSecond
-            });
-
-            return new Promise((resolve, reject) => {
-                if (!this.mediaRecorder) return reject(new Error('MediaRecorder not initialized'));
-
-                this.mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        this.chunks.push(event.data);
-                    }
-                };
-
-                this.mediaRecorder.onstop = () => {
-                    if (this.chunks.length === 0) {
-                        reject(new Error('No frames were captured'));
-                        return;
-                    }
-
-                    const blob = new Blob(this.chunks, { type: mimeType });
-                    this.cleanup();
+            const totalFrames = duration * frameRate;
+            console.log(`Recording ${totalFrames} frames at ${frameRate} FPS...`);
+            this.schematicRenderer.cameraManager.animateCameraAlongPath({
+                targetFps: frameRate,
+                totalFrames,
+                lookAtTarget: true,
+                onUpdate: async () => {
+                    if (!this.isRecording) return;
                     
-                    if (blob.size === 0) {
-                        reject(new Error('Recording produced empty file'));
-                        return;
+                    const frame = await this.captureFrame();
+                    const filename = `frame${this.frameCount.toString().padStart(6, '0')}.png`;
+                    await this.ffmpeg.writeFile(filename, frame);
+                    this.frameCount++;
+                    
+                    if (onProgress) onProgress(this.frameCount / totalFrames);
+                },
+                onComplete: async () => {
+                    if (!this.isRecording) return;
+                    console.log('Recording complete');
+                    console.log('Encoding video...');
+                    try {
+                        await this.ffmpeg.exec([
+                            '-framerate', frameRate.toString(),
+                            '-pattern_type', 'sequence',
+                            '-start_number', '0',
+                            '-i', 'frame%06d.png',
+                            '-c:v', 'libx264',
+                            '-preset', 'ultrafast',
+                            '-threads', '0',
+                            '-crf', '23',  // Balance between quality and size
+                            '-pix_fmt', 'yuv420p',
+                            'output.mp4'
+                        ]);
+                        const data = await this.ffmpeg.readFile('output.mp4');
+                        console.log('Video encoding complete');
+                        //@ts-ignore
+                        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+                        
+                        if (onComplete) onComplete(blob);
+                        this.stopRecording();
+                    } catch (error) {
+                        console.error('FFmpeg encoding failed:', error);
+                        throw error;
                     }
-
-                    if (onComplete) {
-                        onComplete(blob);
-                    }
-                    resolve();
-                };
-
-                this.mediaRecorder.onerror = (event) => {
-                    this.cleanup();
-                    reject(new Error('Recording failed: ' + event));
-                };
-
-                // Start recording
-                this.isRecording = true;
-                this.recordingStartTime = performance.now();
-                this.mediaRecorder.start(1000);
-
-                // Start animation and recording
-                this.startRenderLoop(duration, onProgress);
+                }
             });
         } catch (error) {
             this.cleanup();
@@ -149,41 +161,14 @@ export class RecordingManager {
         }
     }
 
-    private startRenderLoop(duration: number, onProgress?: (progress: number) => void): void {
-        const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
-        if (!mainCanvas) throw new Error('Main canvas not found');
-    
-        // Start camera animation first
-        this.schematicRenderer.cameraManager.animateCameraAlongPath({
-            duration: duration,
-            lookAtTarget: true,
-            onUpdate: () => {
-                if (!this.isRecording || !this.ctx2d) return;
-                this.ctx2d.drawImage(mainCanvas, 0, 0);
-                
-                const elapsed = performance.now() - this.recordingStartTime;
-                const progress = Math.min(elapsed / (duration * 1000), 1);
-                
-                if (onProgress) onProgress(progress);
-                
-                if (progress >= 1) this.stopRecording();
-            }
-        });
-    }
-
     private cleanup(): void {
         if (this.originalSettings) {
             const renderer = this.schematicRenderer.renderManager?.renderer;
-            if (!renderer) {
-                throw new Error('Renderer not found');
-            }
+            if (!renderer) throw new Error('Renderer not found');
             const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
 
-            // Reset renderer settings
             renderer.setSize(this.originalSettings.width, this.originalSettings.height, false);
             renderer.setPixelRatio(this.originalSettings.pixelRatio);
-
-            // Reset camera
             camera.aspect = this.originalSettings.aspect;
             camera.updateProjectionMatrix();
 
@@ -192,27 +177,12 @@ export class RecordingManager {
     }
 
     public stopRecording(): void {
-        if (!this.isRecording || !this.mediaRecorder) return;
-
-        if (this.animationFrameId !== null) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-        }
-
         this.isRecording = false;
-        
-        if (this.mediaRecorder.state !== 'inactive') {
-            this.mediaRecorder.stop();
-        }
-        
-        this.mediaRecorder = null;
         this.cleanup();
     }
 
     public dispose(): void {
         this.stopRecording();
-        if (this.originalSettings) {
-            this.cleanup();
-        }
+        this.ffmpeg.terminate();
     }
 }

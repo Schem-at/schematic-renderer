@@ -44,7 +44,7 @@ const renderer = new SchematicRenderer(canvas, {
 	
 	{
 		gamma: 0.65,
-		showCameraPathVisualization: false,
+		showCameraPathVisualization: true,
 		enableInteraction: false,
 		enableDragAndDrop: true,
 		enableGizmos: false,
@@ -55,6 +55,8 @@ const renderer = new SchematicRenderer(canvas, {
 		dragAndDropOptions: {
 		  acceptedFileTypes: ['schematic', 'nbt', 'schem', 'litematic'],
 		},
+		hdri: '/public/minecraft_day.hdr',
+
 		showAxes: false,
 		showGrid: true,
 		gizmoOptions: {

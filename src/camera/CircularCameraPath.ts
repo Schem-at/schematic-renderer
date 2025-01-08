@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CameraPath } from './CameraPath';
 import { SchematicRenderer } from '../SchematicRenderer';
+import { CameraFrame } from '../managers/CameraManager';
 
 interface CircularPathParams {
   height: number;
@@ -68,27 +69,62 @@ export class CircularCameraPath extends CameraPath {
     };
   }
 
+  public animate(options: {
+    duration: number,
+    onFrame: (frame: CameraFrame) => void,
+    onComplete?: () => void
+  }): void {
+    const startTime = performance.now();
+    let lastT = 0;
+    
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(elapsed / (options.duration * 1000), 1);
+      
+      if (Math.abs(t - lastT) > 0.001) {
+        const frame = this.pathFunction(t);
+        options.onFrame({ ...frame, progress: t });
+        lastT = t;
+      }
+      
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      } else if (options.onComplete) {
+        options.onComplete();
+      }
+    };
+    
+    animate();
+  }
+
 
   public fitToSchematics(): void {
-    // Calculate the center of the schematic
     if (!this.schematicRenderer.schematicManager) {
       return;
     }
+    
     const schematicCenters = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
     const cameraPosition = this.schematicRenderer.cameraManager.activeCamera.position as THREE.Vector3;
-
-    // Set the target to the center of the schematic
+  
+    // Set target and height
     this.params.target = schematicCenters;
     this.targetVec = this.vectorFromInput(schematicCenters);
     this.params.height = cameraPosition.y;
-
-    console.log("schematicCenters", schematicCenters);
-    // Set the radius to fit the distance from the camera to the center of the schematic
+  
+    // Calculate radius from horizontal distance
     const distance = cameraPosition.distanceTo(schematicCenters);
     this.params.radius = distance;
-
+  
+    // Calculate current angle in XZ plane relative to center
+    const deltaX = cameraPosition.x - schematicCenters.x;
+    const deltaZ = cameraPosition.z - schematicCenters.z;
+    const currentAngle = Math.atan2(deltaZ, deltaX);
+  
+    // Set the startAngle to match current camera position
+    this.startAngle = currentAngle;
+    this.endAngle = currentAngle + Math.PI * 2; // Full circle from current position
+  
     this.updatePathFunction();
-
   }
 
   public updateParameters(params: Partial<CircularPathParams>): void {

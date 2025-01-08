@@ -13,12 +13,21 @@ export interface CameraManagerOptions {
 	showCameraPathVisualization?: boolean;
 }
 
+export interface CameraFrame {
+	position: THREE.Vector3;
+	rotation: THREE.Euler;
+	target: THREE.Vector3;
+	progress: number;
+}
+
 export interface CameraAnimationWithRecordingOptions {
 	pathName?: string;
-	duration?: number;
+	totalFrames?: number;
+	targetFps?: number; // e.g. 60
 	easing?: (t: number) => number;
 	lookAtTarget?: boolean;
 	updateControls?: boolean;
+	onStart?: () => void;
 	onUpdate?: (progress: number) => void;
 	onComplete?: () => void;
 	recording?: {
@@ -39,7 +48,6 @@ export class CameraManager extends EventEmitter {
 	private rendererDomElement: HTMLCanvasElement;
 	private animationRequestId: number | null = null;
 	private isAnimating: boolean = false;
-	private animationStartTime: number = 0;
 	private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
 	private animationStartRotation: THREE.Euler = new THREE.Euler();
 	public recordingManager: RecordingManager;
@@ -112,7 +120,6 @@ export class CameraManager extends EventEmitter {
 		let cameraPath: CameraPath | undefined;
 		let options: CameraAnimationWithRecordingOptions = {};
 
-		// Handle different input cases
 		if (pathOrOptions instanceof CameraPath) {
 			cameraPath = pathOrOptions;
 		} else if (typeof pathOrOptions === "object") {
@@ -122,7 +129,6 @@ export class CameraManager extends EventEmitter {
 			}
 		}
 
-		// If no path is specified, try to get the default path
 		if (!cameraPath) {
 			const defaultPath = this.getDefaultCameraPath();
 			if (!defaultPath) {
@@ -133,29 +139,25 @@ export class CameraManager extends EventEmitter {
 		}
 
 		const {
-			duration = 5,
+			totalFrames = 300,
+			targetFps = 60,
 			easing = EasingFunctions.linear,
 			lookAtTarget = true,
 			updateControls = true,
+			onStart,
 			onUpdate,
 			onComplete,
-			recording,
 		} = options;
 
-		// Stop any existing animation
+		const targetFrameMs = 1000 / targetFps;
 		this.stopAnimation();
 
 		try {
-			// Start recording if enabled
-			if (recording?.enabled) {
-				await this.recordingManager.startRecording(duration, recording.options);
-			}
-
 			return new Promise((resolve, _) => {
 				this.isAnimating = true;
-				this.animationStartTime = performance.now();
+				let frame = 0;
+				let lastFrameTime = performance.now();
 
-				// Store initial camera state
 				this.animationStartPosition.copy(
 					this.activeCamera.position as THREE.Vector3
 				);
@@ -163,7 +165,6 @@ export class CameraManager extends EventEmitter {
 					this.activeCamera.rotation as THREE.Euler
 				);
 
-				// Temporarily disable controls if they exist
 				if (updateControls) {
 					const controls = this.controls.get(this.activeControlKey);
 					if (controls && controls.enabled) {
@@ -171,48 +172,55 @@ export class CameraManager extends EventEmitter {
 					}
 				}
 
-				const animate = () => {
-					const currentTime = performance.now();
-					const elapsed = (currentTime - this.animationStartTime) / 1000;
-					let t = Math.min(elapsed / duration, 1);
+				//set the camera to the start of the path
+				const {
+					position: startPosition,
+					rotation: startRotation,
+					target,
+				} = cameraPath!.getPoint(0);
+				(this.activeCamera.position as THREE.Vector3).copy(startPosition);
+				(this.activeCamera.rotation as THREE.Euler).copy(startRotation);
+				if (lookAtTarget) {
+					this.activeCamera.lookAt(target);
+				}
 
-					// Apply easing
+				const animate = async () => {
+					let t = frame / totalFrames;
 					t = easing(t);
 
-					// Get position and rotation from the path
 					const { position, rotation, target } = cameraPath!.getPoint(t);
-
-					// Set camera position directly
 					(this.activeCamera.position as THREE.Vector3).copy(position);
 
 					if (lookAtTarget) {
-						// Look at the target point
 						this.activeCamera.lookAt(target);
 					} else {
-						// Set camera rotation directly
 						(this.activeCamera.rotation as THREE.Euler).copy(rotation);
 					}
 
-					// Emit camera movement event
 					this.emit("cameraMove", {
 						position: (this.activeCamera.position as THREE.Vector3).clone(),
 						rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
 						progress: t,
 					});
 
-					// Call update callback if provided
 					if (onUpdate) {
-						onUpdate(t);
+						await onUpdate(t);
 					}
 
-					// Continue animation if not complete
-					if (t < 1) {
-						this.animationRequestId = requestAnimationFrame(animate);
+					frame++;
+
+					if (frame <= totalFrames) {
+						const currentTime = performance.now();
+						const frameTime = currentTime - lastFrameTime;
+						const delay = Math.max(0, targetFrameMs - frameTime);
+
+						lastFrameTime = currentTime;
+						setTimeout(() => {
+							this.animationRequestId = requestAnimationFrame(animate);
+						}, delay);
 					} else {
-						// Animation complete
 						this.isAnimating = false;
 
-						// Re-enable controls if they were disabled
 						if (updateControls) {
 							const controls = this.controls.get(this.activeControlKey);
 							if (controls) {
@@ -220,12 +228,6 @@ export class CameraManager extends EventEmitter {
 							}
 						}
 
-						// Stop recording if it was enabled
-						if (recording?.enabled) {
-							this.recordingManager.stopRecording();
-						}
-
-						// Call complete callback if provided
 						if (onComplete) {
 							onComplete();
 						}
@@ -233,7 +235,7 @@ export class CameraManager extends EventEmitter {
 						resolve();
 					}
 				};
-
+				onStart && onStart();
 				this.animationRequestId = requestAnimationFrame(animate);
 			});
 		} catch (error) {
@@ -313,8 +315,6 @@ export class CameraManager extends EventEmitter {
 				value: (this.activeCamera.rotation as THREE.Euler).clone(),
 			});
 		});
-
-	
 	}
 
 	// Update loop for controls

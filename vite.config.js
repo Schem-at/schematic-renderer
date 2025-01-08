@@ -41,6 +41,6 @@ export default defineConfig({
   },
   optimizeDeps: {
 
-    exclude: ['@wasm/minecraft_schematic_utils']
+    exclude: ['@wasm/minecraft_schematic_utils','@ffmpeg/ffmpeg', '@ffmpeg/util']
   }
 });
