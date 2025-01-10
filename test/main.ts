@@ -1,4 +1,6 @@
 import { SchematicRenderer } from "../src/SchematicRenderer";
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
@@ -36,6 +38,21 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 	return bytes.buffer;
 }
 
+
+const ffmpeg = new FFmpeg();
+const initFFmpeg = async () => {
+	const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+	await ffmpeg.load({
+		coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+		wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+	});
+}
+initFFmpeg();
+
+
+
+
+
 const renderer = new SchematicRenderer(canvas, {
 	// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
 	// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
@@ -44,6 +61,7 @@ const renderer = new SchematicRenderer(canvas, {
 	{},
 	
 	{
+		ffmpeg: ffmpeg,
 		gamma: 0.65,
 		showCameraPathVisualization: false,
 		enableInteraction: false,
@@ -69,80 +87,10 @@ const renderer = new SchematicRenderer(canvas, {
 			onSchematicDropSuccess: async (file) => {
 				console.log('Schematic dropped successfully:', file);
 			},
-		  onRendererInitialized: () => {
-				// console.log('Renderer has been initialized.');
-				// renderer.schematicManager?.createEmptySchematic("piston");
-				// //oak sapling
-				// renderer.schematicManager?.getSchematic("test")?.setBlock([0, 0, 0], "minecraft:oak_sapling", {
-				// 	stage: "0",
-				// });
-
-
-				// // single normal piston
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 0], "minecraft:piston", {
-				// 	facing: "up",
-				// 	extended: "false",
-				// });
-
-
-				// //north 
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -2], "minecraft:sticky_piston", {
-				// 	facing: "north",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, -3], "minecraft:piston_head", {
-				// 	facing: "north",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-				// //east 
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([2, 0, 0], "minecraft:sticky_piston", {
-				// 	facing: "east",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([3, 0, 0], "minecraft:piston_head", {
-				// 	facing: "east",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-
-				// // //up 
-
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 2, 0], "minecraft:sticky_piston", {
-				// 	facing: "up",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 3, 0], "minecraft:piston_head", {
-				// 	facing: "up",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-				// //west
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([-2, 0, 0], "minecraft:sticky_piston", {
-				// 	facing: "west",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([-3, 0, 0], "minecraft:piston_head", {
-				// 	facing: "west",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-				// //south
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 2], "minecraft:sticky_piston", {
-				// 	facing: "south",
-				// 	extended: "true",
-				// });
-				// renderer.schematicManager?.getSchematic("piston")?.setBlock([0, 0, 3], "minecraft:piston_head", {
-				// 	facing: "south",
-				// 	short: "false",
-				// 	type: "sticky",
-				// });
-
-
+			onRendererInitialized: () => {
+				renderer.uiManager?.hideEmptyState();
+				renderer.schematicManager?.createEmptySchematic("glass_test");
+				renderer.schematicManager?.getSchematic("glass_test")?.setBlock([0, 0, 0], "minecraft:light_blue_stained_glass", {});
 		  },
 		  onSchematicLoaded: (schematicName: string) => {
 			console.log(`Schematic ${schematicName} has been loaded.`);

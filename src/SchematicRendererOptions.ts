@@ -9,6 +9,7 @@ import { SelectableObject } from './managers/SelectableObject';
 export interface SchematicRendererOptions {
   hdri?: string;
   resourcePackBlobs?: any;
+  ffmpeg?: any;
   gamma?: number;
   // Global toggles for enabling/disabling functionalities
   enableInteraction?: boolean;

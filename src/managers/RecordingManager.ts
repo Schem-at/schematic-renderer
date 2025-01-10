@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { SchematicRenderer } from '../SchematicRenderer';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { toBlobURL } from '@ffmpeg/util';
 
 export interface RecordingOptions {
     width?: number;
@@ -18,7 +17,7 @@ export class RecordingManager {
     private schematicRenderer: SchematicRenderer;
     private recordingCanvas: HTMLCanvasElement;
     private ctx2d: CanvasRenderingContext2D | null = null;
-    private ffmpeg: FFmpeg;
+    private ffmpeg?: FFmpeg;
     private frameCount: number = 0;
     private originalSettings: {
         width: number;
@@ -34,21 +33,38 @@ export class RecordingManager {
             alpha: false,
             desynchronized: true
         });
-        this.ffmpeg = new FFmpeg();
+        // this.ffmpeg = new FFmpeg();
         
-        // Initialize FFmpeg early
-        const initFFmpeg = async () => {
-            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-            await this.ffmpeg.load({
-                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-                // classWorkerURL: await toBlobURL(`https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js`, 'text/javascript')
-            });
-        };
-        initFFmpeg();
-     }
+        // // Initialize FFmpeg early
+        // const initFFmpeg = async () => {
+        //     const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        //     await this.ffmpeg.load({
+        //         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        //         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        //         // classWorkerURL: await toBlobURL(`https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js`, 'text/javascript')
+        //     });
+        // };
+        // initFFmpeg();
+        // instead of loading ffmpeg from here it will be passed as an option from the main app
+        //check if the ffmpeg is passed as an option
+        if(!this.schematicRenderer.options.ffmpeg) {
+            console.error('FFmpeg not found in options');
+            console.error('Recording will not work');
+            return;
+        }
+
+        //initialize ffmpeg from the options
+        this.ffmpeg = this.schematicRenderer.options.ffmpeg;
+
+
+    }
 
     private async captureFrame(): Promise<Uint8Array> {
+        //if ffmpeg is null then return an empty array
+        if(!this.ffmpeg) {
+            console.error('FFmpeg not found');
+            return new Uint8Array();
+        }
         if (!this.ctx2d) throw new Error('Recording context not initialized');
         const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
         if (!mainCanvas) throw new Error('Main canvas not found');
@@ -66,7 +82,11 @@ export class RecordingManager {
     }
 
      
-     private async setupRecording(width: number, height: number): Promise<void> {
+    private async setupRecording(width: number, height: number): Promise<void> {
+         if(!this.ffmpeg) {
+            console.error('FFmpeg not found');
+             return;
+            }
         const renderer = this.schematicRenderer.renderManager?.renderer;
         if (!renderer) throw new Error('Renderer not found');
         const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
@@ -88,6 +108,11 @@ export class RecordingManager {
     
 
     public async startRecording(duration: number, options: RecordingOptions = {}): Promise<void> {
+        if(!this.ffmpeg) {
+            console.error('FFmpeg not found');
+            this.stopRecording();
+            return;
+        }
         if (this.isRecording) throw new Error('Recording already in progress');
         console.log('Starting recording...');
 
@@ -99,7 +124,11 @@ export class RecordingManager {
             onProgress,
             onComplete
         } = options;
-
+        if (!this.ffmpeg) {
+            console.error('FFmpeg not found');
+            this.stopRecording();
+            return;
+        }
         try {
             console.log('Setting up recording...');
             await this.setupRecording(width, height);
@@ -120,6 +149,10 @@ export class RecordingManager {
                     
                     const frame = await this.captureFrame();
                     const filename = `frame${this.frameCount.toString().padStart(6, '0')}.png`;
+                    if(!this.ffmpeg) {
+                        console.error('FFmpeg not found');
+                        return;
+                    }
                     await this.ffmpeg.writeFile(filename, frame);
                     this.frameCount++;
                     
@@ -130,6 +163,10 @@ export class RecordingManager {
                     console.log('Recording complete');
                     console.log('Encoding video...');
                     try {
+                        if (!this.ffmpeg) {
+                            console.error('FFmpeg not found');
+                            return;
+                        }
                         await this.ffmpeg.exec([
                             '-framerate', frameRate.toString(),
                             '-pattern_type', 'sequence',
@@ -182,7 +219,12 @@ export class RecordingManager {
     }
 
     public dispose(): void {
+        
         this.stopRecording();
+        if(!this.ffmpeg) {
+            console.error('FFmpeg not found');
+            return;
+        }
         this.ffmpeg.terminate();
     }
 }

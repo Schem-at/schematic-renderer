@@ -152,48 +152,65 @@ export class ResourceLoader {
 		color?: THREE.Color
 	): Promise<THREE.MeshStandardMaterial | undefined> {
 		let textureName = faceData.texture;
-
+	
 		// Resolve texture references
 		textureName = this.resolveTextureName(textureName, model);
-
+	
 		// Remove "minecraft:" prefix if present
 		if (textureName.startsWith("minecraft:")) {
 			textureName = textureName.substring("minecraft:".length);
 		}
-
+	
 		// Get the base64 image
-		const base64Resource = await this.getResourceBase64(
-			`textures/${textureName}.png`
-		);
+		const base64Resource = await this.getResourceBase64(`textures/${textureName}.png`);
 		if (!base64Resource) {
-			// console.warn(`Texture ${textureName} not found.`);
 			return undefined;
 		}
 		const base64Png = "data:image/png;base64," + base64Resource;
 		
-		// Load the texture
-		const texture = this.textureLoader.load(base64Png, () => {
-			texture.minFilter = THREE.NearestFilter;
-			texture.magFilter = THREE.NearestFilter;
-			texture.wrapS = THREE.RepeatWrapping;
-			texture.wrapT = THREE.RepeatWrapping;
-			texture.needsUpdate = true;
-		});
-
+		// Load the texture with proper alpha channel handling
+		const texture = this.textureLoader.load(base64Png);
+		texture.minFilter = THREE.NearestFilter;
+		texture.magFilter = THREE.NearestFilter;
+		texture.wrapS = THREE.RepeatWrapping;
+		texture.wrapT = THREE.RepeatWrapping;
+		texture.format = THREE.RGBAFormat;  // Important for alpha
+		texture.premultiplyAlpha = true;    // Important for correct alpha blending
+		texture.needsUpdate = true;
+	
 		// Handle rotation
 		const rotation = faceData.rotation;
 		if (rotation) {
 			texture.center = new THREE.Vector2(0.5, 0.5);
 			texture.rotation = (rotation * Math.PI) / 180;
 		}
-
-		return new THREE.MeshStandardMaterial({
+	
+		// Create material with proper alpha handling
+		const material = new THREE.MeshStandardMaterial({
 			map: texture,
 			side: THREE.FrontSide,
-			alphaTest: 0.1,
-			transparent: transparent ?? false,
+			transparent: true,  // Always true when dealing with alpha textures
+			opacity: 1.0,      // Let the texture's alpha control transparency
+			alphaTest: 0.1,    // Adjust this value based on your needs
+			depthWrite: !transparent,  // Important for proper transparency rendering
+			depthTest: true,
 			color: color ?? 0xffffff,
 		});
+	
+		// Enable proper alpha blending
+		material.blending = THREE.NormalBlending;
+		material.premultipliedAlpha = true;
+		material.needsUpdate = true;
+	
+		// TODO: Handle PBR resource packs
+		// if (textureName.includes("glass")) {
+		// 	material.roughness = 0.1;
+		// 	material.metalness = 0.2;
+		// 	material.envMapIntensity = 1.0;
+		// 	material.refractionRatio = 0.98;
+		// }
+	
+		return material;
 	}
 
 	public getModelOption(data: BlockModelData) {
