@@ -174,8 +174,8 @@ export class ResourceLoader {
 		texture.magFilter = THREE.NearestFilter;
 		texture.wrapS = THREE.RepeatWrapping;
 		texture.wrapT = THREE.RepeatWrapping;
-		texture.format = THREE.RGBAFormat;  // Important for alpha
-		texture.premultiplyAlpha = true;    // Important for correct alpha blending
+		texture.format = THREE.RGBAFormat;
+		texture.premultiplyAlpha = false;  // Changed to false for better transparency
 		texture.needsUpdate = true;
 	
 		// Handle rotation
@@ -189,26 +189,34 @@ export class ResourceLoader {
 		const material = new THREE.MeshStandardMaterial({
 			map: texture,
 			side: THREE.FrontSide,
-			transparent: true,  // Always true when dealing with alpha textures
-			opacity: 1.0,      // Let the texture's alpha control transparency
-			alphaTest: 0.1,    // Adjust this value based on your needs
-			depthWrite: !transparent,  // Important for proper transparency rendering
-			depthTest: true,
+			transparent: transparent ?? false,
+			opacity: 1.0,
+			alphaTest: 0.1,
+			// depthWrite: !transparent,
+			// depthTest: true,
 			color: color ?? 0xffffff,
+			// Improved transparency settings
+			blending: THREE.CustomBlending,
+			blendSrc: THREE.SrcAlphaFactor,
+			blendDst: THREE.OneMinusSrcAlphaFactor,
+			blendEquation: THREE.AddEquation,
+			// Better lighting through glass
+			shadowSide: THREE.FrontSide,
+			toneMapped: false
 		});
 	
-		// Enable proper alpha blending
-		material.blending = THREE.NormalBlending;
-		material.premultipliedAlpha = true;
-		material.needsUpdate = true;
-	
-		// TODO: Handle PBR resource packs
-		// if (textureName.includes("glass")) {
-		// 	material.roughness = 0.1;
-		// 	material.metalness = 0.2;
-		// 	material.envMapIntensity = 1.0;
-		// 	material.refractionRatio = 0.98;
-		// }
+		// For transparent materials (like glass)
+		if (transparent) {
+			material.blending = THREE.CustomBlending;
+			material.blendSrc = THREE.SrcAlphaFactor;
+			material.blendDst = THREE.OneMinusSrcAlphaFactor;
+			material.blendEquation = THREE.AddEquation;
+			material.premultipliedAlpha = false;
+			// Make glass affect lighting less
+			material.metalness = 0.0;
+			material.roughness = 0.2;
+			material.envMapIntensity = 0.5;
+		}
 	
 		return material;
 	}
@@ -241,7 +249,10 @@ export class ResourceLoader {
 			holders.push(model.options[index].holder);
 			name = `${name}-${index}`;
 		}
-
+		if (holders.length === 0) {
+			console.warn("No models found for block", data);
+			console.log(data, data.models);
+		}
 		return { name, holders };
 	}
 
@@ -308,7 +319,7 @@ export class ResourceLoader {
 	public async getBlockMeta(block: Block) {
 		// Remove the "minecraft:" prefix
 		block.name = block.name.replace("minecraft:", "");
-
+		console.log("Block name: ", block.name);
 		const blockKey = hashBlockForMap(block);
 		if (this.blockMetaCache.has(blockKey)) {
 			return this.blockMetaCache.get(blockKey);
@@ -317,7 +328,7 @@ export class ResourceLoader {
 		const blockStateDefinition = await this.getBlockStateDefinition(block.name);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
-
+		
 		const blockMeta = { blockStateDefinition, modelData, modelOptions };
 		this.blockMetaCache.set(blockKey, blockMeta);
 		return blockMeta;
@@ -453,6 +464,10 @@ export class ResourceLoader {
 			const mesh = new THREE.Mesh(geometry, material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
+			if (material?.transparent) {
+				// Set renderOrder to ensure proper rendering order
+				mesh.renderOrder = 1000;
+			}
 			meshes.push(mesh);
 		}
 
@@ -485,6 +500,7 @@ export class ResourceLoader {
 		block: Block,
 		blockState: BlockStateDefinition
 	): BlockModelData {
+
 		const models: BlockModelData["models"] = [];
 
 		const validVariantProperties = blockState.variants
@@ -569,7 +585,11 @@ export class ResourceLoader {
 
 		const name =
 			variantName.length > 0 ? `${block.name}[${variantName}]` : block.name;
-
+		if (models.length === 0) {
+			console.warn(`No models found for block ${name}.`);
+			// if no models are found, use the first model
+			
+		}
 		return { models, name };
 	}
 

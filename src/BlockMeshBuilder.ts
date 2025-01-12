@@ -306,6 +306,10 @@ export class BlockMeshBuilder {
 		const { modelOptions } = await this.schematicRenderer.resourceLoader?.getBlockMeta(block);
 		let modelIndex = 0;
 		let start = performance.now();
+		if (!modelOptions.holders || modelOptions.holders.length === 0) {
+			console.error("No model holders", block);
+			return {};
+		}
 		for (const modelHolder of modelOptions.holders) {
 			modelIndex++;
 			if (modelHolder === undefined) continue;
@@ -683,6 +687,10 @@ export class BlockMeshBuilder {
 		} else {
 			const start = performance.now();
 			const blockComponents = await this.getBlockMesh(block, pos);
+			if (!blockComponents) {
+				console.error("Failed to get block mesh", block);
+				return;
+			}
 			// if over 100ms log the block
 			const time = performance.now() - start;
 			const previousTimes = this.schematicRenderer.timings.get("getBlockMesh") || 0;

@@ -55,14 +55,25 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
 
     // Pre-calculate block meta and cache it
     private async prepareBlockMeta(name: string, properties: Record<string, string>) {
+
+
+        if (name === "minecraft:redstone_wire" && Object.keys(properties).length === 0) {
+			properties = {
+				power: "0",
+				north: "none",
+				south: "none",  
+				east: "none",
+				west: "none"
+            };
+		}
         const meta = await this.getBlockMeta(name, properties);
         const holder = meta.modelOptions.holders[0];
         return {
             meta,
             rotationMatrix: this.getRotationMatrix(
-                holder.x ?? 0,
-                holder.y ?? 0,
-                holder.z ?? 0
+                holder?.x ?? 0,
+                holder?.y ?? 0,
+                holder?.z ?? 0
             )
         };
     }
@@ -190,6 +201,9 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
                 { name, properties },
                 { x, y, z }
             );
+
+            if (!blockComponents) continue;
+            
 
             // Get pre-calculated meta and rotation matrix
             const key = `${name}-${JSON.stringify(properties)}`;
