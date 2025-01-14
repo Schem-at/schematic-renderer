@@ -49,72 +49,50 @@ export class RecordingManager {
 
         this.ffmpeg = this.schematicRenderer.options.ffmpeg;
     }
-
-    private async captureFrame(): Promise<Uint8Array> {
-        if(!this.ffmpeg) {
+    private async captureFrame(
+        quality: number = 1.0
+    ): Promise<Uint8Array> {
+        if (!this.ffmpeg) {
             console.error('FFmpeg not found');
             return new Uint8Array();
         }
         if (!this.ctx2d) throw new Error('Recording context not initialized');
         const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
         if (!mainCanvas) throw new Error('Main canvas not found');
-       
+        
+        // During animation, the scene is already being rendered for us
+        // so we don't need to call render() here
         return new Promise<Uint8Array>((resolve) => {
-            if (!this.schematicRenderer) {
-                console.error('SchematicRenderer not found');
-                return new Uint8Array();
-            }
-            if (!this.schematicRenderer.renderManager) throw new Error('Render manager not found');
-            // Force a render through the EffectComposer
-            this.schematicRenderer.renderManager.render();
-            
-            const composer = (this.schematicRenderer.renderManager as any).composer;
-            const readBuffer = composer.outputBuffer;
-            this.schematicRenderer.renderManager.renderer.setRenderTarget(readBuffer);
-            
-            this.ctx2d!.drawImage(this.schematicRenderer.renderManager.renderer.domElement, 0, 0);
-            
-            // Reset render target
-            this.schematicRenderer.renderManager.renderer.setRenderTarget(null);
-            
+            this.ctx2d!.drawImage(mainCanvas, 0, 0);
             this.recordingCanvas.toBlob((blob) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
                     resolve(new Uint8Array(reader.result as ArrayBuffer));
                 };
                 reader.readAsArrayBuffer(blob!);
-            }, 'image/jpeg', 1.0); // Try JPEG with max quality instead of PNG
+            }, 'image/png', quality);
         });
     }
-
+    
     /**
      * Takes a screenshot of the current view
-     * @param options Screenshot options including dimensions and format
-     * @returns Promise<Blob> A promise that resolves with the screenshot blob
      */
     public async takeScreenshot(options: ScreenshotOptions = {}): Promise<Blob> {
         const {
             width = this.schematicRenderer.renderManager?.renderer.domElement.width || 3840,
             height = this.schematicRenderer.renderManager?.renderer.domElement.height || 2160,
-            // @ts-ignore
             quality = 0.9,
             format = 'image/png'
         } = options;
-
+    
         // Store original settings
         const tempSettings = await this.setupTemporarySettings(width, height);
         
         try {
-            // Force a render to ensure the latest state is captured
-            this.schematicRenderer.renderManager?.renderer.render(
-                this.schematicRenderer.sceneManager.scene,
-                this.schematicRenderer.cameraManager.activeCamera.camera
-            );
-
-            // Reuse captureFrame for consistency
-            const frameData = await this.captureFrame();
+            // For screenshots, we need to explicitly render since we're not in an animation loop
+            this.schematicRenderer.renderManager?.render();
             
-            // Convert Uint8Array to Blob
+            const frameData = await this.captureFrame(quality);
             // @ts-ignore
             return new Blob([frameData.buffer], { type: format });
         } catch (error) {
@@ -164,12 +142,12 @@ export class RecordingManager {
         camera.aspect = settings.aspect;
         camera.updateProjectionMatrix();
     }
-
+     
     private async setupRecording(width: number, height: number): Promise<void> {
-        if(!this.ffmpeg) {
+         if(!this.ffmpeg) {
             console.error('FFmpeg not found');
-            return;
-        }
+             return;
+            }
         const renderer = this.schematicRenderer.renderManager?.renderer;
         if (!renderer) throw new Error('Renderer not found');
         const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
@@ -187,7 +165,7 @@ export class RecordingManager {
         renderer.setSize(width, height, false);
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-    }
+     }
 
     public async startRecording(duration: number, options: RecordingOptions = {}): Promise<void> {
         if(!this.ffmpeg) {
@@ -206,7 +184,11 @@ export class RecordingManager {
             onProgress,
             onComplete
         } = options;
-        
+        if (!this.ffmpeg) {
+            console.error('FFmpeg not found');
+            this.stopRecording();
+            return;
+        }
         try {
             console.log('Setting up recording...');
             await this.setupRecording(width, height);
@@ -253,7 +235,7 @@ export class RecordingManager {
                             '-c:v', 'libx264',
                             '-preset', 'ultrafast',
                             '-threads', '0',
-                            '-crf', '23',
+                            '-crf', '23', 
                             '-pix_fmt', 'yuv420p',
                             'output.mp4'
                         ]);

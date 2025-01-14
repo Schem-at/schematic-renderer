@@ -319,7 +319,6 @@ export class ResourceLoader {
 	public async getBlockMeta(block: Block) {
 		// Remove the "minecraft:" prefix
 		block.name = block.name.replace("minecraft:", "");
-		console.log("Block name: ", block.name);
 		const blockKey = hashBlockForMap(block);
 		if (this.blockMetaCache.has(blockKey)) {
 			return this.blockMetaCache.get(blockKey);
