@@ -48,7 +48,7 @@ export class SchematicWrapper {
   get_dimensions(): Int32Array;
   get_block_count(): number;
   get_volume(): number;
-  get_region_names(): (string)[];
+  get_region_names(): string[];
   blocks(): Array<any>;
   chunks(chunk_width: number, chunk_height: number, chunk_length: number): Array<any>;
   get_chunk_blocks(offset_x: number, offset_y: number, offset_z: number, width: number, height: number, length: number): Array<any>;
@@ -58,14 +58,6 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly __wbg_blockposition_free: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_x: (a: number) => number;
-  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_y: (a: number) => number;
-  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_z: (a: number) => number;
-  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
-  readonly blockposition_new: (a: number, b: number, c: number) => number;
   readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_mchprsworldwrapper_free: (a: number, b: number) => void;
   readonly __wbg_blockstatewrapper_free: (a: number, b: number) => void;
@@ -106,6 +98,14 @@ export interface InitOutput {
   readonly debug_schematic: (a: number, b: number) => void;
   readonly debug_json_schematic: (a: number, b: number) => void;
   readonly start: () => void;
+  readonly __wbg_blockposition_free: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_x: (a: number) => number;
+  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_y: (a: number) => number;
+  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_z: (a: number) => number;
+  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
+  readonly blockposition_new: (a: number, b: number, c: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

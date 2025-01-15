@@ -9,6 +9,7 @@ export interface RecordingOptions {
 	quality?: number;
 	onStart?: () => void;
 	onProgress?: (progress: number) => void;
+	onFfmpegProgress?: (progress: number, time: number) => void;
 	onComplete?: (blob: Blob) => void;
 }
 
@@ -75,6 +76,17 @@ export class RecordingManager {
 				quality
 			);
 		});
+	}
+
+
+	public  setCameraToFirstPathPoint(): void {
+		const camera = this.schematicRenderer.cameraManager.activeCamera
+			.camera as THREE.PerspectiveCamera;
+		const path = this.schematicRenderer.cameraManager.cameraPathManager.getPath("circularPath");
+		if (!path) throw new Error("Path not found");
+		const { position, target } = path.getPoint(0);
+		camera.position.copy(position);
+		camera.lookAt(target);
 	}
 
 	/**
@@ -205,7 +217,8 @@ export class RecordingManager {
 			height = 2160,
 			frameRate = 60,
 			onStart,
-            onProgress,
+			onProgress,
+			onFfmpegProgress,
             // @ts-ignore
 			onComplete,
 		} = options;
@@ -254,6 +267,10 @@ export class RecordingManager {
 							console.error("FFmpeg not found");
 							return;
 						}
+
+						this.ffmpeg.on('progress', ({ progress, time }: { progress: number, time: number }) => {
+							if (onFfmpegProgress) onFfmpegProgress(progress, time);
+						});
 						await this.ffmpeg.exec([
 							"-framerate",
 							frameRate.toString(),
