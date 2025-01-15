@@ -43,18 +43,16 @@ export class RecordingManager {
 		});
 
 		if (!this.schematicRenderer.options.ffmpeg) {
-			console.error("FFmpeg not found in options");
-			console.error("Recording will not work");
+			console.groupCollapsed("FFmpeg not found");
+			console.warn("FFmpeg not found in options");
+			console.warn("Recording will not work");
+			console.groupEnd();
 			return;
 		}
 
 		this.ffmpeg = this.schematicRenderer.options.ffmpeg;
 	}
 	private async captureFrame(quality: number = 1.0): Promise<Uint8Array> {
-		if (!this.ffmpeg) {
-			console.error("FFmpeg not found");
-			return new Uint8Array();
-		}
 		if (!this.ctx2d) throw new Error("Recording context not initialized");
 		const mainCanvas =
 			this.schematicRenderer.renderManager?.renderer.domElement;

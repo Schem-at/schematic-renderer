@@ -60,7 +60,7 @@ const renderer = new SchematicRenderer(
 
 	{
 		ffmpeg: ffmpeg,
-		gamma: 0.65,
+		gamma: 0.45,
 		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,
@@ -105,7 +105,12 @@ const renderer = new SchematicRenderer(
 				// 	west: "side",
 				// });
 				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 1], "minecraft:redstone_wire", {});
-
+				renderer.uiManager?.hideEmptyState();
+				renderer.schematicManager?.createEmptySchematic("lectern");
+				renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 0], "minecraft:lectern", {
+					facing: "north",
+					has_book: "true",
+				});
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);
