@@ -201,22 +201,19 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 			corners: [
 				{
 					pos: cornerDictionary["up"]["corners"][0]["pos"],
-					uv: [faceUVs["up"][2], faceUVs["up"][1]],
-
+					uv: [faceUVs["up"][0], faceUVs["up"][3]],
 				},
 				{
 					pos: cornerDictionary["up"]["corners"][1]["pos"],
-					uv: [faceUVs["up"][0], faceUVs["up"][1]],
-
+					uv: [faceUVs["up"][2], faceUVs["up"][3]],
 				},
 				{
 					pos: cornerDictionary["up"]["corners"][2]["pos"],
-					uv: [faceUVs["up"][2], faceUVs["up"][3]],
-
+					uv: [faceUVs["up"][0], faceUVs["up"][1]],
 				},
 				{
 					pos: cornerDictionary["up"]["corners"][3]["pos"],
-					uv: [faceUVs["up"][0], faceUVs["up"][3]],
+					uv: [faceUVs["up"][2], faceUVs["up"][1]],
 				},
 			],
 		},

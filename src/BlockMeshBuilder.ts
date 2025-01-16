@@ -188,17 +188,16 @@ export class BlockMeshBuilder {
 
 	@Monitor
 	public rotateUv(uv: [number, number, number, number], rotation: number): [number, number, number, number] {
-		// Normalize rotation to 0, 90, 180, or 270
 		const r = ((rotation % 360 + 360) % 360) / 90;
 		
 		if (r === 0) return uv;
+		// uv[0] is x1, uv[1] is y1, uv[2] is x2, uv[3] is y2
 		
-		// For 90° rotations, we just need to swap and flip coordinates
 		switch (r) {
 			case 1: // 90° clockwise
 				return [uv[1], 1 - uv[0], uv[3], 1 - uv[2]];
 			case 2: // 180°
-				return [1 - uv[0], 1 - uv[1], 1 - uv[2], 1 - uv[3]];
+				return [1 - uv[2], 1 - uv[3], 1 - uv[0], 1 - uv[1]];
 			case 3: // 270° clockwise
 				return [1 - uv[1], uv[0], 1 - uv[3], uv[2]];
 			default:
@@ -326,6 +325,9 @@ export class BlockMeshBuilder {
 			let elementIndex = 0;
 			for (const element of elements) {
 				elementIndex++;
+				// if (elementIndex > 1) {
+				// 	break;
+				// }
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
 				let faceData;

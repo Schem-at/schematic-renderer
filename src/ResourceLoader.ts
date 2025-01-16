@@ -213,9 +213,9 @@ export class ResourceLoader {
 			material.blendEquation = THREE.AddEquation;
 			material.premultipliedAlpha = false;
 			// Make glass affect lighting less
-			material.metalness = 0.0;
-			material.roughness = 0.2;
-			material.envMapIntensity = 0.5;
+			// material.metalness = 0.0;
+			// material.roughness = 0.2;
+			// material.envMapIntensity = 0.5;
 		}
 	
 		return material;

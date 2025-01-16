@@ -276,7 +276,11 @@ export class SchematicObject extends EventEmitter {
 		return this.schematicWrapper;
 	}
 
-	private async setBlockNoRebuild(position: THREE.Vector3, blockType: string, properties?: any) {
+	public async setBlockNoRebuild(position: THREE.Vector3 | number[], blockType: string, properties?: any) {
+		if (Array.isArray(position)) {
+			position = new THREE.Vector3(position[0], position[1], position[2]);
+		}
+		
 		if (properties) {
 			this.schematicWrapper.set_block_with_properties(
 				position.x,

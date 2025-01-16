@@ -74,7 +74,7 @@ const renderer = new SchematicRenderer(
 		},
 		hdri: "/minecraft_day.hdr",
 
-		showAxes: false,
+		showAxes: true,
 		showGrid: true,
 		gizmoOptions: {
 			enableRotation: true,
@@ -107,10 +107,29 @@ const renderer = new SchematicRenderer(
 				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 1], "minecraft:redstone_wire", {});
 				renderer.uiManager?.hideEmptyState();
 				renderer.schematicManager?.createEmptySchematic("lectern");
-				renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 0], "minecraft:lectern", {
+				renderer.schematicManager?.getSchematic("lectern")?.setBlockNoRebuild([1, 0, 0], "minecraft:lectern", {
 					facing: "north",
 					has_book: "true",
 				});
+				renderer.schematicManager?.getSchematic("lectern")?.setBlock([0, 0, 0], "minecraft:piston_head", {
+					facing: "north",
+					short: "true",
+					type: "sticky",
+				});
+
+				// //set a comparator block next to the lectern
+				renderer.schematicManager?.getSchematic("lectern")?.setBlock([2, 0, 0], "minecraft:comparator", {
+					facing: "north",
+					mode: "compare",
+					powered: "false",
+				});
+
+				// // set a chest block next to the comparator
+				// renderer.schematicManager?.getSchematic("lectern")?.setBlock([2, 0, 0], "minecraft:chest", {
+				// 	facing: "west",
+				// 	type: "single",
+				// });
+
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);
