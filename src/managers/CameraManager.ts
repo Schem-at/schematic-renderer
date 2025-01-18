@@ -356,26 +356,60 @@ export class CameraManager extends EventEmitter {
 		}
 	}
 
-	public focusOnSchematics() {
-		console.log("Focusing on schematics");
+	public lookAtSchematicsCenter() {
 		if (!this.schematicRenderer.schematicManager) {
+			return;
+		}
+		const averagePosition = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		this.activeCamera.lookAt(averagePosition);
+	}
+
+	public async focusOnSchematics() {
+		console.log("Focusing on schematics");
+		if (!this.schematicRenderer?.schematicManager) {
 			return;
 		}
 		if (this.schematicRenderer.schematicManager.isEmpty()) {
 			return;
 		}
-		const averagePosition =
+	
+		// Temporarily disable controls
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls) {
+			controls.enabled = false;
+		}
+	
+		const averagePosition = 
 			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
 		const maxDimensions =
 			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
-
-		this.activeCamera.lookAt(averagePosition);
-		(this.activeCamera.position as THREE.Vector3).set(
-			averagePosition.x + maxDimensions.x,
-			averagePosition.y + maxDimensions.y,
-			averagePosition.z + maxDimensions.z
+		const maxDimension = Math.max(
+			maxDimensions.x,
+			maxDimensions.y,
+			maxDimensions.z
 		);
-		this.update();
+	
+		const rootThree = Math.sqrt(3);
+		const scaledMaxDimension = maxDimension / rootThree;
+	
+		console.log("Average position:", averagePosition);
+		
+		const newPosition = [
+			averagePosition.x + scaledMaxDimension,
+			averagePosition.y + scaledMaxDimension,
+			averagePosition.z + scaledMaxDimension
+		];
+		
+		this.activeCamera.setPosition(newPosition as THREE.Vector3Tuple);
+		this.lookAt(averagePosition);
+	
+		// If using OrbitControls, update their target
+		if (controls && 'target' in controls) {
+			controls.target.copy(averagePosition);
+			controls.update();
+			// Re-enable controls after updating
+			controls.enabled = true;
+		}
 	}
 
 	public dispose(): void {

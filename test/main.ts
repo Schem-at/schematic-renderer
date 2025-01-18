@@ -55,6 +55,7 @@ const renderer = new SchematicRenderer(
 		// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
 		// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
 		// "xor": () => Promise.resolve(base64ToArrayBuffer(xor)),
+		"diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
 	{},
 
@@ -74,7 +75,7 @@ const renderer = new SchematicRenderer(
 		},
 		hdri: "/minecraft_day.hdr",
 
-		showAxes: true,
+		showAxes: false,
 		showGrid: true,
 		gizmoOptions: {
 			enableRotation: true,
@@ -86,49 +87,12 @@ const renderer = new SchematicRenderer(
 				console.log("Schematic dropped successfully:", file);
 			},
 			onRendererInitialized: () => {
-				// renderer.uiManager?.hideEmptyState();
-				// renderer.schematicManager?.createEmptySchematic("glass_test");
-				// for (let i = 0; i < 10; i++) {
-				// 	renderer.schematicManager
-				// 		?.getSchematic("glass_test")
-				// 		?.setBlock([i, 0, 0], "minecraft:light_blue_stained_glass", {});
-				// 	renderer.schematicManager
-				// 		?.getSchematic("glass_test")
-				// 		?.setBlock([i, 0, 1], "minecraft:quartz_block", {});
-				// }
+
 
 				// renderer.uiManager?.hideEmptyState();
-				// renderer.schematicManager?.createEmptySchematic("redstone_test");
-				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 0], "minecraft:redstone_wire", {
-				// 	power: "15",
-				// 	east: "side",
-				// 	west: "side",
-				// });
-				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 1], "minecraft:redstone_wire", {});
-				renderer.uiManager?.hideEmptyState();
-				renderer.schematicManager?.createEmptySchematic("lectern");
-				renderer.schematicManager?.getSchematic("lectern")?.setBlockNoRebuild([1, 0, 0], "minecraft:lectern", {
-					facing: "north",
-					has_book: "true",
-				});
-				renderer.schematicManager?.getSchematic("lectern")?.setBlock([0, 0, 0], "minecraft:piston_head", {
-					facing: "north",
-					short: "true",
-					type: "sticky",
-				});
-
-				// //set a comparator block next to the lectern
-				renderer.schematicManager?.getSchematic("lectern")?.setBlock([2, 0, 0], "minecraft:comparator", {
-					facing: "north",
-					mode: "compare",
-					powered: "false",
-				});
-
-				// // set a chest block next to the comparator
-				// renderer.schematicManager?.getSchematic("lectern")?.setBlock([2, 0, 0], "minecraft:chest", {
-				// 	facing: "west",
-				// 	type: "single",
-				// });
+				// renderer.schematicManager?.createEmptySchematic("animated");
+				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 0], "minecraft:sea_lantern");
+				
 
 			},
 			onSchematicLoaded: (schematicName: string) => {

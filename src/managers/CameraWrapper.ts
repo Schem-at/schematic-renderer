@@ -155,6 +155,18 @@ export class CameraWrapper extends EventEmitter {
 		return controls;
 	}
 
+	setPosition(position: THREE.Vector3 | THREE.Vector3Tuple) {
+		if (Array.isArray(position)) {
+			this._camera.position.set(position[0], position[1], position[2]);
+		} else {
+			this._camera.position.copy(position);
+		}
+		if (this._camera instanceof THREE.PerspectiveCamera) {
+			this._camera.updateProjectionMatrix();
+		}
+		this.emit("propertyChanged", { property: "position", value: position });
+	}
+
 	lookAt(target: THREE.Vector3 | THREE.Vector3Tuple) {
 		if (Array.isArray(target)) {
 			this._camera.lookAt(new THREE.Vector3(...target));
@@ -166,6 +178,27 @@ export class CameraWrapper extends EventEmitter {
 		}
 		this.emit("propertyChanged", { property: "lookAt", value: target });
 	}
+
+
+	setPositionLookAt(position: THREE.Vector3 | THREE.Vector3Tuple, target: THREE.Vector3 | THREE.Vector3Tuple) {
+		if (Array.isArray(position)) {
+			this._camera.position.set(position[0], position[1], position[2]);
+		}
+		else {
+			this._camera.position.copy(position);
+		}
+		if (Array.isArray(target)) {
+			this._camera.lookAt(new THREE.Vector3(...target));
+		}
+		else {
+			this._camera.lookAt(target);
+		}
+		if (this._camera instanceof THREE.PerspectiveCamera) {
+			this._camera.updateProjectionMatrix();
+		}
+		this.emit("propertyChanged", { property: "position", value: position });
+		this.emit("propertyChanged", { property: "lookAt", value: target });
+	}	
 
 	changeType(type: "perspective" | "orthographic") {
 		this._type = type;

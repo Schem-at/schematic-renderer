@@ -499,7 +499,7 @@ export class SchematicObject extends EventEmitter {
 		const dimensions = this.schematicWrapper.get_dimensions();
 		return new THREE.Vector3(
 			this.position.x + Math.abs(dimensions[0] / 2),
-			dimensions[1] / 2 + this.position.y,
+			this.position.y + Math.abs(dimensions[1] / 2),
 			this.position.z + Math.abs(dimensions[2] / 2)
 		);
 	}
