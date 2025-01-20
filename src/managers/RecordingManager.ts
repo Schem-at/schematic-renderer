@@ -103,6 +103,7 @@ export class RecordingManager {
 		// Store original settings
 		const tempSettings = await this.setupTemporarySettings(width, height);
 
+		await new Promise((resolve) => requestAnimationFrame(resolve));
 		try {
 			// For screenshots, we need to explicitly render since we're not in an animation loop
 			this.schematicRenderer.renderManager?.render();

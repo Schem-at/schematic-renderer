@@ -55,7 +55,7 @@ const renderer = new SchematicRenderer(
 		// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
 		// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
 		// "xor": () => Promise.resolve(base64ToArrayBuffer(xor)),
-		"diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
+		// "diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
 	{},
 

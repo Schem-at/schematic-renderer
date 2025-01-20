@@ -11,6 +11,7 @@ import {
 import { Vector } from "./types";
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 import { SchematicRenderer } from "./SchematicRenderer";
+import { SchematicObject } from "./managers/SchematicObject";
 
 // Pre-allocated reusable objects
 const REUSABLE_VECTOR = new THREE.Vector3();
@@ -232,13 +233,14 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     }
 
     public async buildSchematicMeshes(
-        schematic: SchematicWrapper,
+        schematicObject: SchematicObject,
         chunkDimensions: any = {
             chunkWidth: 16,
             chunkHeight: 16,
             chunkLength: 16,
         }
     ): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
+        const schematic = schematicObject.schematicWrapper;
         // Reset metrics for new build
         this.metrics.timings.clear();
         this.metrics.memory.clear();

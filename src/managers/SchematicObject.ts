@@ -157,7 +157,7 @@ export class SchematicObject extends EventEmitter {
 	private async buildMeshes(): Promise<void> {
 		const { meshes, chunkMap } =
 			await this.worldMeshBuilder.buildSchematicMeshes(
-				this.schematicWrapper,
+				this,
 				this.chunkDimensions
 			);
 		this.chunkMeshes = chunkMap;
@@ -188,6 +188,8 @@ export class SchematicObject extends EventEmitter {
 		// console.log("Updated bounding box min:", box.min);
 		// console.log("Updated bounding box max:", box.max);
 		// console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
+        this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(this.name);
+
 	}
 
 	public async getMeshes(): Promise<THREE.Mesh[]> {

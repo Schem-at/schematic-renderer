@@ -59,6 +59,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 
 export interface Callbacks {
   onRendererInitialized?: () => void;
+  onSchematicRendered?: (schematicName: string) => void;
   onSchematicLoaded?: (schematicName: string) => void;
   onObjectSelected?: (object: SelectableObject) => void;
   onObjectDeselected?: (object: SelectableObject) => void;
