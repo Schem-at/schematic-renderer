@@ -2,9 +2,19 @@ const chokidar = require('chokidar');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
+// current path
+///Users//Documents/GitHub/schematic-renderer
+
+const wasmDestPath = path.resolve(__dirname, 'src/wasm');
+
+// Rust project path
+///Users//RustroverProjects/schematic_utils
 
 const rustProjectPath = path.resolve(__dirname, '../minecraft_schematic_utils');
-const wasmDestPath = path.resolve(__dirname, 'src/wasm');
+
+//check if the path is correct
+console.log(rustProjectPath);
+console.log(wasmDestPath);
 
 // Watch Rust project files
 chokidar.watch(path.join(rustProjectPath, 'src'), {
@@ -17,7 +27,7 @@ chokidar.watch(path.join(rustProjectPath, 'src'), {
 });
 
 function rebuildWasm() {
-    exec('wasm-pack build --target web', { cwd: rustProjectPath }, (error, stdout, stderr) => {
+    exec('wasm-pack build --target web --features wasm', { cwd: rustProjectPath }, (error, stdout, stderr) => {
         if (error) {
             console.error(`exec error: ${error}`);
             return;

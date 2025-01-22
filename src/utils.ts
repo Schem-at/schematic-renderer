@@ -179,19 +179,20 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 			corners: [
 				{
 					pos: cornerDictionary["west"]["corners"][0]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][3]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][1]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][1]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][2]["pos"],
 					uv: [faceUVs["west"][2], faceUVs["west"][3]],
 				},
 				{
-					pos: cornerDictionary["west"]["corners"][3]["pos"],
+					pos: cornerDictionary["west"]["corners"][1]["pos"],
 					uv: [faceUVs["west"][2], faceUVs["west"][1]],
+				},
+				{
+					pos: cornerDictionary["west"]["corners"][2]["pos"],
+					uv: [faceUVs["west"][0], faceUVs["west"][3]],
+
+				},
+				{
+					pos: cornerDictionary["west"]["corners"][3]["pos"],
+					uv: [faceUVs["west"][0], faceUVs["west"][1]],
 				},
 			],
 		},
@@ -221,19 +222,22 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 			corners: [
 				{
 					pos: cornerDictionary["down"]["corners"][0]["pos"],
-					uv: [faceUVs["down"][0], faceUVs["down"][1]],
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][1]["pos"],
-					uv: [faceUVs["down"][2], faceUVs["down"][1]],
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][2]["pos"],
 					uv: [faceUVs["down"][0], faceUVs["down"][3]],
 				},
 				{
-					pos: cornerDictionary["down"]["corners"][3]["pos"],
+					pos: cornerDictionary["down"]["corners"][1]["pos"],
 					uv: [faceUVs["down"][2], faceUVs["down"][3]],
+					
+				},
+				{
+					pos: cornerDictionary["down"]["corners"][2]["pos"],
+					uv: [faceUVs["down"][0], faceUVs["down"][1]],
+					
+				},
+				{
+					pos: cornerDictionary["down"]["corners"][3]["pos"],
+					uv: [faceUVs["down"][2], faceUVs["down"][1]],
+
 				},
 			],
 		},
@@ -444,12 +448,12 @@ export function isExtendedPiston(block: Block) {
 }
 
 export const INVISIBLE_BLOCKS = new Set([
-	"air",
-	"cave_air",
-	"void_air",
-	"structure_void",
-	"barrier",
-	"light",
+	"minecraft:air",
+	"minecraft:cave_air",
+	"minecraft:void_air",
+	"minecraft:structure_void",
+	"minecraft:barrier",
+	"minecraft:light",
 ]);
 
 export const TRANSPARENT_BLOCKS = new Set([
@@ -499,4 +503,22 @@ export function getOppositeFace(face: string): string {
 		default:
 			return "north";
 	}
+}
+
+export function multiplyMatrices(a: number[][], b: number[][]): number[][] {
+	const result: number[][] = [
+		[0, 0, 0],
+		[0, 0, 0],
+		[0, 0, 0],
+	];
+
+	for (let i = 0; i < 3; i++) {
+		for (let j = 0; j < 3; j++) {
+			for (let k = 0; k < 3; k++) {
+				result[i][j] += a[i][k] * b[k][j];
+			}
+		}
+	}
+
+	return result;
 }
