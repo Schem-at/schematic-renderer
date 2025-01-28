@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.8",
+	"version": "1.0.11",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
 	"module": "dist/schematic-renderer.es.js",

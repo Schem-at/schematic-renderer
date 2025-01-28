@@ -395,7 +395,7 @@ export class BlockMeshBuilder {
 			}
 		}
 
-		if (performance.now() - start > 50) {
+		if (performance.now() - start > 50 && this.DEBUG) {
 			console.error(
 				"Slow block mesh builder",
 				block,
@@ -697,13 +697,15 @@ export class BlockMeshBuilder {
 			const time = performance.now() - start;
 			const previousTimes = this.schematicRenderer.timings.get("getBlockMesh") || 0;
 			this.schematicRenderer.timings.set("getBlockMesh", previousTimes + time);
-			if (time > 100) {
+			if (time > 100 && this.DEBUG) {
 				console.error(
 					"Slow block",
 					pos,
 					block,
 					"took",
-					performance.now() - start
+					performance.now() - start,
+					"cache_key",
+					blockUniqueKey
 				);
 			}
 			this.blockMeshCache.set(blockUniqueKey, blockComponents);

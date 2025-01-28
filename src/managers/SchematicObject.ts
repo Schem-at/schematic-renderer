@@ -34,6 +34,8 @@ export class SchematicObject extends EventEmitter {
 	public opacity: number;
 	public visible: boolean;
 
+	public meshBoundingBox: [number[], number[]];
+
 	private meshesReady: Promise<void>;
 	constructor(
 		name: string,
@@ -47,6 +49,7 @@ export class SchematicObject extends EventEmitter {
 			scale: THREE.Vector3 | number[] | number;
 			opacity: number;
 			visible: boolean;
+			meshBoundingBox?: [number[], number[]];
 		}>
 	) {
 		super();
@@ -64,6 +67,7 @@ export class SchematicObject extends EventEmitter {
 		this.scale = new THREE.Vector3(1, 1, 1);
 		this.opacity = 1.0;
 		this.visible = true;
+		
 
 		// Set initial properties if provided
 		Object.assign(this, properties);
@@ -75,6 +79,18 @@ export class SchematicObject extends EventEmitter {
 			0,
 			-schematicDimensions[2] / 2
 		);
+
+		if (properties?.meshBoundingBox) {
+			this.meshBoundingBox = properties.meshBoundingBox;
+		} else { 
+			this.meshBoundingBox = [
+				this.position.toArray(),
+				this.position
+					.clone()
+					.add(new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2]))
+					.toArray(),
+			];
+		}
 
 
 		this.group = new THREE.Group();
