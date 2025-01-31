@@ -66,6 +66,7 @@ export class SchematicManager {
 			scale: THREE.Vector3 | number[] | number;
 			opacity: number;
 			visible: boolean;
+			focused: boolean;
 		}>,
 		options?: {
 			onProgress?: (progress: LoadingProgress) => void;
@@ -125,7 +126,9 @@ export class SchematicManager {
 		}
 		this.addSchematic(schematicObject);
 		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
-		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+		if (properties?.focused || !properties || properties.focused === undefined) {
+			this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+		}
 
 		options?.onProgress?.({
 			stage: "scene_setup",
@@ -195,36 +198,45 @@ export class SchematicManager {
 		}
 	}
 
-	// In SchematicManager
 	public async removeSchematic(name: string) {
 		const schematicObject = this.schematics.get(name);
-		if (schematicObject) {
-			try {
-				// Get and dispose all meshes
-				const meshes = await schematicObject.getMeshes();
-				meshes.forEach((mesh) => {
-					// Remove from scene first
-					this.sceneManager.scene.remove(mesh);
-
-					// Then dispose resources
-					if (mesh.geometry) mesh.geometry.dispose();
-					if (Array.isArray(mesh.material)) {
-						mesh.material.forEach((m) => m.dispose());
-					} else {
-						mesh.material.dispose();
+		if (!schematicObject) return;
+		
+		try {
+			// Remove from map first to prevent any new operations on this schematic
+			this.schematics.delete(name);
+			
+			// Get meshes - if this fails, at least the schematic is removed from the map
+			const meshes = await schematicObject.getMeshes();
+			console.log('Before removal - scene children:', this.sceneManager.scene.children.length);
+			console.log('Meshes to remove:', meshes.length);
+			// Use traverse to ensure we catch all nested objects
+			schematicObject.group.traverse((object) => {
+				if (object instanceof THREE.Mesh) {
+					this.sceneManager.scene.remove(object);
+					if (object.geometry) object.geometry.dispose();
+					if (Array.isArray(object.material)) {
+						object.material.forEach(m => m.dispose());
+					} else if (object.material) {
+						object.material.dispose();
 					}
-				});
+				}
+			});
 
-				// Remove the group itself
-				this.sceneManager.scene.remove(schematicObject.group);
-
-				// Only delete from map after cleanup
-				this.schematics.delete(name);
-				this.eventEmitter.emit("schematicRemoved", { id: name });
-			} catch (error) {
-				console.error("Error removing schematic:", error);
-			}
+			schematicObject.group.clear(); // Clear the group to remove all children
+			
+			// Remove the group last
+			this.sceneManager.scene.remove(schematicObject.group);
+			
+			this.eventEmitter.emit("schematicRemoved", { id: name });
+		} catch (error) {
+			console.error("Error removing schematic:", error);
+			// Consider re-adding to map if failed
+			this.schematics.set(name, schematicObject);
 		}
+
+		console.log('After removal - scene children:', this.sceneManager.scene.children.length);
+		
 		if (this.isEmpty() && this.schematicRenderer.uiManager) {
 			this.schematicRenderer.uiManager.showEmptyState();
 		}
@@ -259,6 +271,10 @@ export class SchematicManager {
 
 	public isEmpty(): boolean {
 		return this.schematics.size === 0;
+	}
+
+	public schematicExists(id: string): boolean {
+		return this.schematics.has(id);
 	}
 
 	public getSchematicsAveragePosition(): THREE.Vector3 {

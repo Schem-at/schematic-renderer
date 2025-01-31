@@ -297,6 +297,7 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
             chunkLength: 16,
         }
     ): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
+        console.log('Building schematic meshes for:', schematicObject.name);
         const schematic = schematicObject.schematicWrapper;
         // Reset metrics for new build
         this.metrics.timings.clear();

@@ -205,6 +205,12 @@ function getArrayU8FromWasm0(ptr, len) {
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
 }
 
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
+}
+
 let stack_pointer = 128;
 
 function addBorrowedObject(obj) {
@@ -235,12 +241,6 @@ function getArrayJsValueFromWasm0(ptr, len) {
         result.push(takeObject(mem.getUint32(i, true)));
     }
     return result;
-}
-
-function _assertClass(instance, klass) {
-    if (!(instance instanceof klass)) {
-        throw new Error(`expected instance of ${klass.name}`);
-    }
 }
 /**
  * @param {SchematicWrapper} schematic
@@ -673,6 +673,55 @@ export class SchematicWrapper {
      * @param {number} x
      * @param {number} y
      * @param {number} z
+     * @param {string} block_string
+     */
+    set_block_from_string(x, y, z, block_string) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(block_string, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.schematicwrapper_set_block_from_string(retptr, this.__wbg_ptr, x, y, z, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * @param {SchematicWrapper} from_schematic
+     * @param {number} min_x
+     * @param {number} min_y
+     * @param {number} min_z
+     * @param {number} max_x
+     * @param {number} max_y
+     * @param {number} max_z
+     * @param {number} target_x
+     * @param {number} target_y
+     * @param {number} target_z
+     * @param {any} excluded_blocks
+     */
+    copy_region(from_schematic, min_x, min_y, min_z, max_x, max_y, max_z, target_x, target_y, target_z, excluded_blocks) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            _assertClass(from_schematic, SchematicWrapper);
+            wasm.schematicwrapper_copy_region(retptr, this.__wbg_ptr, from_schematic.__wbg_ptr, min_x, min_y, min_z, max_x, max_y, max_z, target_x, target_y, target_z, addBorrowedObject(excluded_blocks));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            heap[stack_pointer++] = undefined;
+        }
+    }
+    /**
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
      * @param {string} block_name
      * @param {any} properties
      */
@@ -907,6 +956,10 @@ function __wbg_get_imports() {
             result = false;
         }
         const ret = result;
+        return ret;
+    };
+    imports.wbg.__wbg_isArray_a1eab7e0d067391b = function(arg0) {
+        const ret = Array.isArray(getObject(arg0));
         return ret;
     };
     imports.wbg.__wbg_keys_5c77a08ddc2fb8a6 = function(arg0) {
