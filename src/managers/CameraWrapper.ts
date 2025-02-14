@@ -47,15 +47,19 @@ export class CameraWrapper extends EventEmitter {
 			}
 		} else {
 			const d = params.size ?? 20;
-			const aspect = params.aspect ?? window.innerWidth / window.innerHeight;
-			this._camera = new THREE.OrthographicCamera(
-				-d * aspect,
-				d * aspect,
-				d,
-				-d,
-				params.near ?? 0.1,
-				params.far ?? 1000
-			);
+            const aspect = params.aspect ?? window.innerWidth / window.innerHeight;
+            
+            const isometricScale = Math.sqrt(2) / 2; // This helps correct the "squishiness"
+            const correctedD = d * isometricScale;
+            
+            this._camera = new THREE.OrthographicCamera(
+                -correctedD * aspect,
+                correctedD * aspect,
+                correctedD,
+                -correctedD,
+                params.near ?? 0.1,
+                params.far ?? 1000
+            );
 		}
 	}
 
@@ -130,10 +134,9 @@ export class CameraWrapper extends EventEmitter {
 			this._camera.aspect = aspect;
 			this._camera.updateProjectionMatrix();
 		} else if (this._camera instanceof THREE.OrthographicCamera) {
-			const frustumHeight = this._camera.top - this._camera.bottom;
-			this._camera.left = (-frustumHeight * aspect) / 2;
-			this._camera.right = (frustumHeight * aspect) / 2;
-			this._camera.updateProjectionMatrix();
+            this._camera.left = -aspect;
+            this._camera.right = aspect;
+            this._camera.updateProjectionMatrix();
 		}
 		this.emit("propertyChanged", { property: "aspect", value: aspect });
 	}
