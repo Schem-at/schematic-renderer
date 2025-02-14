@@ -198,6 +198,52 @@ export class SchematicManager {
 		}
 	}
 
+	public async loadSchematicFromURL(
+		url: string,
+		name?: string,
+		properties?: Partial<{
+			position: THREE.Vector3 | number[];
+			rotation: THREE.Euler | number[];
+			scale: THREE.Vector3 | number[] | number;
+			opacity: number;
+			visible: boolean;
+			focused: boolean;
+		}>,
+		options?: {
+			onProgress?: (progress: LoadingProgress) => void;
+		}
+	): Promise<void> {
+		try {
+			// File reading stage
+			options?.onProgress?.({
+				stage: "file_reading",
+				progress: 0,
+				message: "Fetching schematic from URL...",
+			});
+	
+			const response = await fetch(url);
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+	
+			const arrayBuffer = await response.arrayBuffer();
+	
+			// Generate a name if none provided
+			const schematicName = name || new URL(url).pathname.split("/").pop() || "schematic_from_url";
+	
+			// Load the schematic with progress tracking
+			await this.loadSchematic(schematicName, arrayBuffer, properties, {
+				onProgress: (progress) => options?.onProgress?.(progress),
+			});
+	
+			// Emit completion event
+			this.eventEmitter.emit("schematicLoaded", { id: schematicName });
+		} catch (error) {
+			this.eventEmitter.emit("schematicLoadError", { error });
+			throw error;
+		}
+	}
+
 	public async removeSchematic(name: string) {
 		const schematicObject = this.schematics.get(name);
 		if (!schematicObject) return;

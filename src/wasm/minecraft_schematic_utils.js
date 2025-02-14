@@ -981,6 +981,10 @@ function __wbg_get_imports() {
         const ret = new Array();
         return addHeapObject(ret);
     };
+    imports.wbg.__wbg_now_807e54c39636c349 = function() {
+        const ret = Date.now();
+        return ret;
+    };
     imports.wbg.__wbg_push_737cfc8c1432c2c6 = function(arg0, arg1) {
         const ret = getObject(arg0).push(getObject(arg1));
         return ret;

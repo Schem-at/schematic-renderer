@@ -360,12 +360,6 @@ export class SchematicObject extends EventEmitter {
 		excludeBlocks?: string[],
 		rebuild: boolean = false
 	) {
-
-		console.log("Copying region from schematic", sourceSchematicName);
-		console.log("Source min:", sourceMin);
-		console.log("Source max:", sourceMax);
-		console.log("Target position:", targetPosition);
-		console.log("Exclude blocks:", excludeBlocks);
 		const sourceSchematic = this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(
 			sourceSchematicName
 		);
@@ -385,7 +379,6 @@ export class SchematicObject extends EventEmitter {
 
 		const sourceDimensions = sourceSchematic.schematicWrapper.get_dimensions();
 
-		// If sourceMin and sourceMax are not provided, copy the entire source schematic
 		if (!sourceMin) {
 			sourceMin = new THREE.Vector3(0, 0, 0);
 		}
@@ -406,7 +399,6 @@ export class SchematicObject extends EventEmitter {
 		}
 
 
-		// Copy the region from the source schematic to the target schematic
 		await this.schematicWrapper.copy_region(
 			sourceSchematic.schematicWrapper,
 			sourceMin.x,
