@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import deepmerge from "deepmerge";
 import { BlockStateWrapper } from "./wasm/minecraft_schematic_utils";
 
 import chestModel from "./custom_models/chest.json";
@@ -27,6 +26,10 @@ interface Block {
 	name: string;
 	properties: Record<string, string>;
 }
+
+
+  
+  
 export class ResourceLoader {
 	schematicRenderer: SchematicRenderer;
 	schematic: any;
@@ -38,7 +41,7 @@ export class ResourceLoader {
 	blockModelCache: Map<string, BlockModel>;
 	faceDataCache: Map<string, any>;
 	blockStateDefinitionCache: Map<string, BlockStateDefinition>;
-
+	private materialCache: Map<string, THREE.MeshStandardMaterial>;
 	resourcePackBlobs: any;
 	zips: any;
 	textureLoader = new THREE.TextureLoader();
@@ -57,6 +60,10 @@ export class ResourceLoader {
 		"block/chest_right": chestRightModel,
 		"block/shulker_box": shulkerBoxModel,
 	};
+
+	// private modelMergeCache = new Map<string, BlockModel>();
+
+
 	constructor(resourcePackBlobs: any, schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 		this.textureCache = new Map();
@@ -69,6 +76,7 @@ export class ResourceLoader {
 		this.blockStateDefinitionCache = new Map();
 		this.resourcePackBlobs = resourcePackBlobs;
 		this.textureLoader = new THREE.TextureLoader();
+		this.materialCache = new Map();
 	}
 
 	async initialize() {
@@ -117,21 +125,24 @@ export class ResourceLoader {
 		return data;
 	}
 
-	public async getResourceString(name: string): Promise<string | undefined> {
-		if (this.stringCache.has(name)) {
-			return this.stringCache.get(name);
-		}
-		for (const zip of this.zips) {
-			const file = zip.file(`assets/minecraft/${name}`);
-			if (file) {
-				const data = await file.async("text");
-				this.stringCache.set(name, data);
-				return data;
-			}
-		}
-		console.warn(`Resource ${name} not found.`);
-		return undefined;
-	}
+public async getResourceString(name: string): Promise<string | undefined> {
+    if (this.stringCache.has(name)) {
+        return this.stringCache.get(name);
+    }
+
+    // Check zips in reverse order (assuming later packs override earlier ones)
+    for (let i = this.zips.length - 1; i >= 0; i--) {
+        const file = this.zips[i].file(`assets/minecraft/${name}`);
+        if (file) {
+            const data = await file.async("text");
+            this.stringCache.set(name, data);
+            return data;
+        }
+    }
+
+    console.warn(`Resource ${name} not found.`);
+    return undefined;
+}
 
 	public async getBase64Image(model: BlockModel, faceData: any) {
 		const textureName = this.resolveTextureName(faceData.texture, model);
@@ -151,75 +162,81 @@ export class ResourceLoader {
 		transparent?: boolean,
 		color?: THREE.Color
 	): Promise<THREE.MeshStandardMaterial | undefined> {
-		let textureName = faceData.texture;
+		// Faster cache key generation
+		const textureKey = this.resolveTextureName(faceData.texture, model).replace("minecraft:", "");
+		const colorKey = color ? `${color.r}|${color.g}|${color.b}` : 'none';
+		const materialKey = `${textureKey}-${transparent}-${colorKey}`;
 	
-		// Resolve texture references
-		textureName = this.resolveTextureName(textureName, model);
-	
-		// Remove "minecraft:" prefix if present
-		if (textureName.startsWith("minecraft:")) {
-			textureName = textureName.substring("minecraft:".length);
+		if (this.materialCache.has(materialKey)) {
+			return this.materialCache.get(materialKey)!;
 		}
 	
-		// Get the base64 image
-		const base64Resource = await this.getResourceBase64(`textures/${textureName}.png`);
-		if (!base64Resource) {
-			return undefined;
-		}
-		const base64Png = "data:image/png;base64," + base64Resource;
-		
-		// Load the texture with proper alpha channel handling
-		const texture = this.textureLoader.load(base64Png);
-		texture.minFilter = THREE.NearestFilter;
-		texture.magFilter = THREE.NearestFilter;
-		texture.wrapS = THREE.RepeatWrapping;
-		texture.wrapT = THREE.RepeatWrapping;
-		texture.format = THREE.RGBAFormat;
-		texture.premultiplyAlpha = false;  // Changed to false for better transparency
-		texture.needsUpdate = true;
+		// Texture loading optimization
+		const texture = await this.loadTextureWithCache(textureKey, faceData.rotation);
+		if (!texture) return undefined;
 	
-		// Handle rotation
-		const rotation = faceData.rotation;
-		if (rotation) {
-			texture.center = new THREE.Vector2(0.5, 0.5);
-			texture.rotation = (rotation * Math.PI) / 180;
-		}
-	
-		// Create material with proper alpha handling
-		const material = new THREE.MeshStandardMaterial({
-			map: texture,
-			side: THREE.FrontSide,
-			transparent: transparent ?? false,
-			opacity: 1.0,
-			alphaTest: 0.1,
-			// depthWrite: !transparent,
-			// depthTest: true,
-			color: color ?? 0xffffff,
-			// Improved transparency settings
-			blending: THREE.CustomBlending,
-			blendSrc: THREE.SrcAlphaFactor,
-			blendDst: THREE.OneMinusSrcAlphaFactor,
-			blendEquation: THREE.AddEquation,
-			// Better lighting through glass
-			shadowSide: THREE.FrontSide,
-			toneMapped: false
-		});
-	
-		// For transparent materials (like glass)
-		if (transparent) {
-			material.blending = THREE.CustomBlending;
-			material.blendSrc = THREE.SrcAlphaFactor;
-			material.blendDst = THREE.OneMinusSrcAlphaFactor;
-			material.blendEquation = THREE.AddEquation;
-			material.premultipliedAlpha = false;
-			// Make glass affect lighting less
-			// material.metalness = 0.0;
-			// material.roughness = 0.2;
-			// material.envMapIntensity = 0.5;
-		}
-	
+		const material = this.createMaterial(texture, transparent, color);
+		this.materialCache.set(materialKey, material);
 		return material;
 	}
+	
+	private async loadTextureWithCache(textureKey: string, rotation?: number): Promise<THREE.Texture | undefined> {
+		if (this.textureCache.has(textureKey)) {
+			return this.textureCache.get(textureKey)!;
+		}
+	
+		const textureBase64 = await this.getResourceBase64(`textures/${textureKey}.png`);
+		if (!textureBase64) return undefined;
+	
+		const texture = await this.createTexture(textureBase64, rotation);
+		this.textureCache.set(textureKey, texture);
+		return texture;
+	}
+	  
+	  private async createTexture(base64Resource: string, rotation?: number): Promise<THREE.Texture> {
+		return new Promise((resolve) => {
+		  this.textureLoader.load(
+			`data:image/png;base64,${base64Resource}`,
+			(texture) => {
+			  texture.minFilter = THREE.NearestFilter;
+			  texture.magFilter = THREE.NearestFilter;
+			  texture.wrapS = THREE.RepeatWrapping;
+			  texture.wrapT = THREE.RepeatWrapping;
+			  texture.format = THREE.RGBAFormat;
+			  texture.premultiplyAlpha = false;
+			  
+			  if (rotation) {
+				texture.center.set(0.5, 0.5);
+				texture.rotation = (rotation * Math.PI) / 180;
+			  }
+			  
+			  texture.needsUpdate = true;
+			  resolve(texture);
+			}
+		  );
+		});
+	  }
+	  
+	  private createMaterial(
+		texture: THREE.Texture, 
+		transparent?: boolean,
+		color?: THREE.Color
+	  ): THREE.MeshStandardMaterial {
+		return new THREE.MeshStandardMaterial({
+		  map: texture,
+		  transparent: transparent ?? false,
+		  opacity: 1.0,
+		  alphaTest: 0.1,
+		  color: color ?? 0xffffff,
+		  side: THREE.FrontSide,
+		  shadowSide: THREE.FrontSide,
+		  toneMapped: false,
+		  blending: transparent ? THREE.CustomBlending : THREE.NormalBlending,
+		  blendSrc: THREE.SrcAlphaFactor,  
+		  blendDst: THREE.OneMinusSrcAlphaFactor,
+		  blendEquation: THREE.AddEquation
+		});
+	  }
 
 	public getModelOption(data: BlockModelData) {
 		const weightedRandomIndex = (
@@ -357,120 +374,122 @@ export class ResourceLoader {
 		z: number,
 		offset: { x: number; y: number; z: number }
 	) {
-		const { materialId, positions, normals, uvs, face } = blockComponent;
-		const occludedFaces = occludedFacesIntToList(occludedFacesInt);
-		if (occludedFaces[face]) {
-			return;
+		if (occludedFacesIntToList(occludedFacesInt)[blockComponent.face]) return;
+	
+		const group = materialGroups[blockComponent.materialId] ||= {
+			positions: new Float32Array(4096 * 3), // Pre-allocated
+			normals: new Float32Array(4096 * 3),
+			uvs: new Float32Array(4096 * 2),
+			indices: new Uint32Array(4096 * 6),
+			count: 0,
+			vertexCount: 0
+		};
+	
+		// Copy data directly into pre-allocated buffers
+		const posOffset = group.count * 3;
+		for (let i = 0; i < blockComponent.positions.length; i += 3) {
+			group.positions[posOffset + i] = blockComponent.positions[i] + x + offset.x;
+			group.positions[posOffset + i + 1] = blockComponent.positions[i + 1] + y + offset.y;
+			group.positions[posOffset + i + 2] = blockComponent.positions[i + 2] + z + offset.z;
 		}
-		if (!materialGroups[materialId]) {
-			materialGroups[materialId] = {
-				positions: [],
-				normals: [],
-				uvs: [],
-				colors: [],
-				indices: [],
-				count: 0,
-			};
+	
+		group.normals.set(blockComponent.normals, posOffset);
+		group.uvs.set(blockComponent.uvs, group.count * 2);
+	
+		const indexOffset = group.vertexCount;
+		for (let i = 0; i < blockComponent.positions.length / 3; i += 4) {
+			group.indices[group.vertexCount++] = indexOffset + i;
+			group.indices[group.vertexCount++] = indexOffset + i + 1;
+			group.indices[group.vertexCount++] = indexOffset + i + 2;
+			group.indices[group.vertexCount++] = indexOffset + i + 2;
+			group.indices[group.vertexCount++] = indexOffset + i + 1;
+			group.indices[group.vertexCount++] = indexOffset + i + 3;
 		}
-		const group = materialGroups[materialId];
-		for (let i = 0; i < positions.length; i += 3) {
-			const positionX = positions[i] + x + offset.x;
-			const positionY = positions[i + 1] + y + offset.y;
-			const positionZ = positions[i + 2] + z + offset.z;
-			group.positions.push(positionX, positionY, positionZ);
-		}
-		group.normals.push(...normals);
-		group.uvs.push(...uvs);
-		const indexOffset = group.count;
-		for (let i = 0; i < positions.length / 3; i += 4) {
-			group.indices.push(indexOffset + i);
-		}
-		group.count += positions.length / 3;
+	
+		group.count += blockComponent.positions.length / 3;
 	}
+	
 
 	@Monitor
 	public createMeshesFromBlocks(blocks: any): THREE.Mesh[] {
 		const meshes: THREE.Mesh[] = [];
-
+		
 		for (const [materialId, blockList] of Object.entries(blocks)) {
 			const material = this.schematicRenderer.materialMap.get(materialId);
-			let totalVertices = 0;
-			let totalIndices = 0;
-
-			// First pass: calculate total vertices and indices
-			for (const block of blockList as any) {
-				const vertexCount = block[0].positions.length / 3;
-				totalVertices += vertexCount;
-				totalIndices += (vertexCount / 4) * 6; // Each quad becomes two triangles
-			}
-
+			if (!material || !(blockList as any[]).length) continue;
+	
+			// Pre-calculate totals
+			const { totalVertices, totalIndices } = this.calculateGeometrySize(blockList as any[]);
+			
+			// Use shared buffers
 			const geometry = new THREE.BufferGeometry();
 			const positions = new Float32Array(totalVertices * 3);
 			const normals = new Float32Array(totalVertices * 3);
 			const uvs = new Float32Array(totalVertices * 2);
 			const indices = new Uint32Array(totalIndices);
-
-			let positionOffset = 0;
-			let normalOffset = 0;
-			let uvOffset = 0;
-			let indexOffset = 0;
-			let indicesOffset = 0;
-
-			for (const block of blockList as any) {
-				const blockComponent = block[0];
-				const worldPos = block[1];
-				const vertexCount = blockComponent.positions.length / 3;
-
-				// Positions
-				for (let i = 0; i < blockComponent.positions.length; i += 3) {
-					positions[positionOffset++] =
-						blockComponent.positions[i] + worldPos[0];
-					positions[positionOffset++] =
-						blockComponent.positions[i + 1] + worldPos[1];
-					positions[positionOffset++] =
-						blockComponent.positions[i + 2] + worldPos[2];
-				}
-
-				// Normals
-				normals.set(blockComponent.normals, normalOffset);
-				normalOffset += blockComponent.normals.length;
-
-				// UVs
-				uvs.set(blockComponent.uvs, uvOffset);
-				uvOffset += blockComponent.uvs.length;
-
-				// Indices
-				for (let i = 0; i < vertexCount; i += 4) {
-					indices[indicesOffset++] = indexOffset + i;
-					indices[indicesOffset++] = indexOffset + i + 1;
-					indices[indicesOffset++] = indexOffset + i + 2;
-					indices[indicesOffset++] = indexOffset + i + 2;
-					indices[indicesOffset++] = indexOffset + i + 1;
-					indices[indicesOffset++] = indexOffset + i + 3;
-				}
-
-				indexOffset += vertexCount;
-			}
-
-			// Set attributes
-			geometry.setAttribute(
-				"position",
-				new THREE.BufferAttribute(positions, 3)
-			);
+	
+			this.fillGeometryBuffers(blockList as any[], positions, normals, uvs, indices);
+			
+			geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 			geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 			geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
 			geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+	
 			const mesh = new THREE.Mesh(geometry, material);
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			if (material?.transparent) {
-				// Set renderOrder to ensure proper rendering order
-				mesh.renderOrder = 1000;
-			}
+			mesh.castShadow = mesh.receiveShadow = true;
+			if (material.transparent) mesh.renderOrder = 1000;
 			meshes.push(mesh);
 		}
-
+	
 		return meshes;
+	}
+	
+	private calculateGeometrySize(blockList: any[]): { totalVertices: number; totalIndices: number } {
+		let totalVertices = 0;
+		let totalIndices = 0;
+	
+		for (const block of blockList) {
+			const component = block[0];
+			const verts = component.positions.length / 3;
+			totalVertices += verts;
+			totalIndices += Math.floor(verts / 4) * 6; // 6 indices per quad
+		}
+	
+		return { totalVertices, totalIndices };
+	}
+	
+	private fillGeometryBuffers(blockList: any[], positions: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array) {
+		let posOffset = 0, normOffset = 0, uvOffset = 0, idxOffset = 0, vertexOffset = 0;
+	
+		for (const block of blockList) {
+			const [component, [x, y, z]] = block;
+			const verts = component.positions.length / 3;
+	
+			// Positions
+			for (let i = 0; i < component.positions.length; i += 3) {
+				positions[posOffset++] = component.positions[i] + x;
+				positions[posOffset++] = component.positions[i + 1] + y;
+				positions[posOffset++] = component.positions[i + 2] + z;
+			}
+	
+			// Normals & UVs
+			normals.set(component.normals, normOffset);
+			uvs.set(component.uvs, uvOffset);
+			normOffset += component.normals.length;
+			uvOffset += component.uvs.length;
+	
+			// Indices
+			for (let i = 0; i < verts; i += 4) {
+				indices[idxOffset++] = vertexOffset + i;
+				indices[idxOffset++] = vertexOffset + i + 1;
+				indices[idxOffset++] = vertexOffset + i + 2;
+				indices[idxOffset++] = vertexOffset + i + 2;
+				indices[idxOffset++] = vertexOffset + i + 1;
+				indices[idxOffset++] = vertexOffset + i + 3;
+			}
+	
+			vertexOffset += verts;
+		}
 	}
 
 	public resolveTextureName(ref: string, model: BlockModel): string {
@@ -600,46 +619,82 @@ export class ResourceLoader {
 		) as BlockStateDefinition;
 	}
 
+	private handleCustomModels(modelRef: string, properties: any): BlockModel | undefined {
+		if (modelRef === "block/chest") {
+			if (properties.type === "single") {
+				return this.CUSTOM_MODELS[modelRef];
+			}
+			if (properties.type === "left") {
+				return this.CUSTOM_MODELS["block/chest_left"];
+			}
+			if (properties.type === "right") {
+				return this.CUSTOM_MODELS["block/chest_right"];
+			}
+		}
+		return this.CUSTOM_MODELS[modelRef];
+	}
+
 	public async loadModel(
 		modelRef: string,
 		properties: any
 	): Promise<BlockModel | undefined> {
+		// Strip namespace first
 		if (modelRef.startsWith("minecraft:")) {
 			modelRef = modelRef.substring("minecraft:".length);
 		}
-		if (modelRef.includes("shulker_box")) {
-			modelRef = "block/shulker_box";
-		}
+	
+		// const cacheKey = `${modelRef}-${JSON.stringify(properties)}`;
+		// if (this.modelMergeCache.has(cacheKey) && false) {
+		// 	return this.modelMergeCache.get(cacheKey)!;
+		// }
+	
+		// Handle custom models first
 		if (this.CUSTOM_MODELS[modelRef]) {
-			if (modelRef === "block/chest") {
-				if (properties.type === "single") {
-					return this.CUSTOM_MODELS[modelRef];
-				}
-				if (properties.type === "left") {
-					return this.CUSTOM_MODELS["block/chest_left"];
-				}
-				if (properties.type === "right") {
-					return this.CUSTOM_MODELS["block/chest_right"];
-				}
+			const customModel = this.handleCustomModels(modelRef, properties);
+			if (customModel) {
+				// this.modelMergeCache.set(cacheKey, customModel);
+				return customModel;
 			}
-			return this.CUSTOM_MODELS[modelRef];
 		}
-		let model = JSON.parse(
+	
+		// Load and merge models
+		const model = await this.loadAndMergeModel(modelRef);
+		// this.modelMergeCache.set(cacheKey, model);
+		return model;
+	}
+	
+	private async loadAndMergeModel(modelRef: string): Promise<BlockModel> {
+		const rawModel = JSON.parse(
 			(await this.getResourceString(`models/${modelRef}.json`)) ?? "{}"
 		) as BlockModel;
-
-		if (model.parent) {
-			const parent = await this.loadModel(model.parent, properties);
-			if (!parent) {
-				return model;
+	
+		if (!rawModel.parent) return rawModel;
+	
+		// Iterative parent resolution instead of recursive
+		let mergedModel = { ...rawModel };
+		let parentRef = rawModel.parent;
+		let depth = 0;
+	
+		while (parentRef && depth++ < 5) { // Prevent infinite loops
+			const parentModel = await this.loadModel(parentRef, {});
+			if (parentModel) {
+				mergedModel = this.shallowMergeModels(parentModel, mergedModel);
+				parentRef = mergedModel.parent ?? "";
+			} else {
+				break;
 			}
-			if (model["elements"] && parent["elements"]) {
-				delete (parent as any)["elements"];
-			}
-			model = deepmerge(parent, model);
-			delete model.parent;
 		}
-		this.blockModelCache.set(modelRef, model);
-		return model;
+	
+		delete mergedModel.parent;
+		return mergedModel;
+	}
+	
+	private shallowMergeModels(parent: BlockModel, child: BlockModel): BlockModel {
+		return {
+			...parent,
+			...child,
+			textures: { ...parent.textures, ...child.textures },
+			elements: child.elements || parent.elements
+		};
 	}
 }

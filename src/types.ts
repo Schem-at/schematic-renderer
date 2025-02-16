@@ -27,6 +27,11 @@ export interface BlockStateDefinition {
 	}[];
 }
 
+export type Block = {
+    name: string;
+    properties: Record<string, string>;
+};
+
 export type Vector = [number, number, number];
 
 export const POSSIBLE_FACES = [

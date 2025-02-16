@@ -34,6 +34,8 @@ export class SchematicObject extends EventEmitter {
 	public opacity: number;
 	public visible: boolean;
 
+	public meshBoundingBox: [number[], number[]];
+
 	private meshesReady: Promise<void>;
 	constructor(
 		name: string,
@@ -47,6 +49,7 @@ export class SchematicObject extends EventEmitter {
 			scale: THREE.Vector3 | number[] | number;
 			opacity: number;
 			visible: boolean;
+			meshBoundingBox?: [number[], number[]];
 		}>
 	) {
 		super();
@@ -63,7 +66,8 @@ export class SchematicObject extends EventEmitter {
 		this.rotation = new THREE.Euler();
 		this.scale = new THREE.Vector3(1, 1, 1);
 		this.opacity = 1.0;
-		this.visible = true;
+		this.visible = properties?.visible ?? true;
+		
 
 		// Set initial properties if provided
 		Object.assign(this, properties);
@@ -76,14 +80,31 @@ export class SchematicObject extends EventEmitter {
 			-schematicDimensions[2] / 2
 		);
 
+		if (properties?.meshBoundingBox) {
+			this.meshBoundingBox = properties.meshBoundingBox;
+		} else { 
+			this.meshBoundingBox = [
+				this.position.toArray(),
+				this.position
+					.clone()
+					.add(new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2]))
+					.toArray(),
+			];
+		}
+
 
 		this.group = new THREE.Group();
 		this.group.name = name;
 
 		// Build meshes and other initialization
-		this.meshesReady = this.buildMeshes();
-		this.updateTransform();
-		this.sceneManager.add(this.group);
+		if (this.visible) {
+			this.meshesReady = this.buildMeshes();
+			this.updateTransform();
+			this.sceneManager.add(this.group);
+		} else {
+			this.meshesReady = Promise.resolve();
+		}
+		
 
 		// Define property configurations
 		const propertyConfigs: Partial<Record<keyof SchematicObject, PropertyConfig<any>>> = {
@@ -155,6 +176,9 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	private async buildMeshes(): Promise<void> {
+		if (!this.visible) {
+			return;
+		}
 		const { meshes, chunkMap } =
 			await this.worldMeshBuilder.buildSchematicMeshes(
 				this,
@@ -249,9 +273,9 @@ export class SchematicObject extends EventEmitter {
 
 		// Clear chunk meshes
 		this.chunkMeshes.clear();
-
-		// Rebuild meshes
-		await this.buildMeshes();
+		if (this.visible) {
+			await this.buildMeshes();
+		}
 	}
 
 	public async rebuildMesh() {
@@ -269,31 +293,21 @@ export class SchematicObject extends EventEmitter {
 
 	// Clear chunk meshes
 		this.chunkMeshes.clear();
-		
-		// Rebuild meshes
-		await this.buildMeshes();
+		if (this.visible) {
+			await this.buildMeshes();
+		}
 	}
 
 	public getSchematicWrapper(): SchematicWrapper {
 		return this.schematicWrapper;
 	}
 
-	public async setBlockNoRebuild(position: THREE.Vector3 | number[], blockType: string, properties?: any) {
+	public async setBlockNoRebuild(position: THREE.Vector3 | number[], blockType: string,) {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
-		
-		if (properties) {
-			this.schematicWrapper.set_block_with_properties(
-				position.x,
-				position.y,
-				position.z,
-				blockType,
-				properties
-			);
-			return;
-		}
-		this.schematicWrapper.set_block(
+
+		this.schematicWrapper.set_block_from_string(
 			position.x,
 			position.y,
 			position.z,
@@ -301,11 +315,11 @@ export class SchematicObject extends EventEmitter {
 		);
 	}
 
-	public async setBlock(position: THREE.Vector3 | number[], blockType: string, properties?: any) {
+	public async setBlock(position: THREE.Vector3 | number[], blockType: string) {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
-		await this.setBlockNoRebuild(position, blockType, properties);
+		await this.setBlockNoRebuild(position, blockType);
 
 		await this.rebuildChunkAtPosition(position);
 	}
@@ -335,6 +349,73 @@ export class SchematicObject extends EventEmitter {
 			await this.rebuildChunk(chunkX, chunkY, chunkZ);
 		}
 		console.log("Chunks rebuilt in", performance.now() - startTime + "ms");
+	}
+
+
+	public async copyRegionFromSchematic(
+		sourceSchematicName: string,
+		sourceMin?: THREE.Vector3 | number[],
+		sourceMax?: THREE.Vector3 | number[],
+		targetPosition?: THREE.Vector3 | number[],
+		excludeBlocks?: string[],
+		rebuild: boolean = false
+	) {
+		const sourceSchematic = this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(
+			sourceSchematicName
+		);
+		if (!sourceSchematic) {
+			throw new Error(`Schematic ${sourceSchematicName} not found`);
+		}
+		if (Array.isArray(sourceMin)) {
+			sourceMin = new THREE.Vector3(sourceMin[0], sourceMin[1], sourceMin[2]);
+		}
+		if (Array.isArray(sourceMax)) {
+			sourceMax = new THREE.Vector3(sourceMax[0], sourceMax[1], sourceMax[2]);
+		}
+		if (Array.isArray(targetPosition)) {
+			targetPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]);
+		}
+
+
+		const sourceDimensions = sourceSchematic.schematicWrapper.get_dimensions();
+
+		if (!sourceMin) {
+			sourceMin = new THREE.Vector3(0, 0, 0);
+		}
+		if (!sourceMax) {
+			sourceMax = new THREE.Vector3(
+				sourceDimensions[0] - 1,
+				sourceDimensions[1] - 1,
+				sourceDimensions[2] - 1
+			);
+		}
+
+		if (!targetPosition) {
+			targetPosition = new THREE.Vector3(0, 0, 0);
+		}
+
+		if (!excludeBlocks) {
+			excludeBlocks = [];
+		}
+
+
+		await this.schematicWrapper.copy_region(
+			sourceSchematic.schematicWrapper,
+			sourceMin.x,
+			sourceMin.y,
+			sourceMin.z,
+			sourceMax.x,
+			sourceMax.y,
+			sourceMax.z,
+			targetPosition.x,
+			targetPosition.y,
+			targetPosition.z,
+			excludeBlocks
+		);
+
+		if (rebuild) {
+			await this.rebuildMesh();
+		}
 	}
 
 	public getBlock(position: THREE.Vector3 | number[]): string | undefined {

@@ -38,6 +38,8 @@ export class SchematicWrapper {
   from_schematic(data: Uint8Array): void;
   to_schematic(): Uint8Array;
   set_block(x: number, y: number, z: number, block_name: string): void;
+  set_block_from_string(x: number, y: number, z: number, block_string: string): void;
+  copy_region(from_schematic: SchematicWrapper, min_x: number, min_y: number, min_z: number, max_x: number, max_y: number, max_z: number, target_x: number, target_y: number, target_z: number, excluded_blocks: any): void;
   set_block_with_properties(x: number, y: number, z: number, block_name: string, properties: any): void;
   get_block(x: number, y: number, z: number): string | undefined;
   get_block_with_properties(x: number, y: number, z: number): BlockStateWrapper | undefined;
@@ -58,6 +60,14 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_blockposition_free: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_x: (a: number) => number;
+  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_y: (a: number) => number;
+  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
+  readonly __wbg_get_blockposition_z: (a: number) => number;
+  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
+  readonly blockposition_new: (a: number, b: number, c: number) => number;
   readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_mchprsworldwrapper_free: (a: number, b: number) => void;
   readonly __wbg_blockstatewrapper_free: (a: number, b: number) => void;
@@ -69,6 +79,8 @@ export interface InitOutput {
   readonly schematicwrapper_from_schematic: (a: number, b: number, c: number, d: number) => void;
   readonly schematicwrapper_to_schematic: (a: number, b: number) => void;
   readonly schematicwrapper_set_block: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+  readonly schematicwrapper_set_block_from_string: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+  readonly schematicwrapper_copy_region: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => void;
   readonly schematicwrapper_set_block_with_properties: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
   readonly schematicwrapper_get_block: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly schematicwrapper_get_block_with_properties: (a: number, b: number, c: number, d: number) => number;
@@ -98,14 +110,6 @@ export interface InitOutput {
   readonly debug_schematic: (a: number, b: number) => void;
   readonly debug_json_schematic: (a: number, b: number) => void;
   readonly start: () => void;
-  readonly __wbg_blockposition_free: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_x: (a: number) => number;
-  readonly __wbg_set_blockposition_x: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_y: (a: number) => number;
-  readonly __wbg_set_blockposition_y: (a: number, b: number) => void;
-  readonly __wbg_get_blockposition_z: (a: number) => number;
-  readonly __wbg_set_blockposition_z: (a: number, b: number) => void;
-  readonly blockposition_new: (a: number, b: number, c: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
