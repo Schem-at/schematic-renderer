@@ -82,8 +82,7 @@ export class CameraManager extends EventEmitter {
 			rotation: [-36 * Math.PI/180, 135 * Math.PI/180, 0] as const, // Their default angles: 36° slant, 135° rotation
 			controlType: "orbit" as const,
 			controlSettings: {
-				enableDamping: true,
-				dampingFactor: 0.0,
+				enableDamping: false,
 				minDistance: 10,
 				maxDistance: 100,
 				enableZoom: true,
@@ -98,8 +97,7 @@ export class CameraManager extends EventEmitter {
 			position: [0, 20, 20] as const,
 			controlType: "orbit" as const,
 			controlSettings: {
-				enableDamping: true,
-				dampingFactor: 0.0,
+				enableDamping: false,
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true
