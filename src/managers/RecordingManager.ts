@@ -3,16 +3,15 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 
 export interface RecordingOptions {
-	width?: number;
-	height?: number;
-	frameRate?: number;
-	quality?: number;
-	onStart?: () => void;
-	onProgress?: (progress: number) => void;
-	onFfmpegProgress?: (progress: number, time: number) => void;
-	onComplete?: (blob: Blob) => void;
+    width?: number;
+    height?: number;
+    frameRate?: number;
+    quality?: number;
+    onStart?: () => void;
+    onProgress?: (progress: number) => void;
+    onFfmpegProgress?: (progress: number, time: number) => void;
+    onComplete?: (blob: Blob) => void;
 }
-
 export interface ScreenshotOptions {
 	width?: number;
 	height?: number;
@@ -210,7 +209,7 @@ export class RecordingManager {
 		}
 		if (this.isRecording) throw new Error("Recording already in progress");
 		console.log("Starting recording...");
-
+	
 		const {
 			width = 3840,
 			height = 2160,
@@ -218,32 +217,28 @@ export class RecordingManager {
 			onStart,
 			onProgress,
 			onFfmpegProgress,
-            // @ts-ignore
 			onComplete,
 		} = options;
-		if (!this.ffmpeg) {
-			console.error("FFmpeg not found");
-			this.stopRecording();
-			return;
-		}
+	
 		try {
 			console.log("Setting up recording...");
 			await this.setupRecording(width, height);
 			console.log("Recording setup complete");
 			this.frameCount = 0;
 			this.isRecording = true;
-
+	
 			if (onStart) onStart();
-
+	
 			const totalFrames = duration * frameRate;
 			console.log(`Recording ${totalFrames} frames at ${frameRate} FPS...`);
+			
 			this.schematicRenderer.cameraManager.animateCameraAlongPath({
 				targetFps: frameRate,
 				totalFrames,
 				lookAtTarget: true,
 				onUpdate: async () => {
 					if (!this.isRecording) return;
-
+	
 					const frame = await this.captureFrame();
 					const filename = `frame${this.frameCount
 						.toString()
@@ -254,7 +249,7 @@ export class RecordingManager {
 					}
 					await this.ffmpeg.writeFile(filename, frame);
 					this.frameCount++;
-
+	
 					if (onProgress) onProgress(this.frameCount / totalFrames);
 				},
 				onComplete: async () => {
@@ -266,10 +261,16 @@ export class RecordingManager {
 							console.error("FFmpeg not found");
 							return;
 						}
-
-						this.ffmpeg.on('progress', ({ progress, time }: { progress: number, time: number }) => {
-							if (onFfmpegProgress) onFfmpegProgress(progress, time);
-						});
+	
+						// Register progress callback
+						if (onFfmpegProgress) {
+							const progressCallback = ({ ratio = 0, time = 0 }) => {
+								onFfmpegProgress(ratio * 100, time);
+							};
+							// @ts-ignore - FFmpeg types might not be up to date
+							this.ffmpeg.on('progress', progressCallback);
+						}
+	
 						await this.ffmpeg.exec([
 							"-framerate",
 							frameRate.toString(),
@@ -291,30 +292,45 @@ export class RecordingManager {
 							"yuv420p",
 							"output.mp4",
 						]);
-						// Get the video blob
+	
+						// Get the video data
 						const data = await this.ffmpeg.readFile("output.mp4");
-						// @ts-ignore
-						const blob = new Blob([data.buffer], { type: "video/mp4" });
-
+						
+						let blobData: BlobPart;
+						if (data instanceof Uint8Array) {
+							blobData = data;
+						} else if (typeof data === 'string') {
+							// Convert base64 string to Uint8Array if needed
+							const binaryString = atob(data);
+							const bytes = new Uint8Array(binaryString.length);
+							for (let i = 0; i < binaryString.length; i++) {
+								bytes[i] = binaryString.charCodeAt(i);
+							}
+							blobData = bytes;
+						} else {
+							throw new Error('Unexpected data type from FFmpeg');
+						}
+	
+						const blob = new Blob([blobData], { type: "video/mp4" });
+	
 						// Cleanup everything
 						await this.cleanupFrames(this.frameCount);
 						await this.ffmpeg.deleteFile("output.mp4");
-
+	
 						// Wait a small delay before restoring WebGL context
 						await new Promise((resolve) => setTimeout(resolve, 100));
-
+	
 						if (onComplete) onComplete(blob);
 					} catch (error) {
 						console.error("FFmpeg encoding failed:", error);
 						throw error;
-                    }
-						this.stopRecording();
-                    
+					}
+					this.stopRecording();
 				},
 			});
 		} catch (error) {
-            this.cleanup();
-            console.error("Recording failed:", error);
+			this.cleanup();
+			console.error("Recording failed:", error);
 			throw error;
 		}
 	}

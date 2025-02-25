@@ -4,7 +4,9 @@ import { EventEmitter } from "events";
 // @ts-ignore
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 // @ts-ignore
-import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls";
+import { CreativeControls } from "three-creative-controls"
+
+import { SchematicRenderer } from "../SchematicRenderer";
 
 export class CameraWrapper extends EventEmitter {
 	private _camera: THREE.Camera;
@@ -15,6 +17,7 @@ export class CameraWrapper extends EventEmitter {
 	constructor(
 		type: "perspective" | "orthographic",
 		rendererDomElement: HTMLCanvasElement,
+		private schematicRenderer: SchematicRenderer,
 		params: any = {}
 	) {
 		super();
@@ -126,9 +129,6 @@ export class CameraWrapper extends EventEmitter {
 		});
 	}
 
-	// Other properties and methods as needed...
-
-	// Update aspect ratio (useful when the canvas size changes)
 	updateAspectRatio(aspect: number) {
 		if (this._camera instanceof THREE.PerspectiveCamera) {
 			this._camera.aspect = aspect;
@@ -141,18 +141,34 @@ export class CameraWrapper extends EventEmitter {
 		this.emit("propertyChanged", { property: "aspect", value: aspect });
 	}
 
-	createControls(type: "orbit" | "pointer-lock" | any) {
+	createControls(type: "orbit" | "creative" | any) {
 		let controls: any;
-		console.log(this._camera);
 		if (type === "orbit") {
 			controls = new OrbitControls(
-				this._camera as THREE.PerspectiveCamera,
+				this._camera,
 				this.rendererDomElement
 			);
-		} else if (type === "pointer-lock") {
-			controls = new PointerLockControls(
-				this._camera as THREE.PerspectiveCamera,
-				this.rendererDomElement
+		} else if (type === "creative") {
+			// Add null checks and default values
+			const uiManager = this.schematicRenderer.uiManager;
+			if (!uiManager) {
+				console.warn('UIManager not initialized, creative controls might not work as expected');
+				controls = CreativeControls.Controls(
+					this._camera,
+					this.rendererDomElement,
+					null,
+					null
+				);
+				return controls;
+			}
+	
+			const { menu, blocker } = uiManager.createFPVElements();
+			
+			controls = CreativeControls.Controls(
+				this._camera,
+				this.rendererDomElement,
+				menu,
+				blocker
 			);
 		}
 		return controls;

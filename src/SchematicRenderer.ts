@@ -26,7 +26,8 @@ import { GizmoManager } from "./managers/GizmoManager";
 import { SchematicRendererOptions, DEFAULT_OPTIONS } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
-
+// @ts-ignore
+import { CreativeControls } from "three-creative-controls"
 
 
 export class SchematicRenderer {
@@ -72,6 +73,8 @@ export class SchematicRenderer {
         // Initialize managers that don't depend on initialization process
         this.sceneManager = new SceneManager(this);
         
+        this.uiManager = new UIManager(this);
+
         // Initialize camera manager
         this.cameraManager = new CameraManager(this, {
             position: options.cameraOptions?.position || [5, 5, 5],
@@ -91,7 +94,6 @@ export class SchematicRenderer {
 
         // Start the initialization process
         this.initialize(schematicData, defaultResourcePacks);
-        this.uiManager = new UIManager(this);
     }
 
     public updateCameraPosition(): void {
@@ -143,6 +145,8 @@ export class SchematicRenderer {
 
         } catch (error) {
             console.error("Failed to initialize SchematicRenderer:", error);
+            //pribnt error line
+            console.error(error)
         }
     }
 
@@ -212,12 +216,21 @@ export class SchematicRenderer {
     private animate(): void {
         requestAnimationFrame(() => this.animate());
         const deltaTime = this.clock.getDelta();
-        if (!this.highlightManager) {
-            return;
+    
+        // Update creative controls if active
+        const activeControlKey = this.cameraManager.activeControlKey;
+        if (activeControlKey?.includes('creative')) {
+            const controls = this.cameraManager.controls.get(activeControlKey);
+            const speed = new THREE.Vector3(200, 200, 200);
+            if (controls) {
+                CreativeControls.update(controls, speed);
+            }
         }
-        if (!this.renderManager) {
-            return;
-        }
+    
+        // Rest of your existing updates
+        if (!this.highlightManager) return;
+        if (!this.renderManager) return;
+        
         this.highlightManager.update(deltaTime);
         this.gizmoManager?.update();
         this.renderManager.render();

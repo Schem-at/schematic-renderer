@@ -8,7 +8,8 @@ import { CameraPathManager } from "./CameraPathManager";
 import { EasingFunctions } from "../utils/EasingFunctions";
 import { RecordingManager, RecordingOptions } from "./RecordingManager";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-
+// @ts-ignore
+import { CreativeControls } from "three-creative-controls"
 export interface CameraManagerOptions {
 	position?: [number, number, number];
 	showCameraPathVisualization?: boolean;
@@ -24,7 +25,8 @@ export interface CameraFrame {
 export interface CameraPreset {
     type: "perspective" | "orthographic";
     position: THREE.Vector3Tuple;
-    rotation?: THREE.Vector3Tuple;
+	rotation?: THREE.Vector3Tuple;
+	fov?: number;
     controlType: ControlType;
     controlSettings?: {
         enableDamping?: boolean;
@@ -56,14 +58,14 @@ export interface CameraAnimationWithRecordingOptions {
 }
 
 type CameraType = "perspective" | "orthographic";
-type ControlType = "orbit" | "pointerLock" | "none";
+type ControlType = "orbit" | "creative" | "none";
 
 export class CameraManager extends EventEmitter {
 	private schematicRenderer: SchematicRenderer;
 	private cameras: Map<string, CameraWrapper> = new Map();
 	private activeCameraKey: string;
 	public controls: Map<string, any> = new Map();
-	private activeControlKey: string;
+	public activeControlKey: string;
 	private rendererDomElement: HTMLCanvasElement;
 	private animationRequestId: number | null = null;
 	private isAnimating: boolean = false;
@@ -81,7 +83,7 @@ export class CameraManager extends EventEmitter {
 			controlType: "orbit" as const,
 			controlSettings: {
 				enableDamping: true,
-				dampingFactor: 0.05,
+				dampingFactor: 0.0,
 				minDistance: 10,
 				maxDistance: 100,
 				enableZoom: true,
@@ -97,10 +99,19 @@ export class CameraManager extends EventEmitter {
 			controlType: "orbit" as const,
 			controlSettings: {
 				enableDamping: true,
-				dampingFactor: 0.05,
+				dampingFactor: 0.0,
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true
+			}
+		},
+		perspective_fpv: {
+			type: "perspective" as const,
+			position: [0, 2, 0] as const,
+			fov: 90,
+			controlType: "creative" as const,
+			controlSettings: {
+				movementSpeed: new THREE.Vector3(200, 200, 200)
 			}
 		}
 	} as const;
@@ -150,16 +161,13 @@ export class CameraManager extends EventEmitter {
 			}
 		});
 	
-		// Set initial active camera and controls
 		this.activeCameraKey = "perspective";
 		this.activeControlKey = "perspective-orbit";
 	
-		// Enable the initial control
 		this.controls.forEach((control, key) => {
 			control.enabled = (key === this.activeControlKey);
 		});
 	
-		// Initialize CameraPathManager
 		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
 			showVisualization: options.showCameraPathVisualization || false,
 		});
@@ -174,12 +182,14 @@ export class CameraManager extends EventEmitter {
 			camera = new CameraWrapper(
 				"perspective",
 				this.rendererDomElement,
+				this.schematicRenderer,  
 				params
 			);
 		} else {
 			camera = new CameraWrapper(
 				"orthographic",
 				this.rendererDomElement,
+				this.schematicRenderer, 
 				params
 			);
 		}
@@ -352,6 +362,9 @@ export class CameraManager extends EventEmitter {
 		// Store previous camera state
 		const previousCameraKey = this.activeCameraKey;
 		
+		// Hide any existing FPV overlay
+		this.schematicRenderer.uiManager?.hideFPVOverlay();
+		
 		// Switch to new camera
 		this.activeCameraKey = presetName;
 		
@@ -370,7 +383,16 @@ export class CameraManager extends EventEmitter {
 		if (activeControl) {
 			// Update the control's camera reference
 			activeControl.object = this.activeCamera.camera;
-			activeControl.update();
+			
+			// Only call update on orbit controls
+			if (preset.controlType === 'orbit' && activeControl.update) {
+				activeControl.update();
+			}
+		}
+	
+		// Show FPV overlay if switching to creative mode
+		if (preset.controlType === 'creative') {
+			this.schematicRenderer.uiManager?.showFPVOverlay();
 		}
 	
 		// Update renderer camera if RenderManager exists
@@ -460,11 +482,17 @@ export class CameraManager extends EventEmitter {
 		controls.minPolarAngle = Math.PI / 4; // 45 degrees
 		controls.maxPolarAngle = Math.PI / 2.5; // ~72 degrees
 	}
-
-	// Update loop for controls
+	
 	public update(deltaTime: number = 0) {
 		const controls = this.controls.get(this.activeControlKey);
-		if (controls && controls.update) {
+		if (!controls) return;
+	
+		if (this.activeControlKey.includes('creative')) {
+			const speed = CameraManager.CAMERA_PRESETS.perspective_fpv.controlSettings?.movementSpeed;
+			if (speed) {
+				CreativeControls.update(controls, speed);
+			}
+		} else if (controls.update) {
 			controls.update(deltaTime);
 		}
 	}

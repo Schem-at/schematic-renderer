@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.16",
+	"version": "1.0.18",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
 	"module": "dist/schematic-renderer.es.js",
@@ -48,6 +48,7 @@
 		"realism-effects": "^1.1.2",
 		"stats-js": "^1.0.1",
 		"three": "^0.161.0",
+		"three-creative-controls": "^1.0.1",
 		"vite-plugin-top-level-await": "^1.4.4",
 		"vite-plugin-wasm": "^3.3.0",
 		"webm-writer": "^1.0.0"
