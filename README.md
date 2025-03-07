@@ -384,7 +384,7 @@ schematic.bounds.reset();
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/schematic-renderer.git
+git clone https://github.com/schem-at/schematic-renderer.git
 cd schematic-renderer
 
 # Install dependencies
