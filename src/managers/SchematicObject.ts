@@ -35,6 +35,21 @@ export class SchematicObject extends EventEmitter {
 	public visible: boolean;
 
 	public meshBoundingBox: [number[], number[]];
+	public renderingBounds: {
+		min: THREE.Vector3;
+		max: THREE.Vector3;
+		helper?: THREE.Box3Helper;
+	};
+	
+	// Reactive bounds for direct manipulation
+	public bounds: {
+		minX: number;
+		minY: number;
+		minZ: number;
+		maxX: number;
+		maxY: number;
+		maxZ: number;
+	};
 
 	private meshesReady: Promise<void>;
 	constructor(
@@ -50,6 +65,10 @@ export class SchematicObject extends EventEmitter {
 			opacity: number;
 			visible: boolean;
 			meshBoundingBox?: [number[], number[]];
+			renderingBounds?: {
+				min: THREE.Vector3 | number[];
+				max: THREE.Vector3 | number[];
+			};
 		}>
 	) {
 		super();
@@ -92,6 +111,100 @@ export class SchematicObject extends EventEmitter {
 			];
 		}
 
+		// Initialize rendering bounds to the full schematic dimensions
+		this.renderingBounds = {
+			min: new THREE.Vector3(0, 0, 0),
+			max: new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2])
+		};
+
+		// Apply custom rendering bounds if provided
+		if (properties?.renderingBounds) {
+			if (Array.isArray(properties.renderingBounds.min)) {
+				this.renderingBounds.min = new THREE.Vector3(
+					properties.renderingBounds.min[0],
+					properties.renderingBounds.min[1],
+					properties.renderingBounds.min[2]
+				);
+			} else if (properties.renderingBounds.min instanceof THREE.Vector3) {
+				this.renderingBounds.min = properties.renderingBounds.min.clone();
+			}
+
+			if (Array.isArray(properties.renderingBounds.max)) {
+				this.renderingBounds.max = new THREE.Vector3(
+					properties.renderingBounds.max[0],
+					properties.renderingBounds.max[1],
+					properties.renderingBounds.max[2]
+				);
+			} else if (properties.renderingBounds.max instanceof THREE.Vector3) {
+				this.renderingBounds.max = properties.renderingBounds.max.clone();
+			}
+		}
+		
+		// Initialize the reactive bounds property
+		const self = this;
+		this.bounds = new Proxy({
+			get minX() { return self.renderingBounds.min.x; },
+			set minX(value: number) { 
+				self.renderingBounds.min.x = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			get minY() { return self.renderingBounds.min.y; },
+			set minY(value: number) { 
+				self.renderingBounds.min.y = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			get minZ() { return self.renderingBounds.min.z; },
+			set minZ(value: number) { 
+				self.renderingBounds.min.z = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			get maxX() { return self.renderingBounds.max.x; },
+			set maxX(value: number) { 
+				self.renderingBounds.max.x = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			get maxY() { return self.renderingBounds.max.y; },
+			set maxY(value: number) { 
+				self.renderingBounds.max.y = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			get maxZ() { return self.renderingBounds.max.z; },
+			set maxZ(value: number) { 
+				self.renderingBounds.max.z = value;
+				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+			},
+			
+			// Reset to full dimensions
+			reset() {
+				const dimensions = self.schematicWrapper.get_dimensions();
+				self.setRenderingBounds(
+					new THREE.Vector3(0, 0, 0),
+					new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
+				);
+				return "Reset to full dimensions";
+			},
+			
+			// Toggle helper visibility
+			showHelper(visible = true) {
+				self.showRenderingBoundsHelper(visible);
+				return `Helper ${visible ? 'shown' : 'hidden'}`;
+			}
+		}, {
+			get(target, prop) {
+				// @ts-ignore
+				return target[prop];
+			},
+			set(target, prop, value) {
+				// @ts-ignore
+				target[prop] = value;
+				return true;
+			}
+		}) as any;
 
 		this.group = new THREE.Group();
 		this.group.name = name;
@@ -139,6 +252,13 @@ export class SchematicObject extends EventEmitter {
 				afterSet: () => {
 					this.updateMeshVisibility();
 					this.emitPropertyChanged("visible", this.visible);
+				},
+			},
+			renderingBounds: {
+				afterSet: () => {
+					// Don't call updateRenderingBounds() here to avoid infinite loops
+					// The specific setRenderingBounds method should be used instead
+					this.emitPropertyChanged("renderingBounds", this.renderingBounds);
 				},
 			},
 		};
@@ -208,12 +328,89 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateMatrixWorld(true);
 		this.group.updateWorldMatrix(true, true);
 
+		// Create initial visualizer for rendering bounds
+		this.createRenderingBoundsHelper();
+		
 		// const box = new THREE.Box3().setFromObject(this.group);
 		// console.log("Updated bounding box min:", box.min);
 		// console.log("Updated bounding box max:", box.max);
 		// console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
         this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(this.name);
 
+	}
+
+	/**
+	 * Creates or updates the rendering bounds helper visualization
+	 */
+	private createRenderingBoundsHelper(visible: boolean = true): void {
+		// Update the visualizer if it exists
+		if (this.renderingBounds.helper) {
+			this.group.remove(this.renderingBounds.helper);
+		}
+
+		if (visible) {
+			// Create a box to represent the rendering bounds
+			const box = new THREE.Box3(
+				this.renderingBounds.min.clone(),
+				this.renderingBounds.max.clone()
+			);
+
+			// Create a box helper to visualize the bounds
+			const helper = new THREE.Box3Helper(box, new THREE.Color(0x00ff00));
+			this.renderingBounds.helper = helper;
+			this.group.add(helper);
+		} else {
+			this.renderingBounds.helper = undefined;
+		}
+	}
+
+	/**
+	 * Sets the rendering bounds for this schematic
+	 * @param min Minimum coordinates for rendering
+	 * @param max Maximum coordinates for rendering
+	 * @param showHelper Whether to show a visual helper for the bounds
+	 */
+	public setRenderingBounds(
+		min: THREE.Vector3 | number[],
+		max: THREE.Vector3 | number[],
+		showHelper: boolean = true
+	): void {
+		// Convert arrays to Vector3 if needed
+		if (Array.isArray(min)) {
+			min = new THREE.Vector3(min[0], min[1], min[2]);
+		}
+		if (Array.isArray(max)) {
+			max = new THREE.Vector3(max[0], max[1], max[2]);
+		}
+
+		// Update the rendering bounds
+		this.renderingBounds.min = min.clone();
+		this.renderingBounds.max = max.clone();
+
+		// Create/update the visualizer if requested
+		this.createRenderingBoundsHelper(showHelper);
+
+		// Rebuild mesh to apply the rendering bounds
+		this.rebuildMesh();
+	}
+
+	/**
+	 * Shows or hides the rendering bounds helper
+	 * @param visible Whether the helper should be visible
+	 */
+	public showRenderingBoundsHelper(visible: boolean): void {
+		this.createRenderingBoundsHelper(visible);
+	}
+
+	/**
+	 * Resets the rendering bounds to include the full schematic
+	 */
+	public resetRenderingBounds(): void {
+		const dimensions = this.schematicWrapper.get_dimensions();
+		this.setRenderingBounds(
+			new THREE.Vector3(0, 0, 0),
+			new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
+		);
 	}
 
 	public async getMeshes(): Promise<THREE.Mesh[]> {
@@ -498,6 +695,21 @@ export class SchematicObject extends EventEmitter {
 			z: chunkZ * this.chunkDimensions.chunkLength,
 		};
 
+		// Check if chunk is outside rendering bounds - if so, just remove it
+		if (this.renderingBounds) {
+			const chunkMaxX = chunkOffset.x + this.chunkDimensions.chunkWidth;
+			const chunkMaxY = chunkOffset.y + this.chunkDimensions.chunkHeight;
+			const chunkMaxZ = chunkOffset.z + this.chunkDimensions.chunkLength;
+
+			// If the chunk is completely outside rendering bounds, just remove it
+			if (chunkMaxX <= this.renderingBounds.min.x || chunkOffset.x >= this.renderingBounds.max.x ||
+				chunkMaxY <= this.renderingBounds.min.y || chunkOffset.y >= this.renderingBounds.max.y ||
+				chunkMaxZ <= this.renderingBounds.min.z || chunkOffset.z >= this.renderingBounds.max.z) {
+				this.removeChunkMeshes(chunkX, chunkY, chunkZ);
+				return;
+			}
+		}
+
 		// Get the blocks in the chunk
 		const chunkBlocks = this.schematicWrapper.get_chunk_blocks(
 			chunkOffset.x,
@@ -511,10 +723,11 @@ export class SchematicObject extends EventEmitter {
 		// Remove old chunk meshes from the scene
 		this.removeChunkMeshes(chunkX, chunkY, chunkZ);
 
-		// Build new chunk meshes
+		// Build new chunk meshes, passing the rendering bounds
 		const newChunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 			chunkBlocks,
-			this.schematicWrapper
+			this.schematicWrapper,
+			this.renderingBounds
 		);
 
 		// Apply properties to the new meshes
@@ -645,5 +858,117 @@ export class SchematicObject extends EventEmitter {
 		const min = positionArray;
 		const max = positionArray.map((v, i) => v + boundingBox[i]);
 		return [min, max];
+	}
+	
+	/**
+	 * Creates an object with properties and methods for easily manipulating rendering bounds
+	 * Useful for console manipulation and testing
+	 * @returns Settings object with properties and methods
+	 */
+	public createBoundsControls(): any {
+		const dimensions = this.schematicWrapper.get_dimensions();
+		const [width, height, depth] = dimensions;
+		
+		const settings = {
+			minX: this.renderingBounds.min.x,
+			maxX: this.renderingBounds.max.x,
+			minY: this.renderingBounds.min.y,
+			maxY: this.renderingBounds.max.y,
+			minZ: this.renderingBounds.min.z,
+			maxZ: this.renderingBounds.max.z,
+			
+			// Apply a specific axis
+			applyX: () => {
+				const min = this.renderingBounds.min.clone();
+				const max = this.renderingBounds.max.clone();
+				min.x = settings.minX;
+				max.x = settings.maxX;
+				this.setRenderingBounds(min, max);
+				return `X axis bounds set to [${settings.minX}, ${settings.maxX}]`;
+			},
+			
+			applyY: () => {
+				const min = this.renderingBounds.min.clone();
+				const max = this.renderingBounds.max.clone();
+				min.y = settings.minY;
+				max.y = settings.maxY;
+				this.setRenderingBounds(min, max);
+				return `Y axis bounds set to [${settings.minY}, ${settings.maxY}]`;
+			},
+			
+			applyZ: () => {
+				const min = this.renderingBounds.min.clone();
+				const max = this.renderingBounds.max.clone();
+				min.z = settings.minZ;
+				max.z = settings.maxZ;
+				this.setRenderingBounds(min, max);
+				return `Z axis bounds set to [${settings.minZ}, ${settings.maxZ}]`;
+			},
+			
+			// Apply all axes
+			applyAll: () => {
+				this.setRenderingBounds(
+					[settings.minX, settings.minY, settings.minZ],
+					[settings.maxX, settings.maxY, settings.maxZ]
+				);
+				return `All bounds set to min:[${settings.minX}, ${settings.minY}, ${settings.minZ}], max:[${settings.maxX}, ${settings.maxY}, ${settings.maxZ}]`;
+			},
+			
+			// Reset to full dimensions
+			reset: () => {
+				this.resetRenderingBounds();
+				// Update local settings to match
+				settings.minX = 0;
+				settings.maxX = width;
+				settings.minY = 0;
+				settings.maxY = height;
+				settings.minZ = 0;
+				settings.maxZ = depth;
+				return `Reset rendering bounds to full dimensions: [${width}, ${height}, ${depth}]`;
+			},
+			
+			// Toggle helper visibility
+			toggleHelper: (visible = true) => {
+				this.showRenderingBoundsHelper(visible);
+				return `Rendering bounds helper ${visible ? 'shown' : 'hidden'}`;
+			},
+			
+			// Get current bounds
+			getCurrentBounds: () => {
+				return {
+					min: this.renderingBounds.min.toArray(),
+					max: this.renderingBounds.max.toArray()
+				};
+			},
+			
+			// Sync from current bounds
+			syncFromCurrent: () => {
+				settings.minX = this.renderingBounds.min.x;
+				settings.maxX = this.renderingBounds.max.x;
+				settings.minY = this.renderingBounds.min.y;
+				settings.maxY = this.renderingBounds.max.y;
+				settings.minZ = this.renderingBounds.min.z;
+				settings.maxZ = this.renderingBounds.max.z;
+				return "Settings synchronized with current bounds";
+			},
+			
+			// Slice from one side (useful for slider UI)
+			sliceX: (value) => {
+				settings.maxX = value;
+				return settings.applyX();
+			},
+			
+			sliceY: (value) => {
+				settings.maxY = value;
+				return settings.applyY();
+			},
+			
+			sliceZ: (value) => {
+				settings.maxZ = value;
+				return settings.applyZ();
+			}
+		};
+		
+		return settings;
 	}
 }

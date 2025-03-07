@@ -247,6 +247,175 @@ export class SchematicRenderer {
         this.interactionManager?.update();
     }
 
+    // Schematic rendering bounds management
+    
+    /**
+     * Gets the rendering bounds for a schematic
+     * @param schematicId ID of the schematic
+     * @param asArrays If true, returns min/max as arrays instead of Vector3s
+     * @returns The rendering bounds or null if schematic not found
+     */
+    public getRenderingBounds(
+        schematicId: string,
+        asArrays: boolean = true
+    ): { min: THREE.Vector3 | number[], max: THREE.Vector3 | number[] } | null {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return null;
+        }
+        
+        if (asArrays) {
+            return {
+                min: schematic.renderingBounds.min.toArray(),
+                max: schematic.renderingBounds.max.toArray()
+            };
+        } else {
+            return {
+                min: schematic.renderingBounds.min.clone(),
+                max: schematic.renderingBounds.max.clone()
+            };
+        }
+    }
+    
+    /**
+     * Sets the rendering bounds for a schematic
+     * @param schematicId ID of the schematic
+     * @param min Minimum coordinates (Vector3 or array [x,y,z])
+     * @param max Maximum coordinates (Vector3 or array [x,y,z])
+     * @param showHelper Whether to show a visual helper for the bounds
+     */
+    public setRenderingBounds(
+        schematicId: string,
+        min: THREE.Vector3 | number[],
+        max: THREE.Vector3 | number[],
+        showHelper: boolean = true
+    ): void {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return;
+        }
+        
+        schematic.setRenderingBounds(min, max, showHelper);
+    }
+
+    /**
+     * Sets a specific axis of the rendering bounds
+     * @param schematicId ID of the schematic
+     * @param axis The axis to set ('x', 'y', or 'z')
+     * @param minValue Minimum value for the axis
+     * @param maxValue Maximum value for the axis
+     */
+    public setRenderingBoundsAxis(
+        schematicId: string,
+        axis: 'x' | 'y' | 'z',
+        minValue: number,
+        maxValue: number
+    ): void {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return;
+        }
+        
+        const bounds = this.getRenderingBounds(schematicId, false);
+        if (!bounds) return;
+        
+        const min = bounds.min as THREE.Vector3;
+        const max = bounds.max as THREE.Vector3;
+        
+        // Update just the specified axis
+        min[axis] = minValue;
+        max[axis] = maxValue;
+        
+        schematic.setRenderingBounds(min, max);
+    }
+
+    /**
+     * Resets the rendering bounds to include the full schematic
+     * @param schematicId ID of the schematic
+     */
+    public resetRenderingBounds(schematicId: string): void {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return;
+        }
+        
+        schematic.resetRenderingBounds();
+    }
+
+    /**
+     * Shows or hides the rendering bounds helper
+     * @param schematicId ID of the schematic
+     * @param visible Whether the helper should be visible
+     */
+    public showRenderingBoundsHelper(schematicId: string, visible: boolean): void {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return;
+        }
+        
+        schematic.showRenderingBoundsHelper(visible);
+    }
+    
+    /**
+     * Gets the dimensions of a schematic
+     * @param schematicId ID of the schematic
+     * @returns The dimensions as an array [width, height, depth] or null if schematic not found
+     */
+    public getSchematicDimensions(schematicId: string): number[] | null {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return null;
+        }
+        
+        return schematic.schematicWrapper.get_dimensions();
+    }
+    
+    /**
+     * Gets all currently loaded schematics
+     * @returns Array of schematic IDs
+     */
+    public getLoadedSchematics(): string[] {
+        if (!this.schematicManager) return [];
+        return this.schematicManager.getAllSchematics().map(schematic => schematic.id);
+    }
+    
+    /**
+     * Creates console-friendly settings for working with rendering bounds
+     * Delegates to the SchematicObject's createBoundsControls method
+     * @param schematicId ID of the schematic
+     * @returns Functions for easy console usage
+     */
+    public createBoundsControls(schematicId: string): any {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return null;
+        }
+        
+        return schematic.createBoundsControls();
+    }
+    
+    /**
+     * Provides direct access to a schematic's bounds for easy manipulation
+     * @param schematicId ID of the schematic
+     * @returns The schematic's reactive bounds object or null if not found
+     */
+    public getBounds(schematicId: string): any {
+        const schematic = this.schematicManager?.getSchematic(schematicId);
+        if (!schematic) {
+            console.error(`Schematic with ID ${schematicId} not found`);
+            return null;
+        }
+        
+        return schematic.bounds;
+    }
+
     // Resource pack management methods
     public async getResourcePacks(): Promise<Array<{ name: string; enabled: boolean; order: number }>> {
         await this.resourcePackManager.initPromise;

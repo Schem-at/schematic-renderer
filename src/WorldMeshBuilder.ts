@@ -179,7 +179,8 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
 
     public async getChunkMesh(
         chunk: any[],
-        schematic: SchematicWrapper
+        schematic: SchematicWrapper,
+        renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
     ): Promise<THREE.Mesh[]> {
         const startTime = performance.now();
     
@@ -196,7 +197,7 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
         // Process blocks in parallel
         const processStartTime = performance.now();
-        const components = await this.processBlocks(chunk, schematic, blockMetaCache);
+        const components = await this.processBlocks(chunk, schematic, blockMetaCache, renderingBounds);
         this.trackTiming('block_processing', performance.now() - processStartTime);
     
         // Track pre-mesh creation memory
@@ -219,7 +220,8 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     private async processBlocks(
         chunk: any[], 
         schematic: SchematicWrapper,
-        blockMetaCache: Map<string, any>
+        blockMetaCache: Map<string, any>,
+        renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
     ): Promise<Record<string, any[]>> {
         const maxBlocksAllowed = 100000000;
         let count = 0;
@@ -237,7 +239,16 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
             const { x, y, z, name, properties } = blockData;
             if (INVISIBLE_BLOCKS.has(name)) return;
-    
+            
+            // Skip blocks outside of rendering bounds if bounds are specified
+            if (renderingBounds) {
+                if (x < renderingBounds.min.x || x >= renderingBounds.max.x ||
+                    y < renderingBounds.min.y || y >= renderingBounds.max.y ||
+                    z < renderingBounds.min.z || z >= renderingBounds.max.z) {
+                    return;
+                }
+            }
+
             // Use a new vector instance for each block
             const position = new THREE.Vector3(x, y, z);
     
@@ -245,7 +256,8 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
                 this.blockMeshBuilder.getOccludedFacesForBlock(
                     schematic,
                     blockData,
-                    position
+                    position,
+                    renderingBounds
                 )
             );
     
@@ -319,6 +331,9 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
         // Track initial memory state
         this.trackMemory();
+
+        // Get the rendering bounds if they exist
+        const renderingBounds = schematicObject.renderingBounds;
     
         for (const chunkData of chunks) {
             index++;
@@ -328,6 +343,23 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
             }
     
             const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
+
+            // Skip chunks that are completely outside the rendering bounds
+            if (renderingBounds) {
+                const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
+                const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
+                const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
+                const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
+                const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
+                const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+
+                // Skip chunk if it's completely outside the rendering bounds
+                if (chunkMaxX <= renderingBounds.min.x || chunkMinX >= renderingBounds.max.x ||
+                    chunkMaxY <= renderingBounds.min.y || chunkMinY >= renderingBounds.max.y ||
+                    chunkMaxZ <= renderingBounds.min.z || chunkMinZ >= renderingBounds.max.z) {
+                    continue;
+                }
+            }
     
             try {
                 // Track chunk processing
@@ -338,7 +370,8 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
                 const chunkMeshes = await this.getChunkMesh(
                     blocks as any[],
-                    schematic
+                    schematic,
+                    renderingBounds
                 );
     
                 // Track post-processing memory

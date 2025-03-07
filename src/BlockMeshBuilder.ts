@@ -605,7 +605,8 @@ export class BlockMeshBuilder {
 	public getOccludedFacesForBlock(
 		schematic: SchematicWrapper,
 		block: Block,
-		pos: THREE.Vector3
+		pos: THREE.Vector3,
+		renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
 	): number {
 		const blockType = block.name.split(":")[1];
 		const { x, y, z } = pos;
@@ -626,10 +627,31 @@ export class BlockMeshBuilder {
 			north: false,
 		};
 
+		// If rendering bounds are specified, check if block is at the edge of the bounds
+		if (renderingBounds) {
+			// Make face visible if it's at the edge of the rendering bounds
+			if (x + 1 >= renderingBounds.max.x) occludedFaces['east'] = false;
+			else if (x <= renderingBounds.min.x) occludedFaces['west'] = false;
+			else if (y + 1 >= renderingBounds.max.y) occludedFaces['up'] = false;
+			else if (y <= renderingBounds.min.y) occludedFaces['down'] = false;
+			else if (z + 1 >= renderingBounds.max.z) occludedFaces['south'] = false;
+			else if (z <= renderingBounds.min.z) occludedFaces['north'] = false;
+		}
+
 		if (blockType.includes("glass")) {
 			for (const face of POSSIBLE_FACES) {
 				const directionVector = directionVectors[face];
 				const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
+				
+				// Skip occlusion check if adjacent block is outside rendering bounds
+				if (renderingBounds && (
+					adjacentPos.x < renderingBounds.min.x || adjacentPos.x >= renderingBounds.max.x ||
+					adjacentPos.y < renderingBounds.min.y || adjacentPos.y >= renderingBounds.max.y ||
+					adjacentPos.z < renderingBounds.min.z || adjacentPos.z >= renderingBounds.max.z
+				)) {
+					continue;
+				}
+				
 				const adjacentBlock = schematic.get_block_with_properties(
 					adjacentPos.x,
 					adjacentPos.y,
@@ -657,8 +679,23 @@ export class BlockMeshBuilder {
 		}
 
 		for (const face of POSSIBLE_FACES) {
+			// If the face is already marked as visible due to rendering bounds, skip occlusion check
+			if (renderingBounds && occludedFaces[face] === false) {
+				continue;
+			}
+			
 			const directionVector = directionVectors[face];
 			const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
+			
+			// If adjacent position is outside of rendering bounds, the face should be visible
+			if (renderingBounds && (
+				adjacentPos.x < renderingBounds.min.x || adjacentPos.x >= renderingBounds.max.x ||
+				adjacentPos.y < renderingBounds.min.y || adjacentPos.y >= renderingBounds.max.y ||
+				adjacentPos.z < renderingBounds.min.z || adjacentPos.z >= renderingBounds.max.z
+			)) {
+				continue; // Skip occlusion, face remains visible
+			}
+			
 			const adjacentBlock = schematic.get_block_with_properties(
 				adjacentPos.x,
 				adjacentPos.y,
