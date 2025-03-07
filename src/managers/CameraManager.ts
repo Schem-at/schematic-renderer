@@ -4,6 +4,7 @@ import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { CameraWrapper } from "./CameraWrapper";
 import { CameraPath } from "../camera/CameraPath";
+import { CircularCameraPath } from "../camera/CircularCameraPath";
 import { CameraPathManager } from "./CameraPathManager";
 import { EasingFunctions } from "../utils/EasingFunctions";
 import { RecordingManager, RecordingOptions } from "./RecordingManager";
@@ -72,6 +73,12 @@ export class CameraManager extends EventEmitter {
 	private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
 	private animationStartRotation: THREE.Euler = new THREE.Euler();
 	public recordingManager: RecordingManager;
+	
+	// Auto-orbit properties
+	private autoOrbitEnabled: boolean = false;
+	private autoOrbitAnimationId: number | null = null;
+	private autoOrbitStartTime: number = 0;
+	private autoOrbitDuration: number = 30; // seconds for full 360° rotation
 
 	public cameraPathManager: CameraPathManager;
 
@@ -169,6 +176,34 @@ export class CameraManager extends EventEmitter {
 		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
 			showVisualization: options.showCameraPathVisualization || false,
 		});
+		
+		// Set auto-orbit duration if provided in the options
+		if (this.schematicRenderer.options.autoOrbitDuration) {
+			this.autoOrbitDuration = this.schematicRenderer.options.autoOrbitDuration;
+		}
+		
+		// Setup event listeners for schematic changes to update camera path
+		if (this.schematicRenderer.eventEmitter) {
+			// Listen for schematic loaded/added events
+			this.schematicRenderer.eventEmitter.on('schematicAdded', () => {
+				// Update the camera path when a new schematic is added
+				const defaultPath = this.cameraPathManager.getFirstPath();
+				if (defaultPath) {
+					this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
+					
+					// If auto-orbit is active, restart it to use the updated path
+					if (this.autoOrbitEnabled) {
+						this.stopAutoOrbit();
+						this.startAutoOrbit();
+					}
+				}
+			});
+		}
+		
+		// Start auto-orbit if enabled in options
+		if (this.schematicRenderer.options.enableAutoOrbit) {
+			this.startAutoOrbit();
+		}
 	}
 	
 
@@ -598,11 +633,144 @@ export class CameraManager extends EventEmitter {
 		if (controls) {
 			controls.enabled = true;
 		}
+		
+		// Update the circular camera path to fit the schematics
+		// This is important for auto-orbit functionality
+		this.cameraPathManager.fitCircularPathToSchematics("circularPath");
+		
+		// If auto-orbit is active, we need to restart it to use the updated path
+		const wasAutoOrbitActive = this.autoOrbitEnabled;
+		if (wasAutoOrbitActive) {
+			// Restart auto-orbit to use the updated path
+			this.stopAutoOrbit();
+			this.startAutoOrbit();
+		}
+	}
+
+	/**
+	 * Starts auto-orbiting the camera around the default camera path
+	 */
+	public startAutoOrbit(): void {
+		if (this.autoOrbitEnabled) {
+			return; // Already running
+		}
+		
+		// Stop any current animations
+		this.stopAnimation();
+		
+		// Get the default camera path
+		const defaultPath = this.cameraPathManager.getFirstPath();
+		if (!defaultPath) {
+			console.warn("Cannot start auto-orbit: No camera path available");
+			return;
+		}
+		
+		// Make sure we have a circular path (we only support circular paths for auto-orbit)
+		if (!(defaultPath.path instanceof CircularCameraPath)) {
+			console.warn("Auto-orbit only supports CircularCameraPath");
+			return;
+		}
+		
+		// Ensure path is fitted to the current schematics
+		if (this.schematicRenderer?.schematicManager && !this.schematicRenderer.schematicManager.isEmpty()) {
+			this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
+		}
+		
+		// Disable controls during auto-orbit
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls) {
+			controls.enabled = false;
+		}
+		
+		this.autoOrbitEnabled = true;
+		this.autoOrbitStartTime = performance.now();
+		
+		// Start animation loop
+		const animateOrbit = () => {
+			if (!this.autoOrbitEnabled) return;
+			
+			const elapsedTime = (performance.now() - this.autoOrbitStartTime) / 1000;
+			const t = (elapsedTime % this.autoOrbitDuration) / this.autoOrbitDuration;
+			
+			// Get camera position from the path
+			const { position, rotation, target } = defaultPath.path.getPoint(t);
+			
+			// Apply position and rotation
+			(this.activeCamera.position as THREE.Vector3).copy(position);
+			this.activeCamera.lookAt(target);
+			
+			// Emit camera movement event
+			this.emit("cameraMove", {
+				position: (this.activeCamera.position as THREE.Vector3).clone(),
+				rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
+				progress: t,
+			});
+			
+			// Continue animation
+			this.autoOrbitAnimationId = requestAnimationFrame(animateOrbit);
+		};
+		
+		// Start the animation
+		this.autoOrbitAnimationId = requestAnimationFrame(animateOrbit);
+	}
+	
+	/**
+	 * Stops the auto-orbit animation
+	 */
+	public stopAutoOrbit(): void {
+		if (!this.autoOrbitEnabled) {
+			return; // Not running
+		}
+		
+		this.autoOrbitEnabled = false;
+		
+		// Cancel animation
+		if (this.autoOrbitAnimationId !== null) {
+			cancelAnimationFrame(this.autoOrbitAnimationId);
+			this.autoOrbitAnimationId = null;
+		}
+		
+		// Re-enable controls
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls) {
+			controls.enabled = true;
+		}
+	}
+	
+	/**
+	 * Toggles the auto-orbit feature
+	 * @returns The new state of auto-orbit (true = enabled, false = disabled)
+	 */
+	public toggleAutoOrbit(): boolean {
+		if (this.autoOrbitEnabled) {
+			this.stopAutoOrbit();
+			return false;
+		} else {
+			this.startAutoOrbit();
+			return true;
+		}
+	}
+	
+	/**
+	 * Sets the auto-orbit duration
+	 * @param duration Duration in seconds for a full rotation
+	 */
+	public setAutoOrbitDuration(duration: number): void {
+		this.autoOrbitDuration = duration;
+	}
+	
+	/**
+	 * Gets the current state of auto-orbit
+	 * @returns True if auto-orbit is enabled
+	 */
+	public isAutoOrbitEnabled(): boolean {
+		return this.autoOrbitEnabled;
 	}
 
 	public dispose(): void {
 		this.recordingManager.dispose();
 		this.stopAnimation();
+		this.stopAutoOrbit();
 
 		// Dispose of all controls
 		this.controls.forEach((control) => {

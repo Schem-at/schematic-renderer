@@ -99,6 +99,39 @@ export class SchematicRenderer {
     public updateCameraPosition(): void {
         this.state.cameraPosition.copy(this.cameraManager.activeCamera.position as THREE.Vector3);
     }
+    
+    /**
+     * Sets whether auto-orbit is enabled
+     * @param enabled True to enable auto-orbit, false to disable
+     */
+    public setAutoOrbit(enabled: boolean): void {
+        this.options.enableAutoOrbit = enabled;
+        
+        if (enabled) {
+            this.cameraManager.startAutoOrbit();
+        } else {
+            this.cameraManager.stopAutoOrbit();
+        }
+    }
+    
+    /**
+     * Sets the duration of a full auto-orbit rotation
+     * @param duration Duration in seconds 
+     */
+    public setAutoOrbitDuration(duration: number): void {
+        this.options.autoOrbitDuration = duration;
+        this.cameraManager.setAutoOrbitDuration(duration);
+    }
+    
+    /**
+     * Toggles the auto-orbit feature
+     * @returns The new state of auto-orbit (true = enabled, false = disabled)
+     */
+    public toggleAutoOrbit(): boolean {
+        const newState = this.cameraManager.toggleAutoOrbit();
+        this.options.enableAutoOrbit = newState;
+        return newState;
+    }
 
     private async initialize(
         schematicData: { [key: string]: () => Promise<ArrayBuffer> },

@@ -18,6 +18,10 @@ export interface SchematicRendererOptions {
   showGrid?: boolean;
   showAxes?: boolean;
   showCameraPathVisualization?: boolean;
+  // Enable auto-orbit around default camera path
+  enableAutoOrbit?: boolean;
+  // Auto-orbit speed in seconds for a full rotation (higher = slower)
+  autoOrbitDuration?: number;
   // Enable single schematic mode (only one schematic can be loaded at a time)
   singleSchematicMode?: boolean;
   // Options for individual managers
@@ -34,6 +38,8 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
   hdri: '',
   gamma: 0.5,
   showCameraPathVisualization: false,
+  enableAutoOrbit: false,
+  autoOrbitDuration: 10,
   enableInteraction: false,
   enableDragAndDrop: false,
   enableGizmos: false,
