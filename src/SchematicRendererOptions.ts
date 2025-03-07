@@ -58,14 +58,28 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 };
 
 export interface Callbacks {
+  // Renderer lifecycle callbacks
   onRendererInitialized?: () => void;
+  
+  // Schematic callbacks
   onSchematicRendered?: (schematicName: string) => void;
   onSchematicLoaded?: (schematicName: string) => void;
-  onObjectSelected?: (object: SelectableObject) => void;
-  onObjectDeselected?: (object: SelectableObject) => void;
   onSchematicDropped?: (file: File) => void | Promise<void>;
   onSchematicDropSuccess?: (file: File) => void | Promise<void>;
   onSchematicDropFailed?: (file: File, error: Error) => void | Promise<void>;
+  
+  // Resource pack callbacks
+  onResourcePackLoaded?: (packName: string) => void | Promise<void>;
+  onResourcePackDropped?: (file: File) => void | Promise<void>;
+  onResourcePackDropSuccess?: (file: File) => void | Promise<void>;
+  onResourcePackDropFailed?: (file: File, error: Error) => void | Promise<void>;
+  
+  // Interaction callbacks
+  onObjectSelected?: (object: SelectableObject) => void;
+  onObjectDeselected?: (object: SelectableObject) => void;
+  
+  // File handling callbacks
   onInvalidFileType?: (file: File) => void | Promise<void>;
-  // Add other callbacks as needed
+  onLoadingProgress?: (file: File, progress: number) => void | Promise<void>;
+  
 }

@@ -180,16 +180,26 @@ export class SchematicRenderer {
             };
             this.interactionManager = new InteractionManager(this, interactionOptions);
         }
-
+    
         if (this.options.enableDragAndDrop) {
             const dragAndDropOptions: DragAndDropManagerOptions = {
                 acceptedFileTypes: this.options.dragAndDropOptions?.acceptedFileTypes || [],
                 callbacks: {
+                    // Schematic callbacks
                     onSchematicLoaded: this.options.callbacks?.onSchematicLoaded,
                     onSchematicDropped: this.options.callbacks?.onSchematicDropped,
                     onSchematicDropSuccess: this.options.callbacks?.onSchematicDropSuccess,
                     onSchematicDropFailed: this.options.callbacks?.onSchematicDropFailed,
+                    
+                    // Resource pack callbacks
+                    onResourcePackLoaded: this.options.callbacks?.onResourcePackLoaded,
+                    onResourcePackDropped: this.options.callbacks?.onResourcePackDropped,
+                    onResourcePackDropSuccess: this.options.callbacks?.onResourcePackDropSuccess,
+                    onResourcePackDropFailed: this.options.callbacks?.onResourcePackDropFailed,
+                    
+                    // General callbacks
                     onInvalidFileType: this.options.callbacks?.onInvalidFileType,
+                    onLoadingProgress: this.options.callbacks?.onLoadingProgress,
                 },
             };
             this.dragAndDropManager = new DragAndDropManager(this, dragAndDropOptions);
