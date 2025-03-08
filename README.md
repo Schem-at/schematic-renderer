@@ -397,3 +397,14 @@ bun run dev
 bun run build
 ```
 
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+Under this license:
+- You can use, modify, and distribute this software
+- You must disclose source code when distributing the software
+- Modifications must also be AGPLv3 licensed
+- If you run a modified version on a server that users interact with, you must make your modified source code available to those users
+- You must state your changes to the original code
+- You must retain attribution to the original authors
