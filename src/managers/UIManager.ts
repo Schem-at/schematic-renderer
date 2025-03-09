@@ -6,11 +6,23 @@ export class UIManager {
 	private loadingIndicator: HTMLDivElement;
 	private messageBox: HTMLDivElement;
 	private progressBar: HTMLDivElement;
+	private progressBarContainer: HTMLDivElement;
+	private progressLabel: HTMLDivElement;
+	private progressText: HTMLDivElement;
 	public emptyStateOverlay: HTMLDivElement;
 	// Add to UIManager class
 	private fpvOverlay: HTMLDivElement | null = null;
 	private fpvMenu: HTMLDivElement | null = null;
     private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+	private progressOptions: {
+		showLabel: boolean;
+		showPercentage: boolean;
+		barColor: string;
+		barHeight: number;
+		labelColor: string;
+		labelSize: string;
+		theme: 'light' | 'dark' | 'custom';
+	};
 
 	public createFPVElements() {
 		const canvas = this.renderer.canvas;
@@ -131,6 +143,26 @@ export class UIManager {
 		this.loadingIndicator = document.createElement("div");
 		this.messageBox = document.createElement("div");
 		this.progressBar = document.createElement("div");
+		this.progressBarContainer = document.createElement("div");
+		this.progressLabel = document.createElement("div");
+		this.progressText = document.createElement("div");
+		
+		// Initialize progress options with defaults, will be overridden by user options
+		this.progressOptions = {
+			showLabel: true,
+			showPercentage: true,
+			barColor: '#4CAF50', // Material green
+			barHeight: 6,
+			labelColor: '#ffffff',
+			labelSize: '14px',
+			theme: 'dark'
+		};
+		
+		// Apply user configuration if available
+		if (this.renderer.options.progressBarOptions) {
+			Object.assign(this.progressOptions, this.renderer.options.progressBarOptions);
+		}
+		
 		if (this.renderer.options.enableDragAndDrop) {
 			this.emptyStateOverlay = this.createUploadStateOverlay();
 		} else {
@@ -301,36 +333,108 @@ export class UIManager {
 		this.messageBox.style.borderRadius = "5px";
 		this.messageBox.style.display = "none";
 
-		// Append elements
+		// Append basic elements
 		this.overlay.appendChild(this.loadingIndicator);
 		this.overlay.appendChild(this.messageBox);
 		container.appendChild(this.overlay);
 
+		// Create modern progress bar container
+		this.progressBarContainer.style.position = "absolute";
+		this.progressBarContainer.style.bottom = "32px";
+		this.progressBarContainer.style.left = "50%";
+		this.progressBarContainer.style.transform = "translateX(-50%)";
+		this.progressBarContainer.style.width = "280px";
+		this.progressBarContainer.style.borderRadius = "8px";
+		this.progressBarContainer.style.overflow = "hidden";
+		this.progressBarContainer.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+		this.progressBarContainer.style.backgroundColor = this.progressOptions.theme === 'dark' ? 
+			"rgba(30, 30, 30, 0.9)" : 
+			"rgba(240, 240, 240, 0.9)";
+		this.progressBarContainer.style.padding = "12px 16px";
+		this.progressBarContainer.style.display = "none";
+		this.progressBarContainer.style.zIndex = "1000";
+		this.progressBarContainer.style.backdropFilter = "blur(4px)";
+		this.progressBarContainer.style.transition = "opacity 0.3s ease";
+
+		// Create progress label
+		this.progressLabel.style.marginBottom = "8px";
+		this.progressLabel.style.color = this.progressOptions.labelColor;
+		this.progressLabel.style.fontSize = this.progressOptions.labelSize;
+		this.progressLabel.style.fontWeight = "500";
+		this.progressLabel.style.display = this.progressOptions.showLabel ? "block" : "none";
+		this.progressLabel.textContent = "Loading...";
+
+		// Create progress text (percentage)
+		this.progressText.style.textAlign = "right";
+		this.progressText.style.marginTop = "4px";
+		this.progressText.style.fontSize = "12px";
+		this.progressText.style.color = this.progressOptions.theme === 'dark' ? 
+			"rgba(255, 255, 255, 0.7)" : 
+			"rgba(0, 0, 0, 0.7)";
+		this.progressText.style.display = this.progressOptions.showPercentage ? "block" : "none";
+		this.progressText.textContent = "0%";
+
+		// Create progress bar track
+		const progressTrack = document.createElement("div");
+		progressTrack.style.width = "100%";
+		progressTrack.style.height = `${this.progressOptions.barHeight}px`;
+		progressTrack.style.backgroundColor = this.progressOptions.theme === 'dark' ? 
+			"rgba(255, 255, 255, 0.1)" : 
+			"rgba(0, 0, 0, 0.1)";
+		progressTrack.style.borderRadius = "4px";
+		progressTrack.style.overflow = "hidden";
+		progressTrack.style.position = "relative";
+
+		// Create modern progress bar
 		this.progressBar.style.position = "absolute";
-		this.progressBar.style.bottom = "0";
+		this.progressBar.style.top = "0";
 		this.progressBar.style.left = "0";
 		this.progressBar.style.width = "0%";
-		this.progressBar.style.height = "5px";
-		this.progressBar.style.backgroundColor = "#00ff00";
+		this.progressBar.style.height = "100%";
+		this.progressBar.style.backgroundColor = this.progressOptions.barColor;
 		this.progressBar.style.transition = "width 0.2s ease";
-		this.progressBar.style.display = "none";
+		this.progressBar.style.borderRadius = "4px";
 
-		this.overlay.appendChild(this.progressBar);
+		// Assemble progress components
+		progressTrack.appendChild(this.progressBar);
+		this.progressBarContainer.appendChild(this.progressLabel);
+		this.progressBarContainer.appendChild(progressTrack);
+		this.progressBarContainer.appendChild(this.progressText);
+
+		// Add to overlay
+		this.overlay.appendChild(this.progressBarContainer);
 	}
 
 	// Methods to control progress bar
-	public showProgressBar() {
-		this.progressBar.style.display = "block";
+	public showProgressBar(label: string = "Loading...") {
+		this.progressBarContainer.style.display = "block";
+		this.progressLabel.textContent = label;
 		this.showOverlay();
 	}
 
 	public hideProgressBar() {
-		this.progressBar.style.display = "none";
+		this.progressBarContainer.style.display = "none";
 		this.hideOverlay();
 	}
+	
+	public isProgressBarVisible(): boolean {
+		return this.progressBarContainer.style.display === "block";
+	}
 
-	public updateProgress(progress: number) {
-		this.progressBar.style.width = `${progress * 100}%`;
+	public updateProgress(progress: number, message?: string) {
+		// Update progress bar width
+		const percentage = progress * 100;
+		this.progressBar.style.width = `${percentage}%`;
+		
+		// Update percentage text
+		if (this.progressOptions.showPercentage) {
+			this.progressText.textContent = `${Math.round(percentage)}%`;
+		}
+		
+		// Update label if provided
+		if (message && this.progressOptions.showLabel) {
+			this.progressLabel.textContent = message;
+		}
 	}
 
 	public showOverlay() {

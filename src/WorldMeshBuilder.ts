@@ -95,6 +95,33 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
             this.metrics.memory.get('heap')?.push(memory.usedJSHeapSize / 1024 / 1024);
         }
     }
+    
+    // Track chunk building progress
+    private reportBuildProgress(message: string, progress: number, totalChunks?: number, completedChunks?: number) {
+        // Only show progress if enabled and UI manager exists
+        if (this.schematicRenderer.options.enableProgressBar && 
+            this.schematicRenderer.uiManager) {
+            
+            // Format detailed progress message if chunks are provided
+            let progressMessage = message;
+            if (totalChunks !== undefined && completedChunks !== undefined) {
+                progressMessage = `${message} (${completedChunks}/${totalChunks} chunks)`;
+            }
+            
+            // Show progress bar if not already visible
+            if (!this.schematicRenderer.uiManager.isProgressBarVisible()) {
+                this.schematicRenderer.uiManager.showProgressBar('Building Schematic');
+            }
+            
+            // Update progress
+            this.schematicRenderer.uiManager.updateProgress(progress, progressMessage);
+            
+            // Hide when complete
+            if (progress >= 1) {
+                this.schematicRenderer.uiManager.hideProgressBar();
+            }
+        }
+    }
 
     // @ts-ignore
     private logMetrics() {
@@ -328,6 +355,16 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
         console.log(`Processing ${chunks.length} chunks...`);
         let index = 0;
+        
+        // Show progress bar at the start of chunk processing
+        if (this.schematicRenderer.options.enableProgressBar) {
+            this.reportBuildProgress(
+                "Building schematic meshes", 
+                0, 
+                chunks.length, 
+                0
+            );
+        }
     
         // Track initial memory state
         this.trackMemory();
@@ -392,9 +429,19 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
                 // Log progress metrics every 5 chunks
                 if (index % 5 === 0) {
-                    const progress = (index / chunks.length) * 100;
-                    console.log(`Progress: ${progress.toFixed(1)}%`);
+                    const progress = (index / chunks.length);
+                    console.log(`Progress: ${(progress * 100).toFixed(1)}%`);
                     this.trackMemory();
+                    
+                    // Update progress bar
+                    if (this.schematicRenderer.options.enableProgressBar) {
+                        this.reportBuildProgress(
+                            "Building schematic meshes", 
+                            progress,
+                            chunks.length,
+                            index
+                        );
+                    }
                 }
     
             } catch (error) {
@@ -406,6 +453,23 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
     
         // Log final metrics
         // this.logMetrics();
+        
+        // Show final progress (100% complete)
+        if (this.schematicRenderer.options.enableProgressBar) {
+            this.reportBuildProgress(
+                "Schematic build complete", 
+                1.0,
+                chunks.length,
+                index
+            );
+            
+            // Slight delay before hiding to show completion
+            setTimeout(() => {
+                if (this.schematicRenderer.uiManager) {
+                    this.schematicRenderer.uiManager.hideProgressBar();
+                }
+            }, 800);
+        }
     
         return { meshes: schematicMeshes, chunkMap };
     }

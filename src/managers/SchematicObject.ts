@@ -476,6 +476,13 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public async rebuildMesh() {
+		// Show progress bar if enabled in renderer options
+		const renderer = this.sceneManager?.schematicRenderer;
+		if (renderer?.options.enableProgressBar && renderer.uiManager) {
+			renderer.uiManager.showProgressBar(`Rebuilding ${this.name}`);
+			renderer.uiManager.updateProgress(0.1, "Disposing old meshes...");
+		}
+		
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh as THREE.Object3D);
@@ -485,13 +492,23 @@ export class SchematicObject extends EventEmitter {
 			} else {
 				mesh.material.dispose();
 			}
-		}
-		);
+		});
 
-	// Clear chunk meshes
+		// Clear chunk meshes and update progress
 		this.chunkMeshes.clear();
+		
+		if (renderer?.options.enableProgressBar && renderer.uiManager) {
+			renderer.uiManager.updateProgress(0.2, "Building new meshes...");
+		}
+		
+		// Build new meshes if visible
 		if (this.visible) {
 			await this.buildMeshes();
+		}
+		
+		// Hide progress bar when complete
+		if (renderer?.options.enableProgressBar && renderer.uiManager) {
+			renderer.uiManager.hideProgressBar();
 		}
 	}
 

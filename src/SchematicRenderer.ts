@@ -92,6 +92,12 @@ export class SchematicRenderer {
             cameraPosition: new THREE.Vector3(),
         };
 
+        // Show initialization progress bar
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.showProgressBar("Initializing renderer...");
+            this.uiManager.updateProgress(0.1);
+        }
+
         // Start the initialization process
         this.initialize(schematicData, defaultResourcePacks);
     }
@@ -138,16 +144,31 @@ export class SchematicRenderer {
         defaultResourcePacks: Record<string, DefaultPackCallback>
     ): Promise<void> {
         try {
+            // Update progress bar for each initialization step
+            const showProgress = (message: string, progress: number) => {
+                if (this.options.enableProgressBar && this.uiManager) {
+                    this.uiManager.updateProgress(progress, message);
+                }
+            };
+            
+            // Step 1: Initialize WebAssembly module
+            showProgress("Loading WebAssembly module...", 0.15);
             await this.initWasm();
+            
+            // Step 2: Initialize resource packs
+            showProgress("Initializing resource packs...", 0.30);
             await this.initializeResourcePacks(defaultResourcePacks);
 
-            // Initialize core components
+            // Step 3: Initialize resource loader
+            showProgress("Loading block models and textures...", 0.45);
             this.resourceLoader = new ResourceLoader(
                 this.options.resourcePackBlobs,
                 this
             );
             await this.resourceLoader.initialize();
 
+            // Step 4: Initialize builders and managers
+            showProgress("Setting up renderer components...", 0.60);
             this.worldMeshBuilder = new WorldMeshBuilder(this);
             this.schematicManager = new SchematicManager(this, {
                 singleSchematicMode: this.options.singleSchematicMode,
@@ -157,29 +178,47 @@ export class SchematicRenderer {
 
             // Initialize optional components
             if (this.options.enableGizmos) {
-                this.gizmoManager = new GizmoManager(
-                    this
-                );
+                this.gizmoManager = new GizmoManager(this);
             }
 
-            // Load schematics and adjust camera
-            await this.schematicManager.loadSchematics(schematicData);
+            // Step 5: Load initial schematics if provided
+            if (Object.keys(schematicData).length > 0) {
+                showProgress("Loading initial schematics...", 0.75);
+                await this.schematicManager.loadSchematics(schematicData);
+            }
+            
+            // Step 6: Setup camera and interaction
+            showProgress("Finalizing setup...", 0.90);
             this.adjustCameraToSchematics();
-
-            // Initialize interaction components
             this.initializeInteractionComponents();
 
+            // Initialization complete
+            showProgress("Ready", 1.0);
+            
             // Start rendering
             this.animate();
 
             // Trigger callbacks and events
             this.options.callbacks?.onRendererInitialized?.();
             this.canvas.dispatchEvent(new CustomEvent("rendererInitialized"));
+            
+            // Hide progress bar after a short delay to show completion state
+            setTimeout(() => {
+                if (this.options.enableProgressBar && this.uiManager) {
+                    this.uiManager.hideProgressBar();
+                }
+            }, 500);
 
         } catch (error) {
             console.error("Failed to initialize SchematicRenderer:", error);
-            //pribnt error line
-            console.error(error)
+            
+            // Show error in progress bar
+            if (this.options.enableProgressBar && this.uiManager) {
+                this.uiManager.updateProgress(1.0, "Initialization failed");
+                setTimeout(() => this.uiManager?.hideProgressBar(), 2000);
+            }
+            
+            console.error(error);
         }
     }
 
@@ -456,25 +495,68 @@ export class SchematicRenderer {
     }
 
     public async addResourcePack(file: File): Promise<void> {
+        // Show progress for resource pack upload
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.showProgressBar(`Adding resource pack: ${file.name}`);
+            this.uiManager.updateProgress(0.1, "Processing pack file...");
+        }
+        
         await this.resourcePackManager.uploadPack(file);
+        
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.updateProgress(0.3, "Resource pack added, reloading resources...");
+        }
+        
         await this.reloadResources();
     }
 
     public async toggleResourcePackEnabled(name: string, enabled: boolean): Promise<void> {
+        // Show progress for resource pack toggling
+        if (this.options.enableProgressBar && this.uiManager) {
+            const actionText = enabled ? "Enabling" : "Disabling";
+            this.uiManager.showProgressBar(`${actionText} resource pack: ${name}`);
+            this.uiManager.updateProgress(0.2, `${actionText} ${name}...`);
+        }
+        
         await this.resourcePackManager.togglePackEnabled(name, enabled);
         await this.reloadResources();
     }
 
     public async removeResourcePack(name: string): Promise<void> {
+        // Show progress for resource pack removal
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.showProgressBar(`Removing resource pack: ${name}`);
+            this.uiManager.updateProgress(0.2, `Removing ${name}...`);
+        }
+        
         await this.resourcePackManager.removePack(name);
         await this.reloadResources();
     }
 
     private async reloadResources(): Promise<void> {
+        // Show progress bar for resource reload
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.showProgressBar("Reloading resources...");
+            this.uiManager.updateProgress(0.2, "Processing resource packs...");
+        }
+        
         await this.initializeResourcePacks();
+        
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.updateProgress(0.5, "Loading textures and models...");
+        }
         
         this.resourceLoader = new ResourceLoader(this.options.resourcePackBlobs, this);
         await this.resourceLoader.initialize();
+        
+        if (this.options.enableProgressBar && this.uiManager) {
+            this.uiManager.updateProgress(1.0, "Resources loaded");
+            
+            // Hide progress bar after a short delay
+            setTimeout(() => {
+                this.uiManager?.hideProgressBar();
+            }, 500);
+        }
         
         this.materialMap.clear();
     }

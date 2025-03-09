@@ -175,24 +175,72 @@ export class SchematicManager {
 		}
 	): Promise<void> {
 		try {
+			// Start showing progress in UI if enabled
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.showProgressBar(`Loading ${file.name}`);
+			}
+			
 			// File reading stage
 			const arrayBuffer = await this.readFileWithProgress(file, (progress) => {
+				// Update progress callback if provided
 				options?.onProgress?.({
 					stage: "file_reading",
 					progress,
 					message: "Reading file...",
 				});
+				
+				// Update UI progress bar
+				if (this.schematicRenderer.options.enableProgressBar && 
+					this.schematicRenderer.uiManager) {
+					
+					this.schematicRenderer.uiManager.updateProgress(
+						progress / 100, // Convert to 0-1 range
+						`Reading ${file.name}...`
+					);
+				}
 			});
 
 			// Load the schematic with progress tracking
 			const id = file.name;
 			await this.loadSchematic(id, arrayBuffer, undefined, {
-				onProgress: (progress) => options?.onProgress?.(progress),
+				onProgress: (progress) => {
+					// Update progress callback if provided
+					options?.onProgress?.(progress);
+					
+					// Update UI progress bar
+					if (this.schematicRenderer.options.enableProgressBar && 
+						this.schematicRenderer.uiManager) {
+						
+						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
+						const overallProgress = 0.2 + (progress.progress / 100 * 0.8);
+						
+						this.schematicRenderer.uiManager.updateProgress(
+							overallProgress,
+							progress.message
+						);
+					}
+				},
 			});
+
+			// Hide progress bar when complete
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
 
 			// Emit completion event
 			this.eventEmitter.emit("schematicLoaded", { id });
 		} catch (error) {
+			// Hide progress bar on error
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
+			
 			this.eventEmitter.emit("schematicLoadError", { error });
 			throw error;
 		}
@@ -214,6 +262,17 @@ export class SchematicManager {
 		}
 	): Promise<void> {
 		try {
+			// Generate a name for display
+			const displayName = name || new URL(url).pathname.split("/").pop() || "schematic";
+			
+			// Start showing progress in UI if enabled
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.showProgressBar(`Loading ${displayName}`);
+				this.schematicRenderer.uiManager.updateProgress(0, "Fetching schematic from URL...");
+			}
+			
 			// File reading stage
 			options?.onProgress?.({
 				stage: "file_reading",
@@ -221,10 +280,24 @@ export class SchematicManager {
 				message: "Fetching schematic from URL...",
 			});
 	
+			// Fetch the schematic
 			const response = await fetch(url);
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
+			
+			// Update progress to 20% after fetch completes
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.updateProgress(0.2, "Download complete, processing schematic...");
+			}
+			
+			options?.onProgress?.({
+				stage: "file_reading",
+				progress: 100,
+				message: "Download complete, processing schematic...",
+			});
 	
 			const arrayBuffer = await response.arrayBuffer();
 	
@@ -233,12 +306,42 @@ export class SchematicManager {
 	
 			// Load the schematic with progress tracking
 			await this.loadSchematic(schematicName, arrayBuffer, properties, {
-				onProgress: (progress) => options?.onProgress?.(progress),
+				onProgress: (progress) => {
+					// Update progress callback if provided
+					options?.onProgress?.(progress);
+					
+					// Update UI progress bar
+					if (this.schematicRenderer.options.enableProgressBar && 
+						this.schematicRenderer.uiManager) {
+						
+						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
+						const overallProgress = 0.2 + (progress.progress / 100 * 0.8);
+						
+						this.schematicRenderer.uiManager.updateProgress(
+							overallProgress,
+							progress.message
+						);
+					}
+				},
 			});
+	
+			// Hide progress bar when complete
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
 	
 			// Emit completion event
 			this.eventEmitter.emit("schematicLoaded", { id: schematicName });
 		} catch (error) {
+			// Hide progress bar on error
+			if (this.schematicRenderer.options.enableProgressBar && 
+				this.schematicRenderer.uiManager) {
+				
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
+			
 			this.eventEmitter.emit("schematicLoadError", { error });
 			throw error;
 		}

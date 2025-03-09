@@ -6,6 +6,16 @@ import { GizmoManagerOptions } from './managers/GizmoManager';
 import { CameraManagerOptions } from './managers/CameraManager';
 import { SelectableObject } from './managers/SelectableObject';
 
+export interface ProgressBarOptions {
+  showLabel?: boolean;
+  showPercentage?: boolean;
+  barColor?: string;
+  barHeight?: number;
+  labelColor?: string;
+  labelSize?: string;
+  theme?: 'light' | 'dark' | 'custom';
+}
+
 export interface SchematicRendererOptions {
   hdri?: string;
   resourcePackBlobs?: any;
@@ -24,6 +34,10 @@ export interface SchematicRendererOptions {
   autoOrbitDuration?: number;
   // Enable single schematic mode (only one schematic can be loaded at a time)
   singleSchematicMode?: boolean;
+  // Enable progress bar for loading and chunk building
+  enableProgressBar?: boolean;
+  // Progress bar customization options
+  progressBarOptions?: ProgressBarOptions;
   // Options for individual managers
   interactionOptions?: InteractionManagerOptions;
   dragAndDropOptions?: DragAndDropManagerOptions;
@@ -45,6 +59,16 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
   enableGizmos: false,
   showGrid: false,
   showAxes: false,
+  enableProgressBar: true,
+  progressBarOptions: {
+    showLabel: true,
+    showPercentage: true,
+    barColor: '#4CAF50', // Material green
+    barHeight: 6,
+    labelColor: '#ffffff',
+    labelSize: '14px',
+    theme: 'dark'
+  },
   callbacks: {},
   interactionOptions: {
       enableSelection: false,
