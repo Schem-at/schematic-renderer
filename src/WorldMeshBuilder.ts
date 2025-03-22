@@ -279,14 +279,16 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
             // Use a new vector instance for each block
             const position = new THREE.Vector3(x, y, z);
     
-            const occludedFaces = occludedFacesIntToList(
-                this.blockMeshBuilder.getOccludedFacesForBlock(
-                    schematic,
-                    blockData,
-                    position,
-                    renderingBounds
-                )
+            // Get occlusion data from BlockMeshBuilder
+            const occludedBitMask = this.blockMeshBuilder.getOccludedFacesForBlock(
+                schematic,
+                blockData,
+                position,
+                renderingBounds
             );
+            
+            // Convert the bit mask to a face map
+            const occludedFaces = occludedFacesIntToList(occludedBitMask);
     
             const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
                 { name, properties },
@@ -311,7 +313,30 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
                     : rotateVectorMatrix(normal, rotationMatrix) as Vector;
                 const newFace = facingvectorToFace(newNormal as Vector);
     
-                if (occludedFaces[newFace]) continue;
+                // Skip faces that should be occluded
+                // Note: occludedFaces[face] === true means the face IS occluded and should NOT be rendered
+                
+                // IMPORTANT: Let's check if this is an outer face of the schematic
+                // For outer faces we must make sure they're visible regardless of occlusion information
+                const dimensions = schematic.get_dimensions();
+                const [width, height, depth] = dimensions;
+                const isOuterFace = (
+                    (newFace === "east" && x === width - 1) ||  // East face at max X
+                    (newFace === "west" && x === 0) ||          // West face at min X
+                    (newFace === "up" && y === height - 1) ||   // Up face at max Y
+                    (newFace === "down" && y === 0) ||          // Down face at min Y
+                    (newFace === "south" && z === depth - 1) || // South face at max Z
+                    (newFace === "north" && z === 0)            // North face at min Z
+                );
+                
+                // For outer faces, never cull them
+                if (isOuterFace) {
+                    // Don't continue - we WANT to render this face
+                }
+                // For inner faces, check occlusion
+                else if (occludedFaces[newFace]) {
+                    continue;
+                }
     
                 // Initialize component array if needed
                 if (!components[materialId]) {
@@ -369,8 +394,9 @@ private rotationMatrixCache: Map<string, number[][]> = new Map();
         // Track initial memory state
         this.trackMemory();
 
-        // Get the rendering bounds if they exist
-        const renderingBounds = schematicObject.renderingBounds;
+        // Get the rendering bounds if they exist and are enabled
+        // By default, renderingBounds should not be used unless explicitly enabled by the user
+        const renderingBounds = schematicObject.renderingBounds?.enabled ? schematicObject.renderingBounds : undefined;
     
         for (const chunkData of chunks) {
             index++;

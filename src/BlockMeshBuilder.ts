@@ -4,7 +4,6 @@ import type { BlockModel, Vector } from "./types";
 
 import {
 	isExtendedPiston,
-	getOppositeFace,
 	NON_OCCLUDING_BLOCKS,
 	normalize,
 	TRANSPARENT_BLOCKS,
@@ -517,107 +516,33 @@ export class BlockMeshBuilder {
 	
 		return finalPosition;
 	}
+	
 	public occludedFacesListToInt(occludedFaces: { [key: string]: boolean }) {
+		// Build the bit field directly with explicit bit positions
 		let result = 0;
-		for (const face of POSSIBLE_FACES) {
-			result = (result << 1) | (occludedFaces[face] ? 1 : 0);
-		}
+		
+		// Set specific bits based on face occlusion
+		if (occludedFaces["south"]) result |= 0b100000;
+		if (occludedFaces["north"]) result |= 0b010000;
+		if (occludedFaces["east"]) result |= 0b001000;
+		if (occludedFaces["west"]) result |= 0b000100;
+		if (occludedFaces["up"]) result |= 0b000010;
+		if (occludedFaces["down"]) result |= 0b000001;
+		
 		return result;
 	}
 
-	// Fast buggy
-	// @Monitor
-	// public getOccludedFacesForBlock(
-	// 	schematic: SchematicWrapper,
-	// 	block: Block,
-	// 	pos: { x: number; y: number; z: number }
-	// ): number {
-	// 	// Extract block type without namespace
-	// 	const blockType = block.name.includes(":")
-	// 		? block.name.split(":")[1]
-	// 		: block.name;
-	// 	const { x, y, z } = pos;
-
-	// 	let occludedFaces = 0; // Use bitmask
-
-	// 	// Handle special cases like glass
-	// 	if (blockType.includes("glass")) {
-	// 		for (const { face, x: dx, y: dy, z: dz } of this.DIRECTION_OFFSETS) {
-	// 			const adjacentBlock = schematic.get_block_with_properties(
-	// 				x + dx,
-	// 				y + dy,
-	// 				z + dz
-	// 			);
-	// 			if (adjacentBlock) {
-	// 				const adjacentBlockType = adjacentBlock.name().includes(":")
-	// 					? adjacentBlock.name().split(":")[1]
-	// 					: adjacentBlock.name();
-	// 				if (adjacentBlockType.includes("glass")) {
-	// 					occludedFaces |= this.FACE_BITMASKS[face];
-	// 				}
-	// 			}
-	// 		}
-	// 		// Do not return here; proceed to check for early exit
-	// 	}
-
-	// 	// Early exit for non-occluding blocks
-	// 	if (
-	// 		NON_OCCLUDING_BLOCKS.has(blockType) ||
-	// 		TRANSPARENT_BLOCKS.has(blockType)
-	// 	) {
-	// 		return occludedFaces;
-	// 	}
-
-	// 	// Handle extended pistons
-	// 	if (isExtendedPiston(block)) {
-	// 		const facing = block.properties?.["facing"] as string;
-	// 		const oppositeFace = getOppositeFace(facing);
-	// 		occludedFaces |= this.FACE_BITMASKS[oppositeFace];
-	// 		return occludedFaces;
-	// 	}
-
-	// 	// General case
-	// 	for (const { face, x: dx, y: dy, z: dz } of this.DIRECTION_OFFSETS) {
-	// 		const adjacentBlock = schematic.get_block_with_properties(
-	// 			x + dx,
-	// 			y + dy,
-	// 			z + dz
-	// 		);
-	// 		if (!adjacentBlock) continue;
-
-	// 		const adjacentBlockType = adjacentBlock.name().includes(":")
-	// 			? adjacentBlock.name().split(":")[1]
-	// 			: adjacentBlock.name();
-
-	// 		if (
-	// 			!NON_OCCLUDING_BLOCKS.has(adjacentBlockType) &&
-	// 			!TRANSPARENT_BLOCKS.has(adjacentBlockType)
-	// 		) {
-	// 			occludedFaces |= this.FACE_BITMASKS[face];
-	// 		}
-	// 	}
-
-	// 	return occludedFaces;
-	// }
-
-	// Slow but correct
 	@Monitor
 	public getOccludedFacesForBlock(
 		schematic: SchematicWrapper,
 		block: Block,
 		pos: THREE.Vector3,
-		renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
+		renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3, enabled?: boolean }
 	): number {
-		const blockType = block.name.split(":")[1];
 		const { x, y, z } = pos;
-		const directionVectors = {
-			east: new THREE.Vector3(1, 0, 0),
-			west: new THREE.Vector3(-1, 0, 0),
-			up: new THREE.Vector3(0, 1, 0),
-			down: new THREE.Vector3(0, -1, 0),
-			south: new THREE.Vector3(0, 0, 1),
-			north: new THREE.Vector3(0, 0, -1),
-		};
+		const blockType = block.name.split(":")[1];
+		
+		// Set up face occlusion flags - true means face is occluded (not rendered)
 		const occludedFaces: { [key: string]: boolean } = {
 			east: false,
 			west: false,
@@ -626,98 +551,105 @@ export class BlockMeshBuilder {
 			south: false,
 			north: false,
 		};
-
-		// If rendering bounds are specified, check if block is at the edge of the bounds
-		if (renderingBounds) {
-			// Make face visible if it's at the edge of the rendering bounds
-			if (x + 1 >= renderingBounds.max.x) occludedFaces['east'] = false;
-			else if (x <= renderingBounds.min.x) occludedFaces['west'] = false;
-			else if (y + 1 >= renderingBounds.max.y) occludedFaces['up'] = false;
-			else if (y <= renderingBounds.min.y) occludedFaces['down'] = false;
-			else if (z + 1 >= renderingBounds.max.z) occludedFaces['south'] = false;
-			else if (z <= renderingBounds.min.z) occludedFaces['north'] = false;
-		}
-
-		if (blockType.includes("glass")) {
-			for (const face of POSSIBLE_FACES) {
-				const directionVector = directionVectors[face];
-				const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
-				
-				// Skip occlusion check if adjacent block is outside rendering bounds
-				if (renderingBounds && (
-					adjacentPos.x < renderingBounds.min.x || adjacentPos.x >= renderingBounds.max.x ||
-					adjacentPos.y < renderingBounds.min.y || adjacentPos.y >= renderingBounds.max.y ||
-					adjacentPos.z < renderingBounds.min.z || adjacentPos.z >= renderingBounds.max.z
-				)) {
-					continue;
-				}
-				
-				const adjacentBlock = schematic.get_block_with_properties(
-					adjacentPos.x,
-					adjacentPos.y,
-					adjacentPos.z
-				);
-
-				if (adjacentBlock && adjacentBlock.name().includes("glass")) {
-					occludedFaces[face] = true;
-				}
-			}
-		}
-
+		
+		// For transparent blocks, don't occlude any faces
 		if (
 			NON_OCCLUDING_BLOCKS.has(blockType) ||
 			TRANSPARENT_BLOCKS.has(blockType)
 		) {
-			return this.occludedFacesListToInt(occludedFaces);
+			return this.occludedFacesListToInt(occludedFaces); // No occlusion
 		}
-
+		
+		// Special case for extended pistons - occlude the face opposite to the facing direction
 		if (isExtendedPiston(block)) {
 			const facing = block.properties?.["facing"] as string;
 			const oppositeFace = getOppositeFace(facing);
 			occludedFaces[oppositeFace] = true;
 			return this.occludedFacesListToInt(occludedFaces);
 		}
-
-		for (const face of POSSIBLE_FACES) {
-			// If the face is already marked as visible due to rendering bounds, skip occlusion check
-			if (renderingBounds && occludedFaces[face] === false) {
-				continue;
-			}
-			
-			const directionVector = directionVectors[face];
-			const adjacentPos = new THREE.Vector3(x, y, z).add(directionVector);
-			
-			// If adjacent position is outside of rendering bounds, the face should be visible
-			if (renderingBounds && (
-				adjacentPos.x < renderingBounds.min.x || adjacentPos.x >= renderingBounds.max.x ||
-				adjacentPos.y < renderingBounds.min.y || adjacentPos.y >= renderingBounds.max.y ||
-				adjacentPos.z < renderingBounds.min.z || adjacentPos.z >= renderingBounds.max.z
-			)) {
-				continue; // Skip occlusion, face remains visible
-			}
-			
-			const adjacentBlock = schematic.get_block_with_properties(
-				adjacentPos.x,
-				adjacentPos.y,
-				adjacentPos.z
-			);
-
-			if (!adjacentBlock || !adjacentBlock) {
-				continue;
-			}
-			const adjacentBlockName = adjacentBlock.name().split(":")[1];
-
-			if (
-				!NON_OCCLUDING_BLOCKS.has(adjacentBlockName) &&
-				!TRANSPARENT_BLOCKS.has(adjacentBlockName)
-			) {
-				occludedFaces[face] = true;
+		
+		// Check if there's a block in each adjacent position
+		// If there is, and it's a solid block, occlude that face
+		
+		// Check east face (x+1)
+		const eastBlock = schematic.get_block(x + 1, y, z);
+		if (eastBlock) {
+			const eastBlockType = eastBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(eastBlockType) && !TRANSPARENT_BLOCKS.has(eastBlockType)) {
+				occludedFaces.east = true;
 			}
 		}
-
+		
+		// Check west face (x-1)
+		const westBlock = schematic.get_block(x - 1, y, z);
+		if (westBlock) {
+			const westBlockType = westBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(westBlockType) && !TRANSPARENT_BLOCKS.has(westBlockType)) {
+				occludedFaces.west = true;
+			}
+		}
+		
+		// Check up face (y+1)
+		const upBlock = schematic.get_block(x, y + 1, z);
+		if (upBlock) {
+			const upBlockType = upBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(upBlockType) && !TRANSPARENT_BLOCKS.has(upBlockType)) {
+				occludedFaces.up = true;
+			}
+		}
+		
+		// Check down face (y-1)
+		const downBlock = schematic.get_block(x, y - 1, z);
+		if (downBlock) {
+			const downBlockType = downBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(downBlockType) && !TRANSPARENT_BLOCKS.has(downBlockType)) {
+				occludedFaces.down = true;
+			}
+		}
+		
+		// Check south face (z+1)
+		const southBlock = schematic.get_block(x, y, z + 1);
+		if (southBlock) {
+			const southBlockType = southBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(southBlockType) && !TRANSPARENT_BLOCKS.has(southBlockType)) {
+				occludedFaces.south = true;
+			}
+		}
+		
+		// Check north face (z-1)
+		const northBlock = schematic.get_block(x, y, z - 1);
+		if (northBlock) {
+			const northBlockType = northBlock.split(":")[1];
+			if (!NON_OCCLUDING_BLOCKS.has(northBlockType) && !TRANSPARENT_BLOCKS.has(northBlockType)) {
+				occludedFaces.north = true;
+			}
+		}
+			// Get the schematic dimensions to check for edges
+			const dimensions = schematic.get_dimensions();
+			const [width, height, depth] = dimensions;
+			
+			// Ensure that faces at the schematic borders are not culled
+			if (x === 0) occludedFaces.west = false;            // West edge of schematic
+			if (x === width - 1) occludedFaces.east = false;    // East edge of schematic
+			if (y === 0) occludedFaces.down = false;            // Bottom edge of schematic
+			if (y === height - 1) occludedFaces.up = false;     // Top edge of schematic
+			if (z === 0) occludedFaces.north = false;           // North edge of schematic
+			if (z === depth - 1) occludedFaces.south = false;   // South edge of schematic
+		
+		// If rendering bounds are enabled, check for faces at the boundaries
+		if (renderingBounds?.enabled) {
+			// Faces at the edges of the rendering bounds should be visible
+			if (x + 1 >= renderingBounds.max.x) occludedFaces.east = false;
+			if (x <= renderingBounds.min.x) occludedFaces.west = false;
+			if (y + 1 >= renderingBounds.max.y) occludedFaces.up = false;
+			if (y <= renderingBounds.min.y) occludedFaces.down = false;
+			if (z + 1 >= renderingBounds.max.z) occludedFaces.south = false;
+			if (z <= renderingBounds.min.z) occludedFaces.north = false;
+		}
+		
+		// Convert the face occlusion object to a bit field
 		return this.occludedFacesListToInt(occludedFaces);
 	}
-
 
 	public async getBlockMeshFromCache(block: any, pos?: any) {
 		const blockUniqueKey = hashBlockForMap(block);

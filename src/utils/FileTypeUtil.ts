@@ -10,7 +10,7 @@ export enum FileType {
   }
   
   export class FileTypeUtility {
-    private static readonly SCHEMATIC_EXTENSIONS = ['.schem', '.litematic', '.nbt'];
+    private static readonly SCHEMATIC_EXTENSIONS = ['.schem', '.litematic', '.nbt', '.schematic'];
     private static readonly RESOURCE_PACK_EXTENSIONS = ['.zip', '.mcpack'];
   
     public static determineFileType(file: File): FileType {

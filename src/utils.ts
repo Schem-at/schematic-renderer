@@ -16,7 +16,10 @@ export const POSSIBLE_FACES = [
 	"down",
 ] as const;
 export const DEFAULT_UV = [0, 0, 16, 16];
-export const REVERSED_POSSIBLE_FACES = POSSIBLE_FACES.slice().reverse();
+// IMPORTANT: This order MUST match how the bits are processed in the renderer
+// These faces are used in occludedFacesIntToList and occludedFacesListToInt
+// IMPORTANT: Make sure this matches exactly what's needed for bit field conversion
+export const REVERSED_POSSIBLE_FACES = ["south", "north", "east", "west", "up", "down"];
 
 export function faceToFacingVector(face: Faces): Vector {
 	switch (face) {
@@ -479,10 +482,17 @@ export function hashBlockForMap(block: Block) {
 
 export function occludedFacesIntToList(occludedFaces: number) {
 	const result: { [key: string]: boolean } = {};
-	for (const face of REVERSED_POSSIBLE_FACES) {
-		result[face] = !!(occludedFaces & 1);
-		occludedFaces = occludedFaces >> 1;
-	}
+	
+	const faceBits = occludedFaces;
+	
+	// Extract each bit directly rather than shifting
+	result["south"] = !!(faceBits & 0b100000);
+	result["north"] = !!(faceBits & 0b010000);
+	result["east"] = !!(faceBits & 0b001000);
+	result["west"] = !!(faceBits & 0b000100);
+	result["up"] = !!(faceBits & 0b000010);
+	result["down"] = !!(faceBits & 0b000001);
+	
 	return result;
 }
 

@@ -693,6 +693,7 @@ export class CameraManager extends EventEmitter {
 			const t = (elapsedTime % this.autoOrbitDuration) / this.autoOrbitDuration;
 			
 			// Get camera position from the path
+			//@ts-ignore
 			const { position, rotation, target } = defaultPath.path.getPoint(t);
 			
 			// Apply position and rotation

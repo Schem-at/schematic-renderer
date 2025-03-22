@@ -53,7 +53,7 @@ const renderer = new SchematicRenderer(
 	canvas,
 	{
 		// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
-		// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+		"schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
 		// "xor": () => Promise.resolve(base64ToArrayBuffer(xor)),
 		// "diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
@@ -86,14 +86,8 @@ const renderer = new SchematicRenderer(
 			onSchematicDropSuccess: async (file) => {
 				console.log("Schematic dropped successfully:", file);
 			},
-			onRendererInitialized: () => {
-
-
-				// renderer.uiManager?.hideEmptyState();
-				// renderer.schematicManager?.createEmptySchematic("animated");
-				// renderer.schematicManager?.getFirstSchematic()?.setBlock([0, 0, 0], "minecraft:sea_lantern");
-				
-
+			onRendererInitialized: async () => {
+				console.log("Renderer initialized");
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);

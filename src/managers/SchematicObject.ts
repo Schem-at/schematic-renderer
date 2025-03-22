@@ -39,6 +39,7 @@ export class SchematicObject extends EventEmitter {
 		min: THREE.Vector3;
 		max: THREE.Vector3;
 		helper?: THREE.Box3Helper;
+		enabled?: boolean;
 	};
 	
 	// Reactive bounds for direct manipulation
@@ -112,10 +113,12 @@ export class SchematicObject extends EventEmitter {
 		}
 
 		// Initialize rendering bounds to the full schematic dimensions
-		this.renderingBounds = {
-			min: new THREE.Vector3(0, 0, 0),
-			max: new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2])
-		};
+			// But they are disabled by default (they won't be used for culling unless explicitly enabled)
+			this.renderingBounds = {
+				min: new THREE.Vector3(0, 0, 0),
+				max: new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2]),
+				enabled: false // Disabled by default
+			};
 
 		// Apply custom rendering bounds if provided
 		if (properties?.renderingBounds) {
@@ -329,7 +332,7 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateWorldMatrix(true, true);
 
 		// Create initial visualizer for rendering bounds
-		this.createRenderingBoundsHelper();
+		this.createRenderingBoundsHelper(false);
 		
 		// const box = new THREE.Box3().setFromObject(this.group);
 		// console.log("Updated bounding box min:", box.min);
@@ -970,17 +973,17 @@ export class SchematicObject extends EventEmitter {
 			},
 			
 			// Slice from one side (useful for slider UI)
-			sliceX: (value) => {
+			sliceX: (value: number) => {
 				settings.maxX = value;
 				return settings.applyX();
 			},
 			
-			sliceY: (value) => {
+			sliceY: (value: number) => {
 				settings.maxY = value;
 				return settings.applyY();
 			},
 			
-			sliceZ: (value) => {
+			sliceZ: (value: number) => {
 				settings.maxZ = value;
 				return settings.applyZ();
 			}

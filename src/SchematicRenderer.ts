@@ -351,7 +351,7 @@ export class SchematicRenderer {
     }
     
     /**
-     * Sets the rendering bounds for a schematic
+     * Sets the rendering bounds for a schematic and enables them
      * @param schematicId ID of the schematic
      * @param min Minimum coordinates (Vector3 or array [x,y,z])
      * @param max Maximum coordinates (Vector3 or array [x,y,z])
@@ -370,6 +370,8 @@ export class SchematicRenderer {
         }
         
         schematic.setRenderingBounds(min, max, showHelper);
+        // Enable the bounds when explicitly set
+        schematic.renderingBounds.enabled = true;
     }
 
     /**
@@ -405,10 +407,11 @@ export class SchematicRenderer {
     }
 
     /**
-     * Resets the rendering bounds to include the full schematic
+     * Resets the rendering bounds to include the full schematic or disables them
      * @param schematicId ID of the schematic
+     * @param disable Whether to disable the rendering bounds (default: true)
      */
-    public resetRenderingBounds(schematicId: string): void {
+    public resetRenderingBounds(schematicId: string, disable: boolean = true): void {
         const schematic = this.schematicManager?.getSchematic(schematicId);
         if (!schematic) {
             console.error(`Schematic with ID ${schematicId} not found`);
@@ -416,6 +419,8 @@ export class SchematicRenderer {
         }
         
         schematic.resetRenderingBounds();
+        // By default, disable the bounds when reset
+        schematic.renderingBounds.enabled = !disable;
     }
 
     /**
@@ -445,7 +450,7 @@ export class SchematicRenderer {
             return null;
         }
         
-        return schematic.schematicWrapper.get_dimensions();
+        return Array.from(schematic.schematicWrapper.get_dimensions());
     }
     
     /**
