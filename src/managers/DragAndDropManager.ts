@@ -110,11 +110,26 @@ export class DragAndDropManager {
       this.uiManager.showLoadingIndicator(`Loading schematic: ${file.name}...`);
 
       console.log("Loading schematic", file.name);
-      
-  
 
-      // Load the schematic
-      await this.loadSchematicFromFile(file);
+      // Load the schematic directly through schematicManager
+      await this.renderer.schematicManager?.loadSchematicFromFile(file, {
+        onProgress: (progress) => {
+          // Update UI based on stage and progress
+          this.uiManager.showLoadingIndicator(
+            `${progress.message} (${Math.round(progress.progress)}%)`
+          );
+
+          // Call the progress callback if provided
+          this.options.callbacks?.onLoadingProgress?.(file, progress.progress);
+        },
+      });
+
+      console.log("Schematic loaded successfully:", file.name);
+
+      // Call the schematic loaded callback if provided
+      if (this.options.callbacks?.onSchematicLoaded) {
+        this.options.callbacks.onSchematicLoaded(file.name);
+      }
 
       // Hide loading indicator
       this.uiManager.hideLoadingIndicator();
@@ -190,29 +205,8 @@ export class DragAndDropManager {
     return this.options.acceptedFileTypes.includes(extension || "");
   }
 
-  private async loadSchematicFromFile(file: File) {
-    try {
-      await this.renderer.schematicManager?.loadSchematicFromFile(file, {
-        onProgress: (progress) => {
-          // Update UI based on stage and progress
-          this.uiManager.showLoadingIndicator(
-            `${progress.message} (${Math.round(progress.progress)}%)`
-          );
-
-          // Call the progress callback if provided
-          this.options.callbacks?.onLoadingProgress?.(file, progress.progress);
-        },
-      });
-
-      // Call the callback if provided
-      const callback = this.options.callbacks?.onSchematicLoaded;
-      if (callback) {
-        callback(file.name);
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
+  // This method is no longer used - we call loadSchematicFromFile directly from handleSchematicDrop
+  // to avoid potential circular calls
 
   public dispose() {
     this.canvas.removeEventListener("dragover", this.onDragOver);
