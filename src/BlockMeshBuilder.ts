@@ -12,6 +12,7 @@ import {
 	POSSIBLE_FACES,
 	DEFAULT_UV,
 	getDegreeRotationMatrix,
+	getOppositeFace,
 } from "./utils";
 
 import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";

@@ -111,14 +111,16 @@ export class DragAndDropManager {
 
       console.log("Loading schematic", file.name);
       
-      // Call schematic drop success callback
-      await this.options.callbacks?.onSchematicDropSuccess?.(file);
+  
 
       // Load the schematic
       await this.loadSchematicFromFile(file);
 
       // Hide loading indicator
       this.uiManager.hideLoadingIndicator();
+
+      // Call schematic drop success callback
+      await this.options.callbacks?.onSchematicDropSuccess?.(file);
     } catch (error) {
       // Hide loading indicator and show error message
       console.error(error);
