@@ -33,7 +33,6 @@ interface Block {
 export class ResourceLoader {
 	schematicRenderer: SchematicRenderer;
 	schematic: any;
-	textureCache: Map<string, THREE.Texture>;
 	blobCache: Map<string, string>;
 	stringCache: Map<string, string>;
 	blockMeshCache: Map<string, any>;
@@ -66,7 +65,6 @@ export class ResourceLoader {
 
 	constructor(resourcePackBlobs: any, schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
-		this.textureCache = new Map();
 		this.blobCache = new Map();
 		this.stringCache = new Map();
 		this.blockMeshCache = new Map();
@@ -167,10 +165,8 @@ public async getResourceString(name: string): Promise<string | undefined> {
 		const colorKey = color ? `${color.r}|${color.g}|${color.b}` : 'none';
 		const materialKey = `${textureKey}-${transparent}-${colorKey}`;
 	
-		if (this.materialCache.has(materialKey)) {
-			return this.materialCache.get(materialKey)!;
-		}
-	
+		
+		
 		// Texture loading optimization
 		const texture = await this.loadTextureWithCache(textureKey, faceData.rotation);
 		if (!texture) return undefined;
@@ -181,15 +177,11 @@ public async getResourceString(name: string): Promise<string | undefined> {
 	}
 	
 	private async loadTextureWithCache(textureKey: string, rotation?: number): Promise<THREE.Texture | undefined> {
-		if (this.textureCache.has(textureKey)) {
-			return this.textureCache.get(textureKey)!;
-		}
 	
 		const textureBase64 = await this.getResourceBase64(`textures/${textureKey}.png`);
 		if (!textureBase64) return undefined;
 	
 		const texture = await this.createTexture(textureBase64, rotation);
-		this.textureCache.set(textureKey, texture);
 		return texture;
 	}
 	  
@@ -206,8 +198,8 @@ public async getResourceString(name: string): Promise<string | undefined> {
 			  texture.premultiplyAlpha = false;
 			  
 			  if (rotation) {
-				texture.center.set(0.5, 0.5);
-				texture.rotation = (rotation * Math.PI) / 180;
+				  texture.center.set(0.5, 0.5);
+				  texture.rotation = rotation * Math.PI / 180;
 			  }
 			  
 			  texture.needsUpdate = true;
@@ -226,11 +218,11 @@ public async getResourceString(name: string): Promise<string | undefined> {
 		  map: texture,
 		  transparent: transparent ?? false,
 		  opacity: 1.0,
-		  alphaTest: 0.1,
+		  alphaTest: 0.5,
 		  color: color ?? 0xffffff,
-		  side: THREE.FrontSide,
-		  shadowSide: THREE.FrontSide,
-		  toneMapped: false,
+		  side: transparent ? THREE.DoubleSide : THREE.FrontSide,
+		  shadowSide: transparent ? THREE.DoubleSide : THREE.FrontSide,
+		  toneMapped: true,
 		  blending: transparent ? THREE.CustomBlending : THREE.NormalBlending,
 		  blendSrc: THREE.SrcAlphaFactor,  
 		  blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -313,40 +305,28 @@ public async getResourceString(name: string): Promise<string | undefined> {
 	public async getBlockStateDefinition(
 		blockType: string
 	): Promise<BlockStateDefinition> {
-		if (this.blockStateDefinitionCache.has(blockType)) {
-			return this.blockStateDefinitionCache.get(
-				blockType
-			) as BlockStateDefinition;
-		}
 
 		const jsonString = await this.getResourceString(
 			`blockstates/${blockType}.json`
 		);
 		if (!jsonString) {
 			console.warn(`Block state definition for ${blockType} not found.`);
-			this.blockStateDefinitionCache.set(blockType, {} as BlockStateDefinition);
 			return {} as BlockStateDefinition;
 		}
 
 		const blockStateDefinition = JSON.parse(jsonString) as BlockStateDefinition;
-		this.blockStateDefinitionCache.set(blockType, blockStateDefinition);
 		return blockStateDefinition;
 	}
 
 	public async getBlockMeta(block: Block) {
-		// Remove the "minecraft:" prefix
 		block.name = block.name.replace("minecraft:", "");
-		const blockKey = hashBlockForMap(block);
-		if (this.blockMetaCache.has(blockKey)) {
-			return this.blockMetaCache.get(blockKey);
-		}
+		
 
 		const blockStateDefinition = await this.getBlockStateDefinition(block.name);
 		const modelData = this.getBlockModelData(block, blockStateDefinition);
 		const modelOptions = this.getModelOption(modelData);
 		
 		const blockMeta = { blockStateDefinition, modelData, modelOptions };
-		this.blockMetaCache.set(blockKey, blockMeta);
 		return blockMeta;
 	}
 

@@ -10,7 +10,7 @@ import { EasingFunctions } from "../utils/EasingFunctions";
 import { RecordingManager, RecordingOptions } from "./RecordingManager";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // @ts-ignore
-import { CreativeControls } from "three-creative-controls"
+import { CreativeControls } from "three-creative-controls";
 export interface CameraManagerOptions {
 	position?: [number, number, number];
 	showCameraPathVisualization?: boolean;
@@ -24,22 +24,22 @@ export interface CameraFrame {
 }
 
 export interface CameraPreset {
-    type: "perspective" | "orthographic";
-    position: THREE.Vector3Tuple;
+	type: "perspective" | "orthographic";
+	position: THREE.Vector3Tuple;
 	rotation?: THREE.Vector3Tuple;
 	fov?: number;
-    controlType: ControlType;
-    controlSettings?: {
-        enableDamping?: boolean;
-        dampingFactor?: number;
-        minDistance?: number;
-        maxDistance?: number;
-        enableZoom?: boolean;
-        enableRotate?: boolean;
-        enablePan?: boolean;
-        minPolarAngle?: number;
-        maxPolarAngle?: number;
-    };
+	controlType: ControlType;
+	controlSettings?: {
+		enableDamping?: boolean;
+		dampingFactor?: number;
+		minDistance?: number;
+		maxDistance?: number;
+		enableZoom?: boolean;
+		enableRotate?: boolean;
+		enablePan?: boolean;
+		minPolarAngle?: number;
+		maxPolarAngle?: number;
+	};
 }
 
 export interface CameraAnimationWithRecordingOptions {
@@ -73,7 +73,7 @@ export class CameraManager extends EventEmitter {
 	private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
 	private animationStartRotation: THREE.Euler = new THREE.Euler();
 	public recordingManager: RecordingManager;
-	
+
 	// Auto-orbit properties
 	private autoOrbitEnabled: boolean = false;
 	private autoOrbitAnimationId: number | null = null;
@@ -85,8 +85,8 @@ export class CameraManager extends EventEmitter {
 	public static readonly CAMERA_PRESETS = {
 		isometric: {
 			type: "orthographic" as const,
-			position: [0, 0, 20] as const,  // Initial position
-			rotation: [-36 * Math.PI/180, 135 * Math.PI/180, 0] as const, // Their default angles: 36° slant, 135° rotation
+			position: [0, 0, 20] as const, // Initial position
+			rotation: [(-36 * Math.PI) / 180, (135 * Math.PI) / 180, 0] as const, // Their default angles: 36° slant, 135° rotation
 			controlType: "orbit" as const,
 			controlSettings: {
 				enableDamping: false,
@@ -95,9 +95,9 @@ export class CameraManager extends EventEmitter {
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true,
-				minPolarAngle: Math.PI / 4,     // 45 degrees
-				maxPolarAngle: Math.PI * 0.4    // ~72 degrees
-			}
+				minPolarAngle: Math.PI / 4, // 45 degrees
+				maxPolarAngle: Math.PI * 0.4, // ~72 degrees
+			},
 		},
 		perspective: {
 			type: "perspective" as const,
@@ -107,8 +107,8 @@ export class CameraManager extends EventEmitter {
 				enableDamping: false,
 				enableZoom: true,
 				enableRotate: true,
-				enablePan: true
-			}
+				enablePan: true,
+			},
 		},
 		perspective_fpv: {
 			type: "perspective" as const,
@@ -116,11 +116,10 @@ export class CameraManager extends EventEmitter {
 			fov: 90,
 			controlType: "creative" as const,
 			controlSettings: {
-				movementSpeed: new THREE.Vector3(200, 200, 200)
-			}
-		}
+				movementSpeed: new THREE.Vector3(200, 200, 200),
+			},
+		},
 	} as const;
-	
 
 	constructor(
 		schematicRenderer: SchematicRenderer,
@@ -129,68 +128,68 @@ export class CameraManager extends EventEmitter {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.rendererDomElement = this.schematicRenderer.canvas;
-	
+
 		// Initialize RecordingManager
 		this.recordingManager = new RecordingManager(schematicRenderer);
-	
+
 		// Initialize cameras with presets
 		Object.entries(CameraManager.CAMERA_PRESETS).forEach(([name, preset]) => {
 			const cameraParams: any = {
 				position: options.position || preset.position,
-				size: preset.type === "orthographic" ? 20 : undefined
+				size: preset.type === "orthographic" ? 20 : undefined,
 			};
-			
+
 			// Only add rotation if it exists in the preset
-			if ('rotation' in preset) {
+			if ("rotation" in preset) {
 				cameraParams.rotation = preset.rotation;
 			}
-			
+
 			const camera = this.createCamera(preset.type, cameraParams);
 			this.cameras.set(name, camera);
-	
+
 			// Create and setup controls for each camera
 			const controlKey = `${name}-${preset.controlType}`;
 			const controls = this.createControls(preset.controlType, camera);
-			
+
 			if (controls && preset.controlSettings) {
 				Object.assign(controls, preset.controlSettings);
-				
+
 				if (name === "isometric") {
 					this.setupIsometricControls(controls);
 				}
 			}
-			
+
 			if (controls) {
 				this.controls.set(controlKey, controls);
 				this.setupControlEvents(controls);
 			}
 		});
-	
+
 		this.activeCameraKey = "perspective";
 		this.activeControlKey = "perspective-orbit";
-	
+
 		this.controls.forEach((control, key) => {
-			control.enabled = (key === this.activeControlKey);
+			control.enabled = key === this.activeControlKey;
 		});
-	
+
 		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
 			showVisualization: options.showCameraPathVisualization || false,
 		});
-		
+
 		// Set auto-orbit duration if provided in the options
 		if (this.schematicRenderer.options.autoOrbitDuration) {
 			this.autoOrbitDuration = this.schematicRenderer.options.autoOrbitDuration;
 		}
-		
+
 		// Setup event listeners for schematic changes to update camera path
 		if (this.schematicRenderer.eventEmitter) {
 			// Listen for schematic loaded/added events
-			this.schematicRenderer.eventEmitter.on('schematicAdded', () => {
+			this.schematicRenderer.eventEmitter.on("schematicAdded", () => {
 				// Update the camera path when a new schematic is added
 				const defaultPath = this.cameraPathManager.getFirstPath();
 				if (defaultPath) {
 					this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
-					
+
 					// If auto-orbit is active, restart it to use the updated path
 					if (this.autoOrbitEnabled) {
 						this.stopAutoOrbit();
@@ -199,15 +198,12 @@ export class CameraManager extends EventEmitter {
 				}
 			});
 		}
-		
+
 		// Start auto-orbit if enabled in options
 		if (this.schematicRenderer.options.enableAutoOrbit) {
 			this.startAutoOrbit();
 		}
 	}
-	
-
-
 
 	private createCamera(type: CameraType, params: any): CameraWrapper {
 		let camera: CameraWrapper;
@@ -215,14 +211,14 @@ export class CameraManager extends EventEmitter {
 			camera = new CameraWrapper(
 				"perspective",
 				this.rendererDomElement,
-				this.schematicRenderer,  
+				this.schematicRenderer,
 				params
 			);
 		} else {
 			camera = new CameraWrapper(
 				"orthographic",
 				this.rendererDomElement,
-				this.schematicRenderer, 
+				this.schematicRenderer,
 				params
 			);
 		}
@@ -386,62 +382,70 @@ export class CameraManager extends EventEmitter {
 	}
 
 	public switchCameraPreset(presetName: string): void {
-		const preset = CameraManager.CAMERA_PRESETS[presetName as keyof typeof CameraManager.CAMERA_PRESETS];
+		const preset =
+			CameraManager.CAMERA_PRESETS[
+				presetName as keyof typeof CameraManager.CAMERA_PRESETS
+			];
 		if (!preset) {
 			console.warn(`Preset ${presetName} not found`);
 			return;
 		}
-	
+
 		// Store previous camera state
 		const previousCameraKey = this.activeCameraKey;
-		
+
 		// Hide any existing FPV overlay
 		this.schematicRenderer.uiManager?.hideFPVOverlay();
-		
+
 		// Switch to new camera
 		this.activeCameraKey = presetName;
-		
+
 		// Handle controls
 		const controlKey = `${presetName}-${preset.controlType}`;
-		
+
 		// Update control states
 		this.controls.forEach((control, key) => {
-			control.enabled = (key === controlKey);
+			control.enabled = key === controlKey;
 		});
-		
+
 		this.activeControlKey = controlKey;
-	
+
 		// Update the active control
 		const activeControl = this.controls.get(this.activeControlKey);
 		if (activeControl) {
 			// Update the control's camera reference
 			activeControl.object = this.activeCamera.camera;
-			
+
 			// Only call update on orbit controls
-			if (preset.controlType === 'orbit' && activeControl.update) {
+			if (preset.controlType === "orbit" && activeControl.update) {
 				activeControl.update();
 			}
 		}
-	
+
 		// Show FPV overlay if switching to creative mode
-		if (preset.controlType === 'creative') {
+		if (preset.controlType === "creative") {
 			this.schematicRenderer.uiManager?.showFPVOverlay();
 		}
-	
+
 		// Update renderer camera if RenderManager exists
 		if (this.schematicRenderer.renderManager) {
-			this.schematicRenderer.renderManager.updateCamera(this.activeCamera.camera);
+			this.schematicRenderer.renderManager.updateCamera(
+				this.activeCamera.camera
+			);
 		}
-		
+
 		// Emit change event
 		this.emit("cameraChanged", {
 			previousCamera: previousCameraKey,
 			newCamera: presetName,
-			controlType: preset.controlType
+			controlType: preset.controlType,
 		});
-	
+
 		// Focus on schematics if they exist
-		if (this.schematicRenderer.schematicManager && !this.schematicRenderer.schematicManager.isEmpty()) {
+		if (
+			this.schematicRenderer.schematicManager &&
+			!this.schematicRenderer.schematicManager.isEmpty()
+		) {
 			this.focusOnSchematics();
 		}
 	}
@@ -510,18 +514,20 @@ export class CameraManager extends EventEmitter {
 		controls.enableZoom = true;
 		controls.enableRotate = true;
 		controls.enablePan = true;
-		
+
 		// Restrict vertical rotation to maintain isometric feel
 		controls.minPolarAngle = Math.PI / 4; // 45 degrees
 		controls.maxPolarAngle = Math.PI / 2.5; // ~72 degrees
 	}
-	
+
 	public update(deltaTime: number = 0) {
 		const controls = this.controls.get(this.activeControlKey);
 		if (!controls) return;
-	
-		if (this.activeControlKey.includes('creative')) {
-			const speed = CameraManager.CAMERA_PRESETS.perspective_fpv.controlSettings?.movementSpeed;
+
+		if (this.activeControlKey.includes("creative")) {
+			const speed =
+				CameraManager.CAMERA_PRESETS.perspective_fpv.controlSettings
+					?.movementSpeed;
 			if (speed) {
 				CreativeControls.update(controls, speed);
 			}
@@ -565,7 +571,8 @@ export class CameraManager extends EventEmitter {
 		if (!this.schematicRenderer.schematicManager) {
 			return;
 		}
-		const averagePosition = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		const averagePosition =
+			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
 		this.activeCamera.lookAt(averagePosition);
 	}
 
@@ -577,14 +584,14 @@ export class CameraManager extends EventEmitter {
 		if (this.schematicRenderer.schematicManager.isEmpty()) {
 			return;
 		}
-	
+
 		// Temporarily disable controls
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) {
 			controls.enabled = false;
 		}
-	
-		const averagePosition = 
+
+		const averagePosition =
 			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
 		const maxDimensions =
 			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
@@ -593,51 +600,55 @@ export class CameraManager extends EventEmitter {
 			maxDimensions.y,
 			maxDimensions.z
 		);
-	
+
 		if (this.activeCameraKey === "isometric") {
 			// For isometric, maintain the preset rotation and adjust distance based on size
 			const scale = maxDimension / 20; // Adjust this factor to control zoom level
-			
+
 			// Use preset rotation - convert readonly array to mutable
 			const preset = CameraManager.CAMERA_PRESETS.isometric;
-			this.activeCamera.rotation = [...preset.rotation!] as [number, number, number];
-			
+			this.activeCamera.rotation = [...preset.rotation!] as [
+				number,
+				number,
+				number
+			];
+
 			// Adjust position while maintaining isometric angles
 			const distance = 20 * scale; // Base distance * scale
 			this.activeCamera.setPosition([
 				averagePosition.x + distance,
 				averagePosition.y + distance,
-				averagePosition.z + distance
+				averagePosition.z + distance,
 			]);
 		} else {
 			// Original perspective camera positioning
 			const rootThree = Math.sqrt(3);
 			const scaledMaxDimension = maxDimension / rootThree;
-			
+
 			const newPosition = [
 				averagePosition.x + scaledMaxDimension,
 				averagePosition.y + scaledMaxDimension,
-				averagePosition.z + scaledMaxDimension
+				averagePosition.z + scaledMaxDimension,
 			];
-			
+
 			this.activeCamera.setPosition(newPosition as THREE.Vector3Tuple);
 		}
-	
+
 		// Update controls target
-		if (controls && 'target' in controls) {
+		if (controls && "target" in controls) {
 			controls.target.copy(averagePosition);
 			controls.update();
 		}
-		
+
 		// Re-enable controls
 		if (controls) {
 			controls.enabled = true;
 		}
-		
+
 		// Update the circular camera path to fit the schematics
 		// This is important for auto-orbit functionality
 		this.cameraPathManager.fitCircularPathToSchematics("circularPath");
-		
+
 		// If auto-orbit is active, we need to restart it to use the updated path
 		const wasAutoOrbitActive = this.autoOrbitEnabled;
 		if (wasAutoOrbitActive) {
@@ -654,67 +665,69 @@ export class CameraManager extends EventEmitter {
 		if (this.autoOrbitEnabled) {
 			return; // Already running
 		}
-		
+
 		// Stop any current animations
 		this.stopAnimation();
-		
+
 		// Get the default camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath) {
 			console.warn("Cannot start auto-orbit: No camera path available");
 			return;
 		}
-		
+
 		// Make sure we have a circular path (we only support circular paths for auto-orbit)
 		if (!(defaultPath.path instanceof CircularCameraPath)) {
 			console.warn("Auto-orbit only supports CircularCameraPath");
 			return;
 		}
-		
+
 		// Ensure path is fitted to the current schematics
-		if (this.schematicRenderer?.schematicManager && !this.schematicRenderer.schematicManager.isEmpty()) {
+		if (
+			this.schematicRenderer?.schematicManager &&
+			!this.schematicRenderer.schematicManager.isEmpty()
+		) {
 			this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
 		}
-		
+
 		// Disable controls during auto-orbit
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) {
 			controls.enabled = false;
 		}
-		
+
 		this.autoOrbitEnabled = true;
 		this.autoOrbitStartTime = performance.now();
-		
+
 		// Start animation loop
 		const animateOrbit = () => {
 			if (!this.autoOrbitEnabled) return;
-			
+
 			const elapsedTime = (performance.now() - this.autoOrbitStartTime) / 1000;
 			const t = (elapsedTime % this.autoOrbitDuration) / this.autoOrbitDuration;
-			
+
 			// Get camera position from the path
-			//@ts-ignore
 			const { position, rotation, target } = defaultPath.path.getPoint(t);
-			
+
 			// Apply position and rotation
 			(this.activeCamera.position as THREE.Vector3).copy(position);
 			this.activeCamera.lookAt(target);
-			
+
 			// Emit camera movement event
 			this.emit("cameraMove", {
 				position: (this.activeCamera.position as THREE.Vector3).clone(),
 				rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
 				progress: t,
 			});
-			
+
 			// Continue animation
 			this.autoOrbitAnimationId = requestAnimationFrame(animateOrbit);
 		};
-		
+
 		// Start the animation
 		this.autoOrbitAnimationId = requestAnimationFrame(animateOrbit);
 	}
-	
+
 	/**
 	 * Stops the auto-orbit animation
 	 */
@@ -722,22 +735,22 @@ export class CameraManager extends EventEmitter {
 		if (!this.autoOrbitEnabled) {
 			return; // Not running
 		}
-		
+
 		this.autoOrbitEnabled = false;
-		
+
 		// Cancel animation
 		if (this.autoOrbitAnimationId !== null) {
 			cancelAnimationFrame(this.autoOrbitAnimationId);
 			this.autoOrbitAnimationId = null;
 		}
-		
+
 		// Re-enable controls
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) {
 			controls.enabled = true;
 		}
 	}
-	
+
 	/**
 	 * Toggles the auto-orbit feature
 	 * @returns The new state of auto-orbit (true = enabled, false = disabled)
@@ -751,7 +764,7 @@ export class CameraManager extends EventEmitter {
 			return true;
 		}
 	}
-	
+
 	/**
 	 * Sets the auto-orbit duration
 	 * @param duration Duration in seconds for a full rotation
@@ -759,7 +772,7 @@ export class CameraManager extends EventEmitter {
 	public setAutoOrbitDuration(duration: number): void {
 		this.autoOrbitDuration = duration;
 	}
-	
+
 	/**
 	 * Gets the current state of auto-orbit
 	 * @returns True if auto-orbit is enabled

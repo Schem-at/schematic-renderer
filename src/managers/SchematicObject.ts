@@ -6,9 +6,7 @@ import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
 import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
 import { castToEuler, castToVector3 } from "../utils/Casts";
-import {
-	resetPerformanceMetrics,
-} from "../monitoring";
+import { resetPerformanceMetrics } from "../monitoring";
 
 export class SchematicObject extends EventEmitter {
 	public name: string;
@@ -41,7 +39,7 @@ export class SchematicObject extends EventEmitter {
 		helper?: THREE.Box3Helper;
 		enabled?: boolean;
 	};
-	
+
 	// Reactive bounds for direct manipulation
 	public bounds: {
 		minX: number;
@@ -87,7 +85,6 @@ export class SchematicObject extends EventEmitter {
 		this.scale = new THREE.Vector3(1, 1, 1);
 		this.opacity = 1.0;
 		this.visible = properties?.visible ?? true;
-		
 
 		// Set initial properties if provided
 		Object.assign(this, properties);
@@ -102,23 +99,33 @@ export class SchematicObject extends EventEmitter {
 
 		if (properties?.meshBoundingBox) {
 			this.meshBoundingBox = properties.meshBoundingBox;
-		} else { 
+		} else {
 			this.meshBoundingBox = [
 				this.position.toArray(),
 				this.position
 					.clone()
-					.add(new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2]))
+					.add(
+						new THREE.Vector3(
+							schematicDimensions[0],
+							schematicDimensions[1],
+							schematicDimensions[2]
+						)
+					)
 					.toArray(),
 			];
 		}
 
 		// Initialize rendering bounds to the full schematic dimensions
-			// But they are disabled by default (they won't be used for culling unless explicitly enabled)
-			this.renderingBounds = {
-				min: new THREE.Vector3(0, 0, 0),
-				max: new THREE.Vector3(schematicDimensions[0], schematicDimensions[1], schematicDimensions[2]),
-				enabled: false // Disabled by default
-			};
+		// But they are disabled by default (they won't be used for culling unless explicitly enabled)
+		this.renderingBounds = {
+			min: new THREE.Vector3(0, 0, 0),
+			max: new THREE.Vector3(
+				schematicDimensions[0],
+				schematicDimensions[1],
+				schematicDimensions[2]
+			),
+			enabled: false, // Disabled by default
+		};
 
 		// Apply custom rendering bounds if provided
 		if (properties?.renderingBounds) {
@@ -142,72 +149,105 @@ export class SchematicObject extends EventEmitter {
 				this.renderingBounds.max = properties.renderingBounds.max.clone();
 			}
 		}
-		
+
 		// Initialize the reactive bounds property
 		const self = this;
-		this.bounds = new Proxy({
-			get minX() { return self.renderingBounds.min.x; },
-			set minX(value: number) { 
-				self.renderingBounds.min.x = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
+		this.bounds = new Proxy(
+			{
+				get minX() {
+					return self.renderingBounds.min.x;
+				},
+				set minX(value: number) {
+					self.renderingBounds.min.x = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				get minY() {
+					return self.renderingBounds.min.y;
+				},
+				set minY(value: number) {
+					self.renderingBounds.min.y = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				get minZ() {
+					return self.renderingBounds.min.z;
+				},
+				set minZ(value: number) {
+					self.renderingBounds.min.z = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				get maxX() {
+					return self.renderingBounds.max.x;
+				},
+				set maxX(value: number) {
+					self.renderingBounds.max.x = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				get maxY() {
+					return self.renderingBounds.max.y;
+				},
+				set maxY(value: number) {
+					self.renderingBounds.max.y = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				get maxZ() {
+					return self.renderingBounds.max.z;
+				},
+				set maxZ(value: number) {
+					self.renderingBounds.max.z = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+				},
+
+				// Reset to full dimensions
+				reset() {
+					const dimensions = self.schematicWrapper.get_dimensions();
+					self.setRenderingBounds(
+						new THREE.Vector3(0, 0, 0),
+						new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
+					);
+					return "Reset to full dimensions";
+				},
+
+				// Toggle helper visibility
+				showHelper(visible = true) {
+					self.showRenderingBoundsHelper(visible);
+					return `Helper ${visible ? "shown" : "hidden"}`;
+				},
 			},
-			
-			get minY() { return self.renderingBounds.min.y; },
-			set minY(value: number) { 
-				self.renderingBounds.min.y = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
-			},
-			
-			get minZ() { return self.renderingBounds.min.z; },
-			set minZ(value: number) { 
-				self.renderingBounds.min.z = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
-			},
-			
-			get maxX() { return self.renderingBounds.max.x; },
-			set maxX(value: number) { 
-				self.renderingBounds.max.x = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
-			},
-			
-			get maxY() { return self.renderingBounds.max.y; },
-			set maxY(value: number) { 
-				self.renderingBounds.max.y = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
-			},
-			
-			get maxZ() { return self.renderingBounds.max.z; },
-			set maxZ(value: number) { 
-				self.renderingBounds.max.z = value;
-				self.setRenderingBounds(self.renderingBounds.min, self.renderingBounds.max);
-			},
-			
-			// Reset to full dimensions
-			reset() {
-				const dimensions = self.schematicWrapper.get_dimensions();
-				self.setRenderingBounds(
-					new THREE.Vector3(0, 0, 0),
-					new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
-				);
-				return "Reset to full dimensions";
-			},
-			
-			// Toggle helper visibility
-			showHelper(visible = true) {
-				self.showRenderingBoundsHelper(visible);
-				return `Helper ${visible ? 'shown' : 'hidden'}`;
+			{
+				get(target, prop) {
+					// @ts-ignore
+					return target[prop];
+				},
+				set(target, prop, value) {
+					// @ts-ignore
+					target[prop] = value;
+					return true;
+				},
 			}
-		}, {
-			get(target, prop) {
-				// @ts-ignore
-				return target[prop];
-			},
-			set(target, prop, value) {
-				// @ts-ignore
-				target[prop] = value;
-				return true;
-			}
-		}) as any;
+		) as any;
 
 		this.group = new THREE.Group();
 		this.group.name = name;
@@ -220,10 +260,11 @@ export class SchematicObject extends EventEmitter {
 		} else {
 			this.meshesReady = Promise.resolve();
 		}
-		
 
 		// Define property configurations
-		const propertyConfigs: Partial<Record<keyof SchematicObject, PropertyConfig<any>>> = {
+		const propertyConfigs: Partial<
+			Record<keyof SchematicObject, PropertyConfig<any>>
+		> = {
 			position: {
 				cast: castToVector3,
 				afterSet: () => {
@@ -284,7 +325,6 @@ export class SchematicObject extends EventEmitter {
 		this.group.scale.copy(this.scale);
 	}
 
-
 	public syncTransformFromGroup() {
 		this.position.copy(this.group.position);
 		this.rotation.copy(this.group.rotation);
@@ -332,14 +372,17 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateWorldMatrix(true, true);
 
 		// Create initial visualizer for rendering bounds
-		this.createRenderingBoundsHelper(false);
-		
+		if (this.sceneManager.schematicRenderer.options.showRenderingBoundsHelper) {
+			this.createRenderingBoundsHelper();
+		}
+
 		// const box = new THREE.Box3().setFromObject(this.group);
 		// console.log("Updated bounding box min:", box.min);
 		// console.log("Updated bounding box max:", box.max);
 		// console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
-        this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(this.name);
-
+		this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(
+			this.name
+		);
 	}
 
 	/**
@@ -485,7 +528,7 @@ export class SchematicObject extends EventEmitter {
 			renderer.uiManager.showProgressBar(`Rebuilding ${this.name}`);
 			renderer.uiManager.updateProgress(0.1, "Disposing old meshes...");
 		}
-		
+
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh as THREE.Object3D);
@@ -499,16 +542,16 @@ export class SchematicObject extends EventEmitter {
 
 		// Clear chunk meshes and update progress
 		this.chunkMeshes.clear();
-		
+
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.updateProgress(0.2, "Building new meshes...");
 		}
-		
+
 		// Build new meshes if visible
 		if (this.visible) {
 			await this.buildMeshes();
 		}
-		
+
 		// Hide progress bar when complete
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.hideProgressBar();
@@ -519,7 +562,10 @@ export class SchematicObject extends EventEmitter {
 		return this.schematicWrapper;
 	}
 
-	public async setBlockNoRebuild(position: THREE.Vector3 | number[], blockType: string,) {
+	public async setBlockNoRebuild(
+		position: THREE.Vector3 | number[],
+		blockType: string
+	) {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
@@ -568,7 +614,6 @@ export class SchematicObject extends EventEmitter {
 		console.log("Chunks rebuilt in", performance.now() - startTime + "ms");
 	}
 
-
 	public async copyRegionFromSchematic(
 		sourceSchematicName: string,
 		sourceMin?: THREE.Vector3 | number[],
@@ -577,9 +622,10 @@ export class SchematicObject extends EventEmitter {
 		excludeBlocks?: string[],
 		rebuild: boolean = false
 	) {
-		const sourceSchematic = this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(
-			sourceSchematicName
-		);
+		const sourceSchematic =
+			this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(
+				sourceSchematicName
+			);
 		if (!sourceSchematic) {
 			throw new Error(`Schematic ${sourceSchematicName} not found`);
 		}
@@ -590,9 +636,12 @@ export class SchematicObject extends EventEmitter {
 			sourceMax = new THREE.Vector3(sourceMax[0], sourceMax[1], sourceMax[2]);
 		}
 		if (Array.isArray(targetPosition)) {
-			targetPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]);
+			targetPosition = new THREE.Vector3(
+				targetPosition[0],
+				targetPosition[1],
+				targetPosition[2]
+			);
 		}
-
 
 		const sourceDimensions = sourceSchematic.schematicWrapper.get_dimensions();
 
@@ -614,7 +663,6 @@ export class SchematicObject extends EventEmitter {
 		if (!excludeBlocks) {
 			excludeBlocks = [];
 		}
-
 
 		await this.schematicWrapper.copy_region(
 			sourceSchematic.schematicWrapper,
@@ -639,13 +687,8 @@ export class SchematicObject extends EventEmitter {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
-		return this.schematicWrapper.get_block(
-			position.x,
-			position.y,
-			position.z
-		);
+		return this.schematicWrapper.get_block(position.x, position.y, position.z);
 	}
-
 
 	public async replaceBlock(replaceBlock: string, newBlock: string) {
 		const blocks: [THREE.Vector3, string][] = [];
@@ -722,9 +765,14 @@ export class SchematicObject extends EventEmitter {
 			const chunkMaxZ = chunkOffset.z + this.chunkDimensions.chunkLength;
 
 			// If the chunk is completely outside rendering bounds, just remove it
-			if (chunkMaxX <= this.renderingBounds.min.x || chunkOffset.x >= this.renderingBounds.max.x ||
-				chunkMaxY <= this.renderingBounds.min.y || chunkOffset.y >= this.renderingBounds.max.y ||
-				chunkMaxZ <= this.renderingBounds.min.z || chunkOffset.z >= this.renderingBounds.max.z) {
+			if (
+				chunkMaxX <= this.renderingBounds.min.x ||
+				chunkOffset.x >= this.renderingBounds.max.x ||
+				chunkMaxY <= this.renderingBounds.min.y ||
+				chunkOffset.y >= this.renderingBounds.max.y ||
+				chunkMaxZ <= this.renderingBounds.min.z ||
+				chunkOffset.z >= this.renderingBounds.max.z
+			) {
 				this.removeChunkMeshes(chunkX, chunkY, chunkZ);
 				return;
 			}
@@ -879,7 +927,7 @@ export class SchematicObject extends EventEmitter {
 		const max = positionArray.map((v, i) => v + boundingBox[i]);
 		return [min, max];
 	}
-	
+
 	/**
 	 * Creates an object with properties and methods for easily manipulating rendering bounds
 	 * Useful for console manipulation and testing
@@ -888,7 +936,7 @@ export class SchematicObject extends EventEmitter {
 	public createBoundsControls(): any {
 		const dimensions = this.schematicWrapper.get_dimensions();
 		const [width, height, depth] = dimensions;
-		
+
 		const settings = {
 			minX: this.renderingBounds.min.x,
 			maxX: this.renderingBounds.max.x,
@@ -896,7 +944,7 @@ export class SchematicObject extends EventEmitter {
 			maxY: this.renderingBounds.max.y,
 			minZ: this.renderingBounds.min.z,
 			maxZ: this.renderingBounds.max.z,
-			
+
 			// Apply a specific axis
 			applyX: () => {
 				const min = this.renderingBounds.min.clone();
@@ -906,7 +954,7 @@ export class SchematicObject extends EventEmitter {
 				this.setRenderingBounds(min, max);
 				return `X axis bounds set to [${settings.minX}, ${settings.maxX}]`;
 			},
-			
+
 			applyY: () => {
 				const min = this.renderingBounds.min.clone();
 				const max = this.renderingBounds.max.clone();
@@ -915,7 +963,7 @@ export class SchematicObject extends EventEmitter {
 				this.setRenderingBounds(min, max);
 				return `Y axis bounds set to [${settings.minY}, ${settings.maxY}]`;
 			},
-			
+
 			applyZ: () => {
 				const min = this.renderingBounds.min.clone();
 				const max = this.renderingBounds.max.clone();
@@ -924,7 +972,7 @@ export class SchematicObject extends EventEmitter {
 				this.setRenderingBounds(min, max);
 				return `Z axis bounds set to [${settings.minZ}, ${settings.maxZ}]`;
 			},
-			
+
 			// Apply all axes
 			applyAll: () => {
 				this.setRenderingBounds(
@@ -933,7 +981,7 @@ export class SchematicObject extends EventEmitter {
 				);
 				return `All bounds set to min:[${settings.minX}, ${settings.minY}, ${settings.minZ}], max:[${settings.maxX}, ${settings.maxY}, ${settings.maxZ}]`;
 			},
-			
+
 			// Reset to full dimensions
 			reset: () => {
 				this.resetRenderingBounds();
@@ -946,21 +994,21 @@ export class SchematicObject extends EventEmitter {
 				settings.maxZ = depth;
 				return `Reset rendering bounds to full dimensions: [${width}, ${height}, ${depth}]`;
 			},
-			
+
 			// Toggle helper visibility
 			toggleHelper: (visible = true) => {
 				this.showRenderingBoundsHelper(visible);
-				return `Rendering bounds helper ${visible ? 'shown' : 'hidden'}`;
+				return `Rendering bounds helper ${visible ? "shown" : "hidden"}`;
 			},
-			
+
 			// Get current bounds
 			getCurrentBounds: () => {
 				return {
 					min: this.renderingBounds.min.toArray(),
-					max: this.renderingBounds.max.toArray()
+					max: this.renderingBounds.max.toArray(),
 				};
 			},
-			
+
 			// Sync from current bounds
 			syncFromCurrent: () => {
 				settings.minX = this.renderingBounds.min.x;
@@ -971,24 +1019,24 @@ export class SchematicObject extends EventEmitter {
 				settings.maxZ = this.renderingBounds.max.z;
 				return "Settings synchronized with current bounds";
 			},
-			
+
 			// Slice from one side (useful for slider UI)
 			sliceX: (value: number) => {
 				settings.maxX = value;
 				return settings.applyX();
 			},
-			
+
 			sliceY: (value: number) => {
 				settings.maxY = value;
 				return settings.applyY();
 			},
-			
+
 			sliceZ: (value: number) => {
 				settings.maxZ = value;
 				return settings.applyZ();
-			}
+			},
 		};
-		
+
 		return settings;
 	}
 }

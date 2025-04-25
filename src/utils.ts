@@ -180,29 +180,32 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 		west: {
 			normal: cornerDictionary["west"]["normal"],
 			corners: [
-				{
-					pos: cornerDictionary["west"]["corners"][0]["pos"],
-					uv: [faceUVs["west"][2], faceUVs["west"][3]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][1]["pos"],
-					uv: [faceUVs["west"][2], faceUVs["west"][1]],
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][2]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][3]],
-
-				},
-				{
-					pos: cornerDictionary["west"]["corners"][3]["pos"],
-					uv: [faceUVs["west"][0], faceUVs["west"][1]],
-				},
+			  // Front bottom
+			  {
+				pos: cornerDictionary["west"]["corners"][0]["pos"], // [0, 0, 1]
+				uv: [faceUVs["west"][0], faceUVs["west"][3]],
+			  },
+			  // Front top
+			  {
+				pos: cornerDictionary["west"]["corners"][1]["pos"], // [0, 1, 1]
+				uv: [faceUVs["west"][0], faceUVs["west"][1]],
+			  },
+			  // Back bottom
+			  {
+				pos: cornerDictionary["west"]["corners"][2]["pos"], // [0, 0, 0]
+				uv: [faceUVs["west"][2], faceUVs["west"][3]],
+			  },
+			  // Back top
+			  {
+				pos: cornerDictionary["west"]["corners"][3]["pos"], // [0, 1, 0]
+				uv: [faceUVs["west"][2], faceUVs["west"][1]],
+			  },
 			],
-		},
-		up: {
+		  },
+		  up: {
 			normal: cornerDictionary["up"]["normal"],
 			corners: [
-				{
+			  {
 					pos: cornerDictionary["up"]["corners"][0]["pos"],
 					uv: [faceUVs["up"][0], faceUVs["up"][3]],
 				},
@@ -219,31 +222,29 @@ export function getDirectionData(faceUVs: { [key: string]: number[] }): any {
 					uv: [faceUVs["up"][2], faceUVs["up"][1]],
 				},
 			],
-		},
-		down: {
+		  },
+		  
+		  down: {
 			normal: cornerDictionary["down"]["normal"],
 			corners: [
-				{
-					pos: cornerDictionary["down"]["corners"][0]["pos"],
-					uv: [faceUVs["down"][0], faceUVs["down"][3]],
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][1]["pos"],
-					uv: [faceUVs["down"][2], faceUVs["down"][3]],
-					
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][2]["pos"],
-					uv: [faceUVs["down"][0], faceUVs["down"][1]],
-					
-				},
-				{
-					pos: cornerDictionary["down"]["corners"][3]["pos"],
-					uv: [faceUVs["down"][2], faceUVs["down"][1]],
-
-				},
+			  {
+				pos: cornerDictionary["down"]["corners"][0]["pos"], // [1, 0, 1]
+				uv: [faceUVs["down"][2], faceUVs["down"][3]], // [1, 0.25]
+			  },
+			  {
+				pos: cornerDictionary["down"]["corners"][1]["pos"], // [0, 0, 1]
+				uv: [faceUVs["down"][0], faceUVs["down"][3]], // [0, 0.25]
+			  },
+			  {
+				pos: cornerDictionary["down"]["corners"][2]["pos"], // [1, 0, 0]
+				uv: [faceUVs["down"][2], faceUVs["down"][1]], // [1, 0]
+			  },
+			  {
+				pos: cornerDictionary["down"]["corners"][3]["pos"], // [0, 0, 0]
+				uv: [faceUVs["down"][0], faceUVs["down"][1]], // [0, 0]
+			  },
 			],
-		},
+		  },
 		south: {
 			normal: cornerDictionary["south"]["normal"],
 			corners: [

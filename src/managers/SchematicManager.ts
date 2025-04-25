@@ -135,6 +135,8 @@ export class SchematicManager {
 			progress: 100,
 			message: "Complete",
 		});
+		
+
 	}
 
 	public async removeAllSchematics() {
@@ -163,7 +165,12 @@ export class SchematicManager {
 				console.log("sfd");
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
-				await this.loadSchematic(key, arrayBuffer, properties);
+				await this.loadSchematic(key, arrayBuffer, properties).then(() => {
+					this.sceneManager.schematicRenderer.options?.callbacks?.onSchematicLoaded?.(
+						key
+					);
+				});
+				
 			}
 		}
 	}

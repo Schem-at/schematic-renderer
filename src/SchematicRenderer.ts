@@ -443,7 +443,7 @@ export class SchematicRenderer {
      * @param schematicId ID of the schematic
      * @returns The dimensions as an array [width, height, depth] or null if schematic not found
      */
-    public getSchematicDimensions(schematicId: string): number[] | null {
+    public getSchematicDimensions(schematicId: string): Int32Array | null {
         const schematic = this.schematicManager?.getSchematic(schematicId);
         if (!schematic) {
             console.error(`Schematic with ID ${schematicId} not found`);

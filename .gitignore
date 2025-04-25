@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .history
 .vscode
+
+
+schematic-renderer-*.tgz

@@ -28,6 +28,7 @@ export interface SchematicRendererOptions {
   showGrid?: boolean;
   showAxes?: boolean;
   showCameraPathVisualization?: boolean;
+  showRenderingBoundsHelper?: boolean;
   // Enable auto-orbit around default camera path
   enableAutoOrbit?: boolean;
   // Auto-orbit speed in seconds for a full rotation (higher = slower)
@@ -66,9 +67,9 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
     barColor: '#4CAF50', // Material green
     barHeight: 6,
     labelColor: '#ffffff',
-    labelSize: '14px',
     theme: 'dark'
   },
+  showRenderingBoundsHelper: false,
   callbacks: {},
   interactionOptions: {
       enableSelection: false,

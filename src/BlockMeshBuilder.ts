@@ -178,7 +178,9 @@ export class BlockMeshBuilder {
 				const base64Png = "data:image/png;base64," + base64Resource;
 				this.showTextureOverlay(
 					base64Png,
-					uvs[face]
+					uvs[face],
+					`${textureName} (${face}) rotation: ${faceRotation}`,
+					faceRotation
 				);	
 
 			}
@@ -189,17 +191,15 @@ export class BlockMeshBuilder {
 	@Monitor
 	public rotateUv(uv: [number, number, number, number], rotation: number): [number, number, number, number] {
 		const r = ((rotation % 360 + 360) % 360) / 90;
-		
 		if (r === 0) return uv;
-		// uv[0] is x1, uv[1] is y1, uv[2] is x2, uv[3] is y2
-		
+
 		switch (r) {
 			case 1: // 90° clockwise
-				return [uv[1], 1 - uv[0], uv[3], 1 - uv[2]];
+				return [1 - uv[1], uv[0], 1 - uv[3], uv[2]];
 			case 2: // 180°
 				return [1 - uv[2], 1 - uv[3], 1 - uv[0], 1 - uv[1]];
 			case 3: // 270° clockwise
-				return [1 - uv[1], uv[0], 1 - uv[3], uv[2]];
+				return [ uv[1], 1 - uv[2], uv[3], 1 - uv[0]];
 			default:
 				return uv;
 		}
@@ -211,7 +211,8 @@ export class BlockMeshBuilder {
 	public showTextureOverlay(
 		imageData: string,
 		uv: [number, number, number, number],
-		name: string = ""
+		name: string = "",
+		rotation: number = 0
 	) {
 		if (!this.popupWindow || this.popupWindow.closed) {
 			this.popupWindow = window.open(
@@ -252,6 +253,7 @@ export class BlockMeshBuilder {
 		image.src = imageData;
 		image.style.imageRendering = "pixelated";
 		image.style.position = "absolute";
+		image.style.transform = `rotate(${rotation}deg)`;
 		image.style.width = "100px";
 		image.style.height = "100px";
 		image.style.backgroundColor = "gray";
@@ -261,6 +263,7 @@ export class BlockMeshBuilder {
 		nameElement.innerText = name;
 		nameElement.style.color = "white";
 		nameElement.style.backgroundColor = "black";
+		nameElement.style.textAlign = "right";
 		imageContainer.appendChild(nameElement);
 
 		if (!uv) {
@@ -268,12 +271,16 @@ export class BlockMeshBuilder {
 		}
 
 		const rect = popupDocument.createElement("div");
+		const width = Math.abs(uv[2] - uv[0]);
+		const height = Math.abs(uv[3] - uv[1]);
+		const left = Math.min(uv[0], uv[2]);
+		const top = Math.min(uv[1], uv[3]);
 		rect.style.position = "absolute";
-		rect.style.width = `${((uv[2] - uv[0])) * 100 - 1}px`;
-		rect.style.height = `${((uv[3] - uv[1])) * 100 - 1}px`;
+		rect.style.width = `${width * 100 - 1}px`;
+		rect.style.height = `${height * 100 - 1}px`;
 		rect.style.border = "1px solid blue";
-		rect.style.left = `${(uv[0]) * 100}px`;
-		rect.style.top = `${(uv[1]) * 100}px`;
+		rect.style.left = `${left * 100}px`;
+		rect.style.top = `${top * 100}px`;
 		imageContainer.appendChild(rect);
 
 		allImagesContainer.appendChild(imageContainer);
@@ -325,25 +332,12 @@ export class BlockMeshBuilder {
 			let elementIndex = 0;
 			for (const element of elements) {
 				elementIndex++;
-				// if (elementIndex > 1) {
-				// 	break;
+				// if (elementIndex == 1) {
+				// 	continue;
 				// }
 				if (!element.from || !element.to) continue;
 				this.normalizeElementCoords(element);
-				let faceData;
-				const blockPropertyHash = JSON.stringify(block.properties);
-				const faceDataCacheKey = `${modelHolder.model}-${modelIndex}-${elementIndex}-${blockPropertyHash}`;
-
-				if (this.faceDataCache.has(faceDataCacheKey) ) {
-					faceData = this.faceDataCache.get(faceDataCacheKey);
-				} else {
-					try {
-						faceData = await this.processFaceData(element, model, block);
-					} catch (e) {
-						continue;
-					}
-					this.faceDataCache.set(faceDataCacheKey, faceData);
-				}
+				const faceData = await this.processFaceData(element, model, block);
 
 				const from = element.from;
 				const to = element.to;
@@ -388,7 +382,7 @@ export class BlockMeshBuilder {
 						cornerPos = this.applyRotation(cornerPos, modelHolderRotation);
 
 						blockComponents[uniqueKey].positions.push(...cornerPos);
-							blockComponents[uniqueKey].uvs.push(uv[0], 1 - uv[1]);
+							blockComponents[uniqueKey].uvs.push(1-uv[0], 1-uv[1]);
 						blockComponents[uniqueKey].normals.push(...dirData.normal);
 					}
 				}
