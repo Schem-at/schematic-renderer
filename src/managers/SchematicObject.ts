@@ -7,11 +7,14 @@ import { SceneManager } from "./SceneManager";
 import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
 import { castToEuler, castToVector3 } from "../utils/Casts";
 import { resetPerformanceMetrics } from "../monitoring";
+import { SchematicRenderer } from "../SchematicRenderer";
 
 export class SchematicObject extends EventEmitter {
 	public name: string;
 	public schematicWrapper: SchematicWrapper;
+	private schematicRenderer: SchematicRenderer;
 	private meshes: THREE.Mesh[] = [];
+
 	private worldMeshBuilder: WorldMeshBuilder;
 	private eventEmitter: EventEmitter;
 	private sceneManager: SceneManager;
@@ -52,11 +55,9 @@ export class SchematicObject extends EventEmitter {
 
 	private meshesReady: Promise<void>;
 	constructor(
+		schematicRenderer: SchematicRenderer,
 		name: string,
 		schematicWrapper: SchematicWrapper,
-		worldMeshBuilder: WorldMeshBuilder,
-		eventEmitter: EventEmitter,
-		sceneManager: SceneManager,
 		properties?: Partial<{
 			position: THREE.Vector3 | number[];
 			rotation: THREE.Euler | number[];
@@ -75,9 +76,18 @@ export class SchematicObject extends EventEmitter {
 		this.id = name;
 		this.name = name;
 		this.schematicWrapper = schematicWrapper;
-		this.worldMeshBuilder = worldMeshBuilder;
-		this.eventEmitter = eventEmitter;
-		this.sceneManager = sceneManager;
+
+		this.schematicRenderer = schematicRenderer;
+		if (!this.schematicRenderer) {
+			throw new Error("SchematicRenderer is required.");
+		}
+		if (!this.schematicRenderer.worldMeshBuilder) {
+			throw new Error("WorldMeshBuilder is required.");
+		}
+		this.worldMeshBuilder =
+			schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.eventEmitter = schematicRenderer.eventEmitter;
+		this.sceneManager = schematicRenderer.sceneManager;
 
 		// Initialize properties with default values
 		this.position = new THREE.Vector3();
@@ -342,11 +352,10 @@ export class SchematicObject extends EventEmitter {
 		if (!this.visible) {
 			return;
 		}
-		const { meshes, chunkMap } =
-			await this.worldMeshBuilder.buildSchematicMeshes(
-				this,
-				this.chunkDimensions
-			);
+		const { meshes, chunkMap } = await this.buildSchematicMeshes(
+			this,
+			this.chunkDimensions
+		);
 		this.chunkMeshes = chunkMap;
 
 		meshes.forEach((mesh) => {
@@ -383,6 +392,235 @@ export class SchematicObject extends EventEmitter {
 		this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(
 			this.name
 		);
+	}
+
+	// Track chunk building progress
+	private reportBuildProgress(
+		message: string,
+		progress: number,
+		totalChunks?: number,
+		completedChunks?: number
+	) {
+		// Only show progress if enabled and UI manager exists
+		if (
+			this.schematicRenderer.options.enableProgressBar &&
+			this.schematicRenderer.uiManager
+		) {
+			// Format detailed progress message if chunks are provided
+			let progressMessage = message;
+			if (totalChunks !== undefined && completedChunks !== undefined) {
+				progressMessage = `${message} (${completedChunks}/${totalChunks} chunks)`;
+			}
+
+			// Show progress bar if not already visible
+			if (!this.schematicRenderer.uiManager.isProgressBarVisible()) {
+				this.schematicRenderer.uiManager.showProgressBar("Building Schematic");
+			}
+
+			// Update progress
+			this.schematicRenderer.uiManager.updateProgress(
+				progress,
+				progressMessage
+			);
+
+			// Hide when complete
+			if (progress >= 1) {
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
+		}
+	}
+
+	// managers/SchematicObject.ts
+
+	public async buildSchematicMeshes(
+		schematicObject: SchematicObject,
+		chunkDimensions: any = {
+			chunkWidth: 16,
+			chunkHeight: 16,
+			chunkLength: 16,
+		}
+	): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
+		console.log("Building schematic meshes for:", schematicObject.name);
+		const schematic = schematicObject.schematicWrapper;
+
+		const startTime = performance.now();
+		const chunks = schematic.chunks(
+			chunkDimensions.chunkWidth,
+			chunkDimensions.chunkHeight,
+			chunkDimensions.chunkLength
+		);
+
+		console.log(
+			"Chunk processing time:",
+			(performance.now() - startTime).toFixed(2),
+			"ms"
+		);
+
+		const schematicMeshes: THREE.Mesh[] = [];
+		const chunkMap: Map<string, THREE.Mesh[]> = new Map();
+		const maxChunks = -1;
+
+		console.log(`Processing ${chunks.length} chunks...`);
+		let index = 0;
+
+		// Show progress bar at the start of chunk processing
+		if (this.schematicRenderer.options.enableProgressBar) {
+			this.reportBuildProgress(
+				"Building schematic meshes",
+				0,
+				chunks.length,
+				0
+			);
+		}
+
+		// Get the rendering bounds if they exist and are enabled
+		const renderingBounds = schematicObject.renderingBounds?.enabled
+			? schematicObject.renderingBounds
+			: undefined;
+
+		// Use concurrency to process chunks
+		const concurrencyLimit = navigator.hardwareConcurrency || 4;
+		let processedCount = 0;
+
+		// Process chunks with limited concurrency
+		const processConcurrently = async <T, R>(
+			items: T[],
+			concurrency: number,
+			processor: (item: T, index: number) => Promise<R>
+		): Promise<R[]> => {
+			const results: R[] = new Array(items.length);
+			let nextIndex = 0;
+
+			const workers = Array.from(
+				{ length: Math.min(concurrency, items.length) },
+				async () => {
+					while (nextIndex < items.length) {
+						const index = nextIndex++;
+						results[index] = await processor(items[index], index);
+					}
+				}
+			);
+
+			await Promise.all(workers);
+			return results;
+		};
+
+		await processConcurrently(
+			Array.from(chunks),
+			concurrencyLimit,
+			async (chunkData, idx) => {
+				const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
+
+				// Skip chunks that are completely outside the rendering bounds
+				if (renderingBounds) {
+					const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
+					const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
+					const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
+					const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
+					const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
+					const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+
+					if (
+						chunkMaxX <= renderingBounds.min.x ||
+						chunkMinX >= renderingBounds.max.x ||
+						chunkMaxY <= renderingBounds.min.y ||
+						chunkMinY >= renderingBounds.max.y ||
+						chunkMaxZ <= renderingBounds.min.z ||
+						chunkMinZ >= renderingBounds.max.z
+					) {
+						return null;
+					}
+				}
+
+				try {
+					// Track chunk processing
+					const chunkStartTime = performance.now();
+
+					const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
+						blocks as any[],
+						schematicObject,
+						renderingBounds
+					);
+
+					const chunkTime = performance.now() - chunkStartTime;
+
+					if (chunkMeshes && chunkMeshes.length > 0) {
+						console.log(
+							`${++processedCount}/${
+								chunks.length
+							} Processed chunk at ${chunk_x},${chunk_y},${chunk_z} (${chunkTime.toFixed(
+								2
+							)}ms)`
+						);
+
+						const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
+
+						// Apply materials and properties to the meshes
+						chunkMeshes.forEach((mesh) => {
+							const material = mesh.material as THREE.Material;
+							material.opacity = this.opacity;
+							material.transparent = this.opacity < 1.0;
+							mesh.visible = this.visible;
+
+							// Compute the bounding box for the geometry
+							mesh.geometry.computeBoundingBox();
+
+							// Add the mesh to the group immediately
+							this.group.add(mesh);
+						});
+
+						// Store the meshes in the chunk map
+						chunkMap.set(chunkKey, chunkMeshes);
+						schematicMeshes.push(...chunkMeshes);
+
+						// Update progress
+						if (this.schematicRenderer.options.enableProgressBar) {
+							const progress = processedCount / chunks.length;
+							this.reportBuildProgress(
+								"Building schematic meshes",
+								progress,
+								chunks.length,
+								processedCount
+							);
+						}
+
+						// Request a render to show the new chunk
+						this.schematicRenderer.renderManager.requestRender();
+					}
+
+					return chunkMeshes;
+				} catch (error) {
+					console.error(
+						`Error processing chunk at ${chunk_x},${chunk_y},${chunk_z}:`,
+						error
+					);
+					return null;
+				}
+			}
+		);
+
+		// Final progress update
+		if (this.schematicRenderer.options.enableProgressBar) {
+			this.reportBuildProgress(
+				"Schematic build complete",
+				1.0,
+				chunks.length,
+				processedCount
+			);
+
+			// Slight delay before hiding
+			setTimeout(() => {
+				if (this.schematicRenderer.uiManager) {
+					this.schematicRenderer.uiManager.hideProgressBar();
+				}
+			}, 800);
+		}
+
+		// Update world matrices
+		this.group.updateMatrixWorld(true);
+		this.group.updateWorldMatrix(true, true);
+
+		return { meshes: schematicMeshes, chunkMap };
 	}
 
 	/**
@@ -794,7 +1032,7 @@ export class SchematicObject extends EventEmitter {
 		// Build new chunk meshes, passing the rendering bounds
 		const newChunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 			chunkBlocks,
-			this.schematicWrapper,
+			this,
 			this.renderingBounds
 		);
 

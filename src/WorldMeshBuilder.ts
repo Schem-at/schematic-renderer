@@ -1,509 +1,761 @@
+// WorldMeshBuilder.ts
 import * as THREE from "three";
-import { BlockMeshBuilder } from "./BlockMeshBuilder";
-import {
-    INVISIBLE_BLOCKS,
-    facingvectorToFace,
-    getDegreeRotationMatrix,
-    occludedFacesIntToList,
-    rotateVectorMatrix,
-} from "./utils";
-
-import { Vector } from "./types";
-import { SchematicWrapper } from "./wasm/minecraft_schematic_utils";
 import { SchematicRenderer } from "./SchematicRenderer";
+import { INVISIBLE_BLOCKS } from "./utils";
 import { SchematicObject } from "./managers/SchematicObject";
-
+import { hashTextureKey } from "./meshing/chunkMesher";
+// Import necessary types
+import type { ChunkMeshRequest, BakedBlockDef, BlockData } from "./types";
 
 export class WorldMeshBuilder {
-    private schematicRenderer: SchematicRenderer;
-    private blockMeshBuilder: BlockMeshBuilder;
-    private blockCache: Map<string, any>;
-    private metaCache: Map<string, any>;
+	private schematicRenderer: SchematicRenderer;
+	private materialCache: Map<number, THREE.Material> = new Map();
+	private textureKeyMap: Map<number, string> = new Map(); // Maps material IDs to texture keys
 
-    constructor(schematicRenderer: SchematicRenderer) {
-        this.schematicRenderer = schematicRenderer;
-        this.blockMeshBuilder = new BlockMeshBuilder(this.schematicRenderer);
-        this.blockCache = new Map();
-        this.metaCache = new Map();
-    }
+	constructor(schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
+	}
 
-    private async getBlockMeta(name: string, properties: Record<string, string>) {
-        const cacheKey = `${name}-${JSON.stringify(properties)}`;
-        if (!this.metaCache.has(cacheKey)) {
-            const meta = await this.schematicRenderer.resourceLoader?.getBlockMeta({
-                name,
-                properties,
-            });
-            this.metaCache.set(cacheKey, meta);
-            return meta;
-        }
-        return this.metaCache.get(cacheKey);
-    }
+	/**
+	 * Maps a texture key to its hashed material ID and stores the mapping
+	 * This allows for retrieving the original texture key when creating materials
+	 */
+	private registerTextureKey(textureKey: string): number {
+		const materialId = hashTextureKey(textureKey);
+		this.textureKeyMap.set(materialId, textureKey);
+		return materialId;
+	}
 
+	/**
+	 * Generates meshes for a set of blocks belonging to a schematic.
+	 * @param blocks Array of block data objects for this chunk/area.
+	 * @param schematic The SchematicObject containing block definitions.
+	 * @param renderingBounds Optional bounds to limit meshing.
+	 * @returns A promise resolving to an array of THREE.Mesh objects.
+	 */
+	/**
+	 * Modifies stateKeys in block data to match the numeric palette indices
+	 * This ensures the mesh worker can find the correct block definitions
+	 */
+	private mapBlocksToDefinitions(
+		blocks: BlockData[],
+		blockPalette: any[]
+	): BlockData[] {
+		// First, let's understand what's in the blocks data
 
-private rotationMatrixCache: Map<string, number[][]> = new Map();
-    
-    // Get rotation matrix with caching
-    private getRotationMatrix(x: number, y: number, z: number): number[][] {
-        const key = `${x},${y},${z}`;
-        if (!this.rotationMatrixCache.has(key)) {
-            this.rotationMatrixCache.set(key, getDegreeRotationMatrix(-x, -y, -z));
-        }
-        return this.rotationMatrixCache.get(key)!;
-    }
+		// Count blocks with undefined stateKey
+		const undefinedCount = blocks.filter(
+			(b) => b.stateKey === undefined
+		).length;
 
-    // Pre-calculate block meta and cache it
-    private async prepareBlockMeta(name: string, properties: Record<string, string>) {
+		// Map of block IDs to their numeric index in the palette
+		const paletteMap = new Map<string, number>();
 
-
-        if (name === "minecraft:redstone_wire" && Object.keys(properties).length === 0) {
-			properties = {
-				power: "0",
-				north: "none",
-				south: "none",  
-				east: "none",
-				west: "none"
-            };
+		if (Array.isArray(blockPalette)) {
+			blockPalette.forEach((id, index) => {
+				// Map both the full ID and the numeric index
+				if (typeof id === "string") {
+					paletteMap.set(id, index);
+				}
+				paletteMap.set(index.toString(), index);
+			});
 		}
-        const meta = await this.getBlockMeta(name, properties);
-        const holder = meta.modelOptions.holders[0];
-        return {
-            meta,
-            rotationMatrix: this.getRotationMatrix(
-                holder?.x ?? 0,
-                holder?.y ?? 0,
-                holder?.z ?? 0
-            )
-        };
-    }
 
-    private metrics = {
-        timings: new Map<string, number>(),
-        memory: new Map<string, number[]>(),
-        startTime: 0
-    };
+		// Map of block names to their palette index (for fallback)
+		const nameToIndex = new Map<string, number>();
+		if (Array.isArray(blockPalette)) {
+			blockPalette.forEach((id, index) => {
+				if (typeof id === "string") {
+					// Extract the base name without properties
+					const baseName = id.replace(/minecraft:/, "").split("[")[0];
+					nameToIndex.set(baseName, index);
+				}
+			});
+		}
 
-    private trackTiming(key: string, time: number) {
-        const current = this.metrics.timings.get(key) ?? 0;
-        this.metrics.timings.set(key, current + time);
-    }
+		// Copy blocks and adjust stateKeys to match definitions
+		return blocks.map((block) => {
+			const adjusted = { ...block };
 
-    private trackMemory() {
-        if (window.performance && (performance as any).memory) {
-            const memory = (performance as any).memory;
-            this.metrics.memory.get('heap') ?? this.metrics.memory.set('heap', []);
-            this.metrics.memory.get('heap')?.push(memory.usedJSHeapSize / 1024 / 1024);
-        }
-    }
-    
-    // Track chunk building progress
-    private reportBuildProgress(message: string, progress: number, totalChunks?: number, completedChunks?: number) {
-        // Only show progress if enabled and UI manager exists
-        if (this.schematicRenderer.options.enableProgressBar && 
-            this.schematicRenderer.uiManager) {
-            
-            // Format detailed progress message if chunks are provided
-            let progressMessage = message;
-            if (totalChunks !== undefined && completedChunks !== undefined) {
-                progressMessage = `${message} (${completedChunks}/${totalChunks} chunks)`;
-            }
-            
-            // Show progress bar if not already visible
-            if (!this.schematicRenderer.uiManager.isProgressBarVisible()) {
-                this.schematicRenderer.uiManager.showProgressBar('Building Schematic');
-            }
-            
-            // Update progress
-            this.schematicRenderer.uiManager.updateProgress(progress, progressMessage);
-            
-            // Hide when complete
-            if (progress >= 1) {
-                this.schematicRenderer.uiManager.hideProgressBar();
-            }
-        }
-    }
+			// Handle undefined stateKey
+			if (block.stateKey === undefined) {
+				// Try to use the block name to find a matching palette entry
+				if (block.name) {
+					const baseName = block.name.replace(/minecraft:/, "").split("[")[0];
+					if (nameToIndex.has(baseName)) {
+						adjusted.stateKey = nameToIndex.get(baseName)!.toString();
+						// Uncomment if there are many warnings
+						// console.log(`Fixed undefined stateKey for block ${block.name} -> ${adjusted.stateKey}`);
+					} else {
+						// Can't find a match, use '0' as a last resort (likely air)
+						adjusted.stateKey = "0";
+						console.warn(
+							`No palette match for block name ${block.name}, using '0'`
+						);
+					}
+				} else {
+					// No name or stateKey, assume it's air (index 0)
+					adjusted.stateKey = "0";
+					console.warn("Block has no name or stateKey, assuming air (0)");
+				}
+			} else if (paletteMap.has(block.stateKey)) {
+				// Use the numeric index as stateKey
+				adjusted.stateKey = paletteMap.get(block.stateKey)!.toString();
+			} else if (/^\d+$/.test(block.stateKey)) {
+				// If stateKey is already a number string, leave it as is
+			} else {
+				// Try to match by block name as fallback
+				if (block.name) {
+					const baseName = block.name.replace(/minecraft:/, "").split("[")[0];
+					if (nameToIndex.has(baseName)) {
+						adjusted.stateKey = nameToIndex.get(baseName)!.toString();
+						console.log(
+							`Matched block ${block.name} to palette index ${adjusted.stateKey}`
+						);
+					} else {
+						console.warn(`Block has stateKey "${block.stateKey}" not found in palette, 
+						  and name "${block.name}" couldn't be matched`);
+					}
+				} else {
+					console.warn(
+						`Block has stateKey "${block.stateKey}" not found in palette`
+					);
+				}
+			}
 
-    // @ts-ignore
-    private logMetrics() {
-        console.group('Build Performance Metrics');
-        
-        // Total time
-        const totalTime = performance.now() - this.metrics.startTime;
-        console.log(`Total build time: ${totalTime.toFixed(2)}ms`);
-        
-        // Detailed timings
-        console.group('Timing Breakdown');
-        for (const [key, value] of this.metrics.timings) {
-            const percentage = ((value / totalTime) * 100).toFixed(1);
-            console.log(`${key}: ${value.toFixed(2)}ms (${percentage}% of total)`);
-        }
-        console.groupEnd();
+			return adjusted;
+		});
+	}
 
-        // Memory metrics
-        if (this.metrics.memory.has('heap')) {
-            const heapSamples = this.metrics.memory.get('heap')!;
-            console.group('Memory Usage');
-            console.log(`Peak heap: ${Math.max(...heapSamples).toFixed(2)}MB`);
-            console.log(`Average heap: ${(heapSamples.reduce((a, b) => a + b) / heapSamples.length).toFixed(2)}MB`);
-            console.log(`Samples taken: ${heapSamples.length}`);
-            console.groupEnd();
-        }
+	public async getChunkMesh(
+		blocks: BlockData[],
+		schematic: SchematicObject,
+		renderingBounds?: { min: THREE.Vector3; max: THREE.Vector3 }
+	): Promise<THREE.Mesh[]> {
+		// Filter invisible blocks
+		const visibleBlocks = blocks.filter(
+			(block) => !INVISIBLE_BLOCKS.has(block.name)
+		);
 
-        console.groupEnd();
-    }
+		// If no visible blocks, return early to avoid errors
+		if (visibleBlocks.length === 0) {
+			return [];
+		}
 
-    private getPropertiesKey(properties: Record<string, string>): string {
-        const keys = Object.keys(properties).sort();
-        return keys.map(k => `${k}=${properties[k]}`).join(',');
-    }
+		// Convert renderingBounds to transferable array format
+		const transferBounds = renderingBounds
+			? {
+					min: [
+						renderingBounds.min.x,
+						renderingBounds.min.y,
+						renderingBounds.min.z,
+					] as [number, number, number],
+					max: [
+						renderingBounds.max.x,
+						renderingBounds.max.y,
+						renderingBounds.max.z,
+					] as [number, number, number],
+			  }
+			: undefined;
 
-    private async prepareBlockMetaCache(chunk: any[]): Promise<Map<string, any>> {
-        const blockMetaCache = new Map<string, any>();
-    
-        // Collect unique block keys with proper property parsing
-        const uniqueKeys = new Set<string>();
-        for (const blockData of chunk) {
-            const { name, properties } = blockData;
-            const key = `${name}-${this.propertiesToString(properties)}`;
-            uniqueKeys.add(key);
-        }
-    
-        // Parallel metadata fetching
-        const metaPromises = Array.from(uniqueKeys).map(async (key) => {
-            const [name, propertiesStr] = key.split('-');
-            const properties = this.stringToProperties(propertiesStr); // Fixed parsing
-            const meta = await this.prepareBlockMeta(name, properties);
-            return { key, meta };
-        });
-    
-        // Store results
-        const metas = await Promise.all(metaPromises);
-        for (const { key, meta } of metas) {
-            blockMetaCache.set(key, meta);
-        }
-    
-        return blockMetaCache;
-    }
-    
-    // Convert properties object to safe string
-    private propertiesToString(properties: Record<string, string>): string {
-        return Object.keys(properties)
-            .sort()
-            .map(k => `${k}=${properties[k]}`)
-            .join(',');
-    }
-    
-    // Convert string back to properties object
-    private stringToProperties(str: string): Record<string, string> {
-        return str.split(',')
-            .reduce((acc: Record<string, string>, pair) => {
-                const [key, value] = pair.split('=');
-                if (key && value) acc[key] = value;
-                return acc;
-            }, {});
-    }
+		// Get block definitions from the schematic using the get_block_palette method
+		const blockPalette = schematic.schematicWrapper?.get_block_palette();
+		if (!blockPalette) {
+			console.warn("No block palette found in schematic");
+			return [];
+		}
 
+		// Process the block palette to create block definitions
+		const blockDefs = this.processBlockPalette(blockPalette, schematic);
+		if (!blockDefs || blockDefs.length === 0) {
+			console.warn("No block definitions could be generated from palette");
+			return [];
+		}
 
-    public async getChunkMesh(
-        chunk: any[],
-        schematic: SchematicWrapper,
-        renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
-    ): Promise<THREE.Mesh[]> {
-        const startTime = performance.now();
-    
-        // Track pre-meta calculation memory
-        this.trackMemory();
-    
-        // Pre-calculate block metas in parallel
-        const metaStartTime = performance.now();
-        const blockMetaCache = await this.prepareBlockMetaCache(chunk);
-        this.trackTiming('meta_calculation', performance.now() - metaStartTime);
-    
-        // Track post-meta calculation memory
-        this.trackMemory();
-    
-        // Process blocks in parallel
-        const processStartTime = performance.now();
-        const components = await this.processBlocks(chunk, schematic, blockMetaCache, renderingBounds);
-        this.trackTiming('block_processing', performance.now() - processStartTime);
-    
-        // Track pre-mesh creation memory
-        this.trackMemory();
-    
-        // Create meshes timing
-        const meshStartTime = performance.now();
-        const meshes = await this.schematicRenderer.resourceLoader?.createMeshesFromBlocks(components);
-        this.trackTiming('mesh_creation', performance.now() - meshStartTime);
-    
-        // Track final memory state
-        this.trackMemory();
-    
-        // Track total chunk time
-        this.trackTiming('total_chunk_processing', performance.now() - startTime);
-    
-        return meshes as THREE.Mesh[];
-    }
+		// Map block stateKeys to match our generated definitions
+		const adjustedBlocks = this.mapBlocksToDefinitions(
+			visibleBlocks,
+			blockPalette
+		);
 
-    private async processBlocks(
-        chunk: any[], 
-        schematic: SchematicWrapper,
-        blockMetaCache: Map<string, any>,
-        renderingBounds?: { min: THREE.Vector3, max: THREE.Vector3 }
-    ): Promise<Record<string, any[]>> {
-        const maxBlocksAllowed = 100000000;
-        let count = 0;
-        const components: Record<string, any[]> = {};
-    
-        // Precompute block positions for occlusion checks
-        const blockPositions = new Set<string>();
-        for (const blockData of chunk) {
-            blockPositions.add(`${blockData.x},${blockData.y},${blockData.z}`);
-        }
-    
-        // Process blocks in parallel
-        const promises = chunk.map(async (blockData) => {
-            if (count > maxBlocksAllowed) return;
-    
-            const { x, y, z, name, properties } = blockData;
-            if (INVISIBLE_BLOCKS.has(name)) return;
-            
-            // Skip blocks outside of rendering bounds if bounds are specified
-            if (renderingBounds) {
-                if (x < renderingBounds.min.x || x >= renderingBounds.max.x ||
-                    y < renderingBounds.min.y || y >= renderingBounds.max.y ||
-                    z < renderingBounds.min.z || z >= renderingBounds.max.z) {
-                    return;
-                }
-            }
+		// Use the mesh worker manager to generate geometry
+		const meshWorkerRequest: ChunkMeshRequest = {
+			chunkX: visibleBlocks[0]?.chunk_x ?? 0,
+			chunkY: visibleBlocks[0]?.chunk_y ?? 0,
+			chunkZ: visibleBlocks[0]?.chunk_z ?? 0,
+			schematicId: schematic.name || "unknown",
+			width: 16,
+			height: 16,
+			depth: 16,
+			blocks: adjustedBlocks, // Use the adjusted blocks with corrected stateKeys
+			renderingBounds: transferBounds,
+			defs: blockDefs,
+		};
 
-            // Use a new vector instance for each block
-            const position = new THREE.Vector3(x, y, z);
-    
-            // Get occlusion data from BlockMeshBuilder
-            const occludedBitMask = this.blockMeshBuilder.getOccludedFacesForBlock(
-                schematic,
-                blockData,
-                position,
-                renderingBounds
-            );
-            
-            // Convert the bit mask to a face map
-            const occludedFaces = occludedFacesIntToList(occludedBitMask);
-    
-            const blockComponents = await this.blockMeshBuilder.getBlockMeshFromCache(
-                { name, properties },
-                { x, y, z }
-            );
-    
-            if (!blockComponents) return;
-    
-            // Get pre-calculated meta and rotation matrix
-            const key = `${name}-${this.getPropertiesKey(properties)}`;
-            const { rotationMatrix } = blockMetaCache.get(key);
-    
-            // Process all components for this block
-            for (const key in blockComponents) {
-                const blockComponent = blockComponents[key];
-                const materialId = blockComponent.materialId;
-    
-                // Skip rotation if it's an identity matrix
-                const normal = [blockComponent.normals[0], blockComponent.normals[1], blockComponent.normals[2]];
-                const newNormal = (x === 0 && y === 0 && z === 0) 
-                    ? normal 
-                    : rotateVectorMatrix(normal, rotationMatrix) as Vector;
-                const newFace = facingvectorToFace(newNormal as Vector);
-    
-                // Skip faces that should be occluded
-                // Note: occludedFaces[face] === true means the face IS occluded and should NOT be rendered
-                
-                // IMPORTANT: Let's check if this is an outer face of the schematic
-                // For outer faces we must make sure they're visible regardless of occlusion information
-                const dimensions = schematic.get_dimensions();
-                const [width, height, depth] = dimensions;
-                const isOuterFace = (
-                    (newFace === "east" && x === width - 1) ||  // East face at max X
-                    (newFace === "west" && x === 0) ||          // West face at min X
-                    (newFace === "up" && y === height - 1) ||   // Up face at max Y
-                    (newFace === "down" && y === 0) ||          // Down face at min Y
-                    (newFace === "south" && z === depth - 1) || // South face at max Z
-                    (newFace === "north" && z === 0)            // North face at min Z
-                );
-                
-                // For outer faces, never cull them
-                if (isOuterFace) {
-                    // Don't continue - we WANT to render this face
-                }
-                // For inner faces, check occlusion
-                else if (occludedFaces[newFace]) {
-                    continue;
-                }
-    
-                // Initialize component array if needed
-                if (!components[materialId]) {
-                    components[materialId] = [];
-                }
-                components[materialId].push([blockComponent, [x, y, z]]);
-            }
-    
-            count++;
-        });
-    
-        await Promise.all(promises);
-    
-        return components;
-    }
+		try {
+			// Get geometry from worker (or main thread fallback)
+			const geometry =
+				await this.schematicRenderer.meshWorkerManager.generateChunkMesh(
+					meshWorkerRequest
+				);
 
-    public async buildSchematicMeshes(
-        schematicObject: SchematicObject,
-        chunkDimensions: any = {
-            chunkWidth: 16,
-            chunkHeight: 16,
-            chunkLength: 16,
-        }
-    ): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
-        console.log('Building schematic meshes for:', schematicObject.name);
-        const schematic = schematicObject.schematicWrapper;
-        // Reset metrics for new build
-        this.metrics.timings.clear();
-        this.metrics.memory.clear();
-        this.metrics.startTime = performance.now();
-    
-        const chunks = schematic.chunks(
-            chunkDimensions.chunkWidth,
-            chunkDimensions.chunkHeight,
-            chunkDimensions.chunkLength
-        );
-    
-        const schematicMeshes: THREE.Mesh[] = [];
-        const chunkMap: Map<string, THREE.Mesh[]> = new Map();
-        const maxChunks = -1;
-    
-        console.log(`Processing ${chunks.length} chunks...`);
-        let index = 0;
-        
-        // Show progress bar at the start of chunk processing
-        if (this.schematicRenderer.options.enableProgressBar) {
-            this.reportBuildProgress(
-                "Building schematic meshes", 
-                0, 
-                chunks.length, 
-                0
-            );
-        }
-    
-        // Track initial memory state
-        this.trackMemory();
+			// Check if geometry generation resulted in valid data
+			if (!geometry || !geometry.getAttribute("position")) {
+				console.warn(
+					"Mesh generation resulted in empty or invalid geometry for chunk",
+					meshWorkerRequest.chunkX,
+					meshWorkerRequest.chunkY,
+					meshWorkerRequest.chunkZ
+				);
+				return [];
+			}
 
-        // Get the rendering bounds if they exist and are enabled
-        // By default, renderingBounds should not be used unless explicitly enabled by the user
-        const renderingBounds = schematicObject.renderingBounds?.enabled ? schematicObject.renderingBounds : undefined;
-    
-        for (const chunkData of chunks) {
-            index++;
-            if (index > maxChunks && maxChunks > 0) {
-                console.warn(`Exceeded max chunks (${maxChunks})`);
-                break;
-            }
-    
-            const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
+			// Get the material indices attribute from the geometry
+			const materialIndices = geometry.getAttribute("materialIndex");
 
-            // Skip chunks that are completely outside the rendering bounds
-            if (renderingBounds) {
-                const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
-                const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
-                const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
-                const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
-                const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
-                const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+			if (!materialIndices) {
+				console.log(
+					"No material indices attribute found in geometry, using default material"
+				);
+				// If no material indices are provided, use a default material
+				return [this.createDefaultMesh(geometry, meshWorkerRequest)];
+			}
 
-                // Skip chunk if it's completely outside the rendering bounds
-                if (chunkMaxX <= renderingBounds.min.x || chunkMinX >= renderingBounds.max.x ||
-                    chunkMaxY <= renderingBounds.min.y || chunkMinY >= renderingBounds.max.y ||
-                    chunkMaxZ <= renderingBounds.min.z || chunkMinZ >= renderingBounds.max.z) {
-                    continue;
-                }
-            }
-    
-            try {
-                // Track chunk processing
-                const chunkStartTime = performance.now();
-    
-                // Track pre-processing memory
-                this.trackMemory();
-    
-                const chunkMeshes = await this.getChunkMesh(
-                    blocks as any[],
-                    schematic,
-                    renderingBounds
-                );
-    
-                // Track post-processing memory
-                this.trackMemory();
-    
-                const chunkTime = performance.now() - chunkStartTime;
-                this.trackTiming(`chunk_${index}`, chunkTime);
-    
-                if (chunkMeshes && chunkMeshes.length > 0) {
-                    console.log(`${index}/${chunks.length} Processed chunk at ${chunk_x},${chunk_y},${chunk_z} (${chunkTime.toFixed(2)}ms)`);
-                    const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
-                    chunkMap.set(chunkKey, chunkMeshes);
-                    schematicMeshes.push(...chunkMeshes);
-    
-                    // Track memory after adding meshes
-                    this.trackMemory();
-                }
-    
-                // Log progress metrics every 5 chunks
-                if (index % 5 === 0) {
-                    const progress = (index / chunks.length);
-                    console.log(`Progress: ${(progress * 100).toFixed(1)}%`);
-                    this.trackMemory();
-                    
-                    // Update progress bar
-                    if (this.schematicRenderer.options.enableProgressBar) {
-                        this.reportBuildProgress(
-                            "Building schematic meshes", 
-                            progress,
-                            chunks.length,
-                            index
-                        );
-                    }
-                }
-    
-            } catch (error) {
-                console.error(`Error processing chunk at ${chunk_x},${chunk_y},${chunk_z}:`, error);
-                this.trackTiming('errors', 0);  // Track error occurrences
-                continue;
-            }
-        }
-    
-        // Log final metrics
-        // this.logMetrics();
-        
-        // Show final progress (100% complete)
-        if (this.schematicRenderer.options.enableProgressBar) {
-            this.reportBuildProgress(
-                "Schematic build complete", 
-                1.0,
-                chunks.length,
-                index
-            );
-            
-            // Slight delay before hiding to show completion
-            setTimeout(() => {
-                if (this.schematicRenderer.uiManager) {
-                    this.schematicRenderer.uiManager.hideProgressBar();
-                }
-            }, 800);
-        }
-    
-        return { meshes: schematicMeshes, chunkMap };
-    }
+			// Group the geometry by material IDs for optimal rendering
+			const meshes = this.createMaterialGroupedMeshes(
+				geometry,
+				meshWorkerRequest
+			);
 
-    // Cleanup method
-public dispose(): void {
-    this.blockCache.clear();
-    this.metaCache.clear();
-    this.rotationMatrixCache.clear();
-}
+			// Debug information
+
+			// Set up mesh properties for rendering
+			meshes.forEach((mesh) => {
+				// Make sure mesh is visible
+				mesh.visible = true;
+				mesh.frustumCulled = true; // Enable frustum culling for performance
+
+				// Enable shadows
+				mesh.castShadow = true;
+				mesh.receiveShadow = true;
+			});
+
+			return meshes;
+		} catch (error) {
+			console.error(
+				`Error processing chunk mesh at ${meshWorkerRequest.chunkX},${meshWorkerRequest.chunkY},${meshWorkerRequest.chunkZ}:`,
+				error
+			);
+			return []; // Return empty array on error
+		}
+	}
+
+	/**
+	 * Creates a default mesh with a single material when material indices are not available.
+	 */
+	private createDefaultMesh(
+		geometry: THREE.BufferGeometry,
+		request: ChunkMeshRequest
+	): THREE.Mesh {
+		const defaultMaterial = new THREE.MeshStandardMaterial({
+			color: 0xcccccc,
+			roughness: 0.7,
+			metalness: 0.2,
+		});
+
+		const mesh = new THREE.Mesh(geometry, defaultMaterial);
+
+		// Ensure mesh is properly configured for rendering
+		mesh.visible = true;
+		mesh.frustumCulled = true;
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+
+		// Compute bounding information for performance
+		if (!geometry.boundingSphere) {
+			geometry.computeBoundingSphere();
+		}
+
+		mesh.userData = {
+			chunkX: request.chunkX,
+			chunkY: request.chunkY,
+			chunkZ: request.chunkZ,
+			isDefaultMesh: true,
+		};
+
+		console.log(
+			"Created default mesh with bounding sphere radius:",
+			geometry.boundingSphere?.radius
+		);
+
+		return mesh;
+	}
+
+	/**
+	 * Creates separate meshes for different materials to optimize rendering.
+	 * This approach groups faces by material ID to minimize material switches during rendering.
+	 */
+	private createMaterialGroupedMeshes(
+		geometry: THREE.BufferGeometry,
+		request: ChunkMeshRequest
+	): THREE.Mesh[] {
+		// Get the material indices from the geometry
+		const materialIndices = geometry.getAttribute("materialIndex");
+		const indices = geometry.getIndex();
+
+		if (!indices) {
+			console.warn("Geometry missing indices, using default mesh");
+			return [this.createDefaultMesh(geometry, request)];
+		}
+
+		// Find all unique material IDs
+		const uniqueMaterialIds = new Set<number>();
+		for (let i = 0; i < materialIndices.count; i++) {
+			uniqueMaterialIds.add(materialIndices.getX(i));
+		}
+
+		// If only one material ID is used, we can use the geometry as is
+		if (uniqueMaterialIds.size === 1) {
+			const materialId = uniqueMaterialIds.values().next().value;
+			const material = this.getMaterial(materialId);
+
+			const mesh = new THREE.Mesh(geometry, material);
+			mesh.userData = {
+				chunkX: request.chunkX,
+				chunkY: request.chunkY,
+				chunkZ: request.chunkZ,
+				materialId,
+			};
+
+			return [mesh];
+		}
+
+		// Group faces by material ID
+		const meshes: THREE.Mesh[] = [];
+
+		// Each unique material ID will get its own mesh
+		uniqueMaterialIds.forEach((materialId) => {
+			// Create a new index buffer for this material
+			const faceIndices: number[] = [];
+
+			// Go through all the indices to find faces using this material
+			for (let i = 0; i < indices.count; i += 3) {
+				// Get the first vertex of this triangle
+				const v1 = indices.getX(i);
+
+				// Get the material ID for this vertex
+				const mat = materialIndices.getX(v1);
+
+				// If this face uses our current material, add all three indices
+				if (mat === materialId) {
+					faceIndices.push(
+						indices.getX(i),
+						indices.getX(i + 1),
+						indices.getX(i + 2)
+					);
+				}
+			}
+
+			// If no faces use this material, skip creating a mesh
+			if (faceIndices.length === 0) return;
+
+			// Create a new geometry for this material group
+			const materialGeometry = new THREE.BufferGeometry();
+
+			// Instead of cloning all attributes, let's create a new geometry with only the vertices we need
+			// This resolves the "vertex buffer not big enough" WebGL errors
+
+			// Get the positions, normals, and UVs attributes
+			const positions = geometry.getAttribute("position");
+			const normals = geometry.getAttribute("normal");
+			const uvs = geometry.getAttribute("uv");
+
+			// Create maps to track which vertices we're using
+			const vertexMap = new Map<number, number>();
+			const newPositions: number[] = [];
+			const newNormals: number[] = [];
+			const newUvs: number[] = [];
+			const newIndices: number[] = [];
+
+			// Process each face (triangle)
+			for (let i = 0; i < faceIndices.length; i += 3) {
+				// Get the original indices for this triangle
+				const idx1 = faceIndices[i];
+				const idx2 = faceIndices[i + 1];
+				const idx3 = faceIndices[i + 2];
+
+				// Safety check: make sure indices are valid
+				if (
+					idx1 >= positions.count ||
+					idx2 >= positions.count ||
+					idx3 >= positions.count
+				) {
+					console.warn(
+						`Invalid index detected: ${idx1}, ${idx2}, ${idx3} (limit: ${positions.count}). Skipping triangle.`
+					);
+					continue;
+				}
+
+				// Map original vertices to new indices
+				for (const idx of [idx1, idx2, idx3]) {
+					if (!vertexMap.has(idx)) {
+						// Add this vertex to our new geometry
+						const newIdx = newPositions.length / 3;
+						vertexMap.set(idx, newIdx);
+
+						// Copy position
+						newPositions.push(
+							positions.getX(idx),
+							positions.getY(idx),
+							positions.getZ(idx)
+						);
+
+						// Copy normal
+						newNormals.push(
+							normals.getX(idx),
+							normals.getY(idx),
+							normals.getZ(idx)
+						);
+
+						// Copy UV
+						newUvs.push(uvs.getX(idx), uvs.getY(idx));
+					}
+
+					// Add index to new triangle
+					newIndices.push(vertexMap.get(idx)!);
+				}
+			}
+
+			// Create new attribute buffers
+			materialGeometry.setAttribute(
+				"position",
+				new THREE.Float32BufferAttribute(newPositions, 3)
+			);
+			materialGeometry.setAttribute(
+				"normal",
+				new THREE.Float32BufferAttribute(newNormals, 3)
+			);
+			materialGeometry.setAttribute(
+				"uv",
+				new THREE.Float32BufferAttribute(newUvs, 2)
+			);
+
+			// Set the index buffer
+			materialGeometry.setIndex(newIndices);
+
+			// console.log(
+			// 	`Created geometry for material ${materialId} with ${
+			// 		newIndices.length / 3
+			// 	} triangles, ${newPositions.length / 3} vertices`
+			// );
+
+			// Get or create the material for this ID
+			const material = this.getMaterial(materialId);
+
+			// Create the mesh with this geometry and material
+			const mesh = new THREE.Mesh(materialGeometry, material);
+			mesh.userData = {
+				chunkX: request.chunkX,
+				chunkY: request.chunkY,
+				chunkZ: request.chunkZ,
+				materialId,
+			};
+
+			// Optimize the mesh for rendering
+			materialGeometry.computeBoundingSphere();
+
+			meshes.push(mesh);
+		});
+
+		return meshes;
+	}
+
+	/**
+	 * Gets or creates a material for the given material ID.
+	 * This method attempts to use the asset worker to load textures when possible,
+	 * and falls back to a unique color for debugging when textures aren't available.
+	 */
+	private getMaterial(materialId: number): THREE.Material {
+		// Check if this material is already cached
+		if (this.materialCache.has(materialId)) {
+			return this.materialCache.get(materialId)!;
+		}
+
+		// In a full implementation, this would get the actual texture name from a mapping
+		const textureName = this.textureKeyMap.get(materialId);
+
+		// Generate a unique color based on the material ID for visualization
+		const hue = (materialId % 360) / 360;
+		const saturation = 0.7;
+		const lightness = 0.6;
+
+		// For transparent blocks (if we know about them)
+		const isTransparent =
+			textureName?.includes("glass") ||
+			textureName?.includes("water") ||
+			textureName?.includes("leaves") ||
+			textureName?.includes("ice");
+
+		// Create a new material with a color derived from the material ID
+		const material = new THREE.MeshStandardMaterial({
+			color: new THREE.Color().setHSL(hue, saturation, lightness),
+			roughness: 0.8,
+			metalness: 0.1,
+			transparent: isTransparent || false,
+			side: isTransparent ? THREE.DoubleSide : THREE.FrontSide,
+			// Slightly move transparent materials forward to avoid z-fighting
+			polygonOffset: isTransparent,
+			polygonOffsetFactor: isTransparent ? -1 : 0,
+		});
+
+		// Cache the material for reuse
+		this.materialCache.set(materialId, material);
+
+		// Asynchronously try to load a texture for this material ID
+		this.loadTextureForMaterial(materialId, material);
+
+		return material;
+	}
+
+	/**
+	 * Attempts to asynchronously load a texture for the given material ID.
+	 * This method updates the material once the texture is loaded.
+	 */
+	private async loadTextureForMaterial(
+		materialId: number,
+		material: THREE.MeshStandardMaterial
+	): Promise<void> {
+		try {
+			// Get the original texture key from our mapping
+			const textureKey = this.textureKeyMap.get(materialId);
+			if (!textureKey) {
+				console.debug(
+					`No texture key mapping found for materialId: ${materialId}`
+				);
+				return;
+			}
+
+			// Log the texture key we would load - in a production implementation, this would
+			// actually load the texture from the asset worker
+
+			// Example of how the texture would be loaded in production:
+			// if (this.schematicRenderer.assetWorkerManager) {
+			//     try {
+			//         // Get the texture path - in Minecraft format it would be like "block/stone"
+			//         // but the asset worker might need "textures/block/stone.png"
+			//         const texturePath = `textures/${textureKey}.png`;
+			//
+			//         // Request the texture from the asset worker
+			//         const texture = await this.schematicRenderer.assetWorkerManager.getTexture(texturePath);
+			//
+			//         // Apply the texture to the material
+			//         material.map = texture;
+			//         material.needsUpdate = true;
+			//
+			//         // Request a render update
+			//         this.schematicRenderer.renderManager.requestRender();
+			//     } catch (workerError) {
+			//         console.warn(`Asset worker failed to load texture: ${textureKey}`, workerError);
+			//     }
+			// }
+
+			// When the renderer eventually implements a texture atlas system:
+			// 1. Instead of loading individual textures, we would use UV coordinates
+			//    mapped to positions in a texture atlas
+			// 2. The materialId would map to UV rect coordinates within the atlas
+			// 3. A shared atlas material would be used with custom UVs per mesh
+		} catch (error) {
+			console.warn(
+				`Failed to load texture for materialId: ${materialId}`,
+				error
+			);
+		}
+	}
+
+	/**
+	 * Processes the block palette from the schematic to create block definitions
+	 * This converts the raw palette data into the format expected by the mesh worker
+	 */
+	private processBlockPalette(
+		blockPalette: any,
+		schematic: SchematicObject
+	): [string, BakedBlockDef][] {
+		const blockDefs: [string, BakedBlockDef][] = [];
+
+		try {
+			// Check if the block palette is empty
+			if (!blockPalette) {
+				console.warn("Empty block palette");
+				return [];
+			}
+
+			// Get the block definitions from the schematic's existing data if available
+			if (
+				schematic.blockDefinitionMap &&
+				schematic.blockDefinitionMap.size > 0
+			) {
+				// Convert Map to array of [key, value] pairs
+				return Array.from(schematic.blockDefinitionMap.entries());
+			}
+
+			// If blockPalette is an array of strings (the expected format from get_block_palette),
+			// process each block string
+			if (Array.isArray(blockPalette)) {
+				for (let i = 0; i < blockPalette.length; i++) {
+					const blockId = blockPalette[i];
+
+					// Use both the index and the full block ID as stateKeys
+					// This way we'll match regardless of how the block data is referencing the palette
+					const stateKey = i.toString();
+
+					// Block IDs typically look like 'minecraft:stone' or 'minecraft:redstone_wire[power=0,...]'
+					// Extract the base name for the texture
+					let textureName = "block/stone"; // Default texture
+
+					if (typeof blockId === "string") {
+						// Remove the minecraft: prefix and any state properties in brackets
+						const blockNameWithoutPrefix = blockId.replace("minecraft:", "");
+						const baseName = blockNameWithoutPrefix.split("[")[0];
+
+						// Use this base name for the texture key
+						textureName = `block/${baseName}`;
+					}
+
+					// Create a block definition with all 6 faces
+					const simpleCubeDef: BakedBlockDef = {
+						faces: [
+							this.createSimpleFace("north", textureName, [0, 0, -1]),
+							this.createSimpleFace("south", textureName, [0, 0, 1]),
+							this.createSimpleFace("east", textureName, [1, 0, 0]),
+							this.createSimpleFace("west", textureName, [-1, 0, 0]),
+							this.createSimpleFace("up", textureName, [0, 1, 0]),
+							this.createSimpleFace("down", textureName, [0, -1, 0]),
+						],
+						bbox: [0, 0, 0, 16, 16, 16], // Full block bounding box
+					};
+
+					blockDefs.push([stateKey, simpleCubeDef]);
+				}
+			}
+			// If it's an object mapping indices to block names
+			else if (
+				typeof blockPalette === "object" &&
+				!Array.isArray(blockPalette)
+			) {
+				for (const [index, blockId] of Object.entries(blockPalette)) {
+					// Use the index as stateKey
+					const stateKey = index;
+
+					// Extract base name from the block ID
+					let textureName = "block/stone"; // Default
+
+					if (typeof blockId === "string") {
+						// Remove minecraft: prefix and any state properties
+						const blockNameWithoutPrefix = blockId.replace("minecraft:", "");
+						const baseName = blockNameWithoutPrefix.split("[")[0];
+
+						textureName = `block/${baseName}`;
+						console.log(
+							`Block at index ${index} is ${blockId}, using texture: ${textureName}`
+						);
+					}
+
+					// Create a block definition with all 6 faces
+					const simpleCubeDef: BakedBlockDef = {
+						faces: [
+							this.createSimpleFace("north", textureName, [0, 0, -1]),
+							this.createSimpleFace("south", textureName, [0, 0, 1]),
+							this.createSimpleFace("east", textureName, [1, 0, 0]),
+							this.createSimpleFace("west", textureName, [-1, 0, 0]),
+							this.createSimpleFace("up", textureName, [0, 1, 0]),
+							this.createSimpleFace("down", textureName, [0, -1, 0]),
+						],
+						bbox: [0, 0, 0, 16, 16, 16], // Full block bounding box
+					};
+
+					blockDefs.push([stateKey, simpleCubeDef]);
+				}
+			} else {
+				console.warn("Unexpected block palette format:", typeof blockPalette);
+				return [];
+			}
+
+			return blockDefs;
+		} catch (error) {
+			console.error("Error processing block palette:", error);
+			return [];
+		}
+	}
+
+	/**
+	 * Creates a simplified face definition for placeholder blocks
+	 */
+	private createSimpleFace(
+		direction: string,
+		texKey: string,
+		normal: [number, number, number]
+	): any {
+		// Calculate vertices based on direction
+		let pos: number[];
+		const uvs = [0, 0, 1, 0, 0, 1, 1, 1]; // Default UVs
+
+		// The order of vertices is important to ensure correct face orientation
+		// We need to ensure the vertices are ordered counter-clockwise when viewed from outside
+		switch (direction) {
+			case "north": // -Z face
+				// For north face, use counter-clockwise winding when viewed from outside (-Z)
+				pos = [16, 0, 0, 0, 0, 0, 16, 16, 0, 0, 16, 0];
+				break;
+			case "south": // +Z face
+				// For south face, use counter-clockwise winding when viewed from outside (+Z)
+				pos = [0, 0, 16, 16, 0, 16, 0, 16, 16, 16, 16, 16];
+				break;
+			case "east": // +X face
+				// For east face, use counter-clockwise winding when viewed from outside (+X)
+				pos = [16, 0, 16, 16, 0, 0, 16, 16, 16, 16, 16, 0];
+				break;
+			case "west": // -X face
+				// For west face, use counter-clockwise winding when viewed from outside (-X)
+				pos = [0, 0, 0, 0, 0, 16, 0, 16, 0, 0, 16, 16];
+				break;
+			case "up": // +Y face (top)
+				// For top face, use counter-clockwise winding when viewed from above
+				pos = [0, 16, 16, 16, 16, 16, 0, 16, 0, 16, 16, 0];
+				break;
+			case "down": // -Y face (bottom)
+				// For bottom face, use counter-clockwise winding when viewed from below
+				pos = [0, 0, 0, 16, 0, 0, 0, 0, 16, 16, 0, 16];
+				break;
+			default:
+				pos = [0, 0, 0, 16, 0, 0, 0, 16, 0, 16, 16, 0];
+		}
+
+		// Register this texture key in our lookup map
+		this.registerTextureKey(texKey);
+
+		return {
+			pos,
+			uv: uvs,
+			normal: normal, // Using the normal passed in
+			texKey,
+		};
+	}
+
+	/**
+	 * Cleans up resources used by the mesh builder.
+	 */
+	public dispose(): void {
+		// Dispose all cached materials
+		this.materialCache.forEach((material) => {
+			if (material instanceof THREE.Material) {
+				material.dispose();
+			}
+		});
+
+		// Clear the caches
+		this.materialCache.clear();
+		this.textureKeyMap.clear();
+
+		console.log("WorldMeshBuilder disposed.");
+	}
 }

@@ -10,7 +10,13 @@ const wasmDestPath = path.resolve(__dirname, 'src/wasm');
 // Rust project path
 ///Users//RustroverProjects/schematic_utils
 
-const rustProjectPath = path.resolve(__dirname, '../minecraft_schematic_utils');
+
+// const rustProjectPath = path.resolve(__dirname, '~/RustroverProjects/schematic_utils');
+
+
+// use /Users/harrisonbastian/RustroverProjects/schematic_utils
+
+const rustProjectPath = path.resolve('/Users/harrisonbastian/RustroverProjects/schematic_utils');
 
 //check if the path is correct
 console.log(rustProjectPath);

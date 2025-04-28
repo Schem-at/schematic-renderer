@@ -17,6 +17,11 @@ export class BlockStateWrapper {
   name(): string;
   properties(): any;
 }
+export class JsChunksIterator {
+  free(): void;
+  constructor(schematic_wrapper: SchematicWrapper, chunk_width: number, chunk_height: number, chunk_length: number);
+  next(): any;
+}
 export class MchprsWorldWrapper {
   free(): void;
   constructor(schematic: SchematicWrapper);
@@ -52,8 +57,10 @@ export class SchematicWrapper {
   get_volume(): number;
   get_region_names(): string[];
   blocks(): Array<any>;
-  chunks(chunk_width: number, chunk_height: number, chunk_length: number): Array<any>;
+  chunks(chunk_width: number, chunk_height: number, chunk_length: number): any;
+  chunks_with_strategy(chunk_width: number, chunk_height: number, chunk_length: number, strategy: string, camera_x: number, camera_y: number, camera_z: number): Array<any>;
   get_chunk_blocks(offset_x: number, offset_y: number, offset_z: number, width: number, height: number, length: number): Array<any>;
+  get_block_palette(): Array<any>;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -71,50 +78,58 @@ export interface InitOutput {
   readonly __wbg_schematicwrapper_free: (a: number, b: number) => void;
   readonly __wbg_mchprsworldwrapper_free: (a: number, b: number) => void;
   readonly __wbg_blockstatewrapper_free: (a: number, b: number) => void;
+  readonly __wbg_jschunksiterator_free: (a: number, b: number) => void;
+  readonly jschunksiterator_new: (a: number, b: number, c: number, d: number) => number;
+  readonly jschunksiterator_next: (a: number) => any;
   readonly schematicwrapper_new: () => number;
   readonly schematicwrapper_create_simulation_world: (a: number) => number;
-  readonly schematicwrapper_from_data: (a: number, b: number, c: number, d: number) => void;
-  readonly schematicwrapper_from_litematic: (a: number, b: number, c: number, d: number) => void;
-  readonly schematicwrapper_to_litematic: (a: number, b: number) => void;
-  readonly schematicwrapper_from_schematic: (a: number, b: number, c: number, d: number) => void;
-  readonly schematicwrapper_to_schematic: (a: number, b: number) => void;
+  readonly schematicwrapper_from_data: (a: number, b: number, c: number) => [number, number];
+  readonly schematicwrapper_from_litematic: (a: number, b: number, c: number) => [number, number];
+  readonly schematicwrapper_to_litematic: (a: number) => [number, number, number, number];
+  readonly schematicwrapper_from_schematic: (a: number, b: number, c: number) => [number, number];
+  readonly schematicwrapper_to_schematic: (a: number) => [number, number, number, number];
   readonly schematicwrapper_set_block: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-  readonly schematicwrapper_set_block_from_string: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-  readonly schematicwrapper_copy_region: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => void;
-  readonly schematicwrapper_set_block_with_properties: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
-  readonly schematicwrapper_get_block: (a: number, b: number, c: number, d: number, e: number) => void;
+  readonly schematicwrapper_set_block_from_string: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+  readonly schematicwrapper_copy_region: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: any) => [number, number];
+  readonly schematicwrapper_set_block_with_properties: (a: number, b: number, c: number, d: number, e: number, f: number, g: any) => [number, number];
+  readonly schematicwrapper_get_block: (a: number, b: number, c: number, d: number) => [number, number];
   readonly schematicwrapper_get_block_with_properties: (a: number, b: number, c: number, d: number) => number;
-  readonly schematicwrapper_get_block_entity: (a: number, b: number, c: number, d: number) => number;
-  readonly schematicwrapper_get_all_block_entities: (a: number) => number;
-  readonly schematicwrapper_print_schematic: (a: number, b: number) => void;
-  readonly schematicwrapper_debug_info: (a: number, b: number) => void;
-  readonly schematicwrapper_get_dimensions: (a: number, b: number) => void;
+  readonly schematicwrapper_get_block_entity: (a: number, b: number, c: number, d: number) => any;
+  readonly schematicwrapper_get_all_block_entities: (a: number) => any;
+  readonly schematicwrapper_print_schematic: (a: number) => [number, number];
+  readonly schematicwrapper_debug_info: (a: number) => [number, number];
+  readonly schematicwrapper_get_dimensions: (a: number) => [number, number];
   readonly schematicwrapper_get_block_count: (a: number) => number;
   readonly schematicwrapper_get_volume: (a: number) => number;
-  readonly schematicwrapper_get_region_names: (a: number, b: number) => void;
-  readonly schematicwrapper_blocks: (a: number) => number;
-  readonly schematicwrapper_chunks: (a: number, b: number, c: number, d: number) => number;
-  readonly schematicwrapper_get_chunk_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
-  readonly mchprsworldwrapper_new: (a: number, b: number) => void;
+  readonly schematicwrapper_get_region_names: (a: number) => [number, number];
+  readonly schematicwrapper_blocks: (a: number) => any;
+  readonly schematicwrapper_chunks: (a: number, b: number, c: number, d: number) => any;
+  readonly schematicwrapper_chunks_with_strategy: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
+  readonly schematicwrapper_get_chunk_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly schematicwrapper_get_block_palette: (a: number) => any;
+  readonly mchprsworldwrapper_new: (a: number) => [number, number, number];
   readonly mchprsworldwrapper_on_use_block: (a: number, b: number, c: number, d: number) => void;
   readonly mchprsworldwrapper_tick: (a: number, b: number) => void;
   readonly mchprsworldwrapper_flush: (a: number) => void;
   readonly mchprsworldwrapper_is_lit: (a: number, b: number, c: number, d: number) => number;
   readonly mchprsworldwrapper_get_lever_power: (a: number, b: number, c: number, d: number) => number;
   readonly mchprsworldwrapper_get_redstone_power: (a: number, b: number, c: number, d: number) => number;
-  readonly mchprsworldwrapper_get_truth_table: (a: number) => number;
+  readonly mchprsworldwrapper_get_truth_table: (a: number) => any;
   readonly blockstatewrapper_new: (a: number, b: number) => number;
   readonly blockstatewrapper_with_property: (a: number, b: number, c: number, d: number, e: number) => void;
-  readonly blockstatewrapper_name: (a: number, b: number) => void;
-  readonly blockstatewrapper_properties: (a: number) => number;
-  readonly debug_schematic: (a: number, b: number) => void;
-  readonly debug_json_schematic: (a: number, b: number) => void;
+  readonly blockstatewrapper_name: (a: number) => [number, number];
+  readonly blockstatewrapper_properties: (a: number) => any;
+  readonly debug_schematic: (a: number) => [number, number];
+  readonly debug_json_schematic: (a: number) => [number, number];
   readonly start: () => void;
   readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly __wbindgen_export_2: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+  readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __externref_drop_slice: (a: number, b: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

@@ -27,20 +27,18 @@ export default defineConfig({
         },
       },
     },
+
   },
   plugins: [
     viteCommonjs(),
-
     wasm(),
     topLevelAwait()
   ],
-
   define: {
     'process.env': {},
     'global': 'globalThis',
   },
   optimizeDeps: {
-
     exclude: ['@wasm/minecraft_schematic_utils', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
   }
 });

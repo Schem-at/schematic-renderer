@@ -10,392 +10,427 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 export class RenderManager {
-    private schematicRenderer: SchematicRenderer;
-    public renderer!: THREE.WebGLRenderer;
-    private composer!: EffectComposer;
-    private passes: Map<string, any> = new Map();
-    private eventEmitter: EventEmitter;
-    private pmremGenerator!: THREE.PMREMGenerator;
-    private isRendering: boolean = false;
-    private hdriPath: string | null = null;
-    private hdriBackgroundOnly: boolean = true;
-    private currentEnvMap: THREE.Texture | null = null;
-    private disposed: boolean = false;
-    private contextLost: boolean = false;
-    private initialSizeSet: boolean = false;
-    private resizeTimeout: number | null = null;
+	private schematicRenderer: SchematicRenderer;
+	public renderer!: THREE.WebGLRenderer;
+	private composer!: EffectComposer;
+	private passes: Map<string, any> = new Map();
+	private eventEmitter: EventEmitter;
+	private pmremGenerator!: THREE.PMREMGenerator;
+	private isRendering: boolean = false;
+	private hdriPath: string | null = null;
+	private hdriBackgroundOnly: boolean = true;
+	private currentEnvMap: THREE.Texture | null = null;
+	private disposed: boolean = false;
+	private contextLost: boolean = false;
+	private initialSizeSet: boolean = false;
+	private resizeTimeout: number | null = null;
+	private renderRequested: boolean = false;
 
-    constructor(schematicRenderer: SchematicRenderer) {
-        this.schematicRenderer = schematicRenderer;
-        this.eventEmitter = this.schematicRenderer.eventEmitter;
+	constructor(schematicRenderer: SchematicRenderer) {
+		this.schematicRenderer = schematicRenderer;
+		this.eventEmitter = this.schematicRenderer.eventEmitter;
 
-        // Ensure we have proper initial size before initialization
-        this.setInitialSize();
-        
-        this.initRenderer();
-        this.initComposer();
-        this.initDefaultPasses(this.schematicRenderer.options);
-        this.setupEventListeners();
+		// Ensure we have proper initial size before initialization
+		this.setInitialSize();
 
-        // Set the size again after everything is initialized
-        this.updateCanvasSize();
+		this.initRenderer();
+		this.initComposer();
+		this.initDefaultPasses(this.schematicRenderer.options);
+		this.setupEventListeners();
 
-        if (this.schematicRenderer.options?.hdri !== undefined && 
-            this.schematicRenderer.options.hdri !== "") {
-            this.setupHDRIBackground(this.schematicRenderer.options.hdri);
-        }
-    }
+		// Set the size again after everything is initialized
+		this.updateCanvasSize();
 
-    private setInitialSize(): void {
-        const canvas = this.schematicRenderer.canvas;
-        const parent = canvas.parentElement;
-        
-        if (!parent) {
-            console.warn('Canvas parent element not found');
-            return;
-        }
+		if (
+			this.schematicRenderer.options?.hdri !== undefined &&
+			this.schematicRenderer.options.hdri !== ""
+		) {
+			this.setupHDRIBackground(this.schematicRenderer.options.hdri);
+		}
+	}
 
-        // Get the parent's dimensions
-        const rect = parent.getBoundingClientRect();
-        const width = rect.width;
-        const height = rect.height;
+	private setInitialSize(): void {
+		const canvas = this.schematicRenderer.canvas;
+		const parent = canvas.parentElement;
 
-        // Set canvas style dimensions
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
+		if (!parent) {
+			console.warn("Canvas parent element not found");
+			return;
+		}
 
-        // Set canvas buffer dimensions
-        canvas.width = width * window.devicePixelRatio;
-        canvas.height = height * window.devicePixelRatio;
+		// Get the parent's dimensions
+		const rect = parent.getBoundingClientRect();
+		const width = rect.width;
+		const height = rect.height;
 
-        this.initialSizeSet = true;
-    }
+		// Set canvas style dimensions
+		canvas.style.width = `${width}px`;
+		canvas.style.height = `${height}px`;
 
-    private initRenderer(): void {
-        this.renderer = new THREE.WebGLRenderer({
-            canvas: this.schematicRenderer.canvas,
-            alpha: true,
-            antialias: true,
-            powerPreference: "high-performance",
-            preserveDrawingBuffer: true
-        });
+		// Set canvas buffer dimensions
+		canvas.width = width * window.devicePixelRatio;
+		canvas.height = height * window.devicePixelRatio;
 
-        // Only set size if we have initial dimensions
-        if (this.initialSizeSet) {
-            const parent = this.schematicRenderer.canvas.parentElement;
-            if (parent) {
-                const width = parent.clientWidth;
-                const height = parent.clientHeight;
-                this.renderer.setSize(width, height, false);
-            }
-        }
+		this.initialSizeSet = true;
+	}
 
-        this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setClearColor(0x000000);
-    }
+	private initRenderer(): void {
+		this.renderer = new THREE.WebGLRenderer({
+			canvas: this.schematicRenderer.canvas,
+			alpha: true,
+			antialias: true,
+			powerPreference: "high-performance",
+			preserveDrawingBuffer: true,
+		});
 
-    private initComposer(): void {
-        this.composer = new EffectComposer(this.renderer);
-        const renderPass = new RenderPass(
-            this.schematicRenderer.sceneManager.scene,
-            this.schematicRenderer.cameraManager.activeCamera.camera
-        );
-        this.composer.addPass(renderPass);
-        this.passes.set("renderPass", renderPass);
-    }
+		// Only set size if we have initial dimensions
+		if (this.initialSizeSet) {
+			const parent = this.schematicRenderer.canvas.parentElement;
+			if (parent) {
+				const width = parent.clientWidth;
+				const height = parent.clientHeight;
+				this.renderer.setSize(width, height, false);
+			}
+		}
 
-    public setupHDRIBackground(hdriPath: string, backgroundOnly: boolean = true): void {
-        this.hdriPath = hdriPath;
-        this.hdriBackgroundOnly = backgroundOnly;
-        
-        this.loadHDRI(hdriPath, backgroundOnly);
-        
-        const canvas = this.renderer.domElement;
-        canvas.removeEventListener('webglcontextlost', this.handleContextLost);
-        canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
-        canvas.addEventListener('webglcontextlost', this.handleContextLost, false);
-        canvas.addEventListener('webglcontextrestored', this.handleContextRestored, false);
-    }
+		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+		this.renderer.setPixelRatio(window.devicePixelRatio);
+		this.renderer.setClearColor(0x000000);
+	}
 
-    private isPMREMGeneratorDisposed(): boolean {
-        return !this.pmremGenerator || 
-               (this.pmremGenerator as any)._blurMaterial === null;
-    }
+	private initComposer(): void {
+		this.composer = new EffectComposer(this.renderer);
+		const renderPass = new RenderPass(
+			this.schematicRenderer.sceneManager.scene,
+			this.schematicRenderer.cameraManager.activeCamera.camera
+		);
+		this.composer.addPass(renderPass);
+		this.passes.set("renderPass", renderPass);
+	}
 
-    private loadHDRI(hdriPath: string, backgroundOnly: boolean): void {
-        const hdriLoader = new RGBELoader();
-        
-        hdriLoader.load(
-            hdriPath,
-            (texture) => {
-                if (this.disposed) {
-                    texture.dispose();
-                    return;
-                }
+	public setupHDRIBackground(
+		hdriPath: string,
+		backgroundOnly: boolean = true
+	): void {
+		this.hdriPath = hdriPath;
+		this.hdriBackgroundOnly = backgroundOnly;
 
-                if (this.isPMREMGeneratorDisposed()) {
-                    this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-                }
+		this.loadHDRI(hdriPath, backgroundOnly);
 
-                const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
-                this.currentEnvMap = envMap;
-                texture.dispose();
+		const canvas = this.renderer.domElement;
+		canvas.removeEventListener("webglcontextlost", this.handleContextLost);
+		canvas.removeEventListener(
+			"webglcontextrestored",
+			this.handleContextRestored
+		);
+		canvas.addEventListener("webglcontextlost", this.handleContextLost, false);
+		canvas.addEventListener(
+			"webglcontextrestored",
+			this.handleContextRestored,
+			false
+		);
+	}
 
-                if (backgroundOnly) {
-                    const backgroundTexture = new THREE.WebGLCubeRenderTarget(1024)
-                        .fromEquirectangularTexture(this.renderer, texture);
-                    this.schematicRenderer.sceneManager.scene.background = backgroundTexture.texture;
-                } else {
-                    this.schematicRenderer.sceneManager.scene.environment = envMap;
-                    this.schematicRenderer.sceneManager.scene.background = envMap;
-                }
+	private isPMREMGeneratorDisposed(): boolean {
+		return (
+			!this.pmremGenerator ||
+			(this.pmremGenerator as any)._blurMaterial === null
+		);
+	}
 
-                this.pmremGenerator.dispose();
-                
-                this.eventEmitter.emit('hdriLoaded', { path: hdriPath });
-            },
-            (progress) => {
-                this.eventEmitter.emit('hdriProgress', { 
-                    loaded: progress.loaded,
-                    total: progress.total 
-                });
-            },
-            (error) => {
-                console.error("HDRI loading failed:", error);
-                this.eventEmitter.emit('hdriError', { error });
-            }
-        );
-    }
+	private loadHDRI(hdriPath: string, backgroundOnly: boolean): void {
+		const hdriLoader = new RGBELoader();
 
-    private handleContextLost = (event: Event): void => {
-        event.preventDefault();
-        this.contextLost = true;
-        this.isRendering = false;
-        console.log("WebGL context lost. Suspending render operations...");
-        this.eventEmitter.emit('webglContextLost');
-    }
+		hdriLoader.load(
+			hdriPath,
+			(texture) => {
+				if (this.disposed) {
+					texture.dispose();
+					return;
+				}
 
-    private handleContextRestored = async (): Promise<void> => {
-        console.log("WebGL context restored. Reinitializing renderer...");
-        
-        try {
-            // Wait a bit before reinitializing
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            this.contextLost = false;
+				if (this.isPMREMGeneratorDisposed()) {
+					this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+				}
 
-            // Reinitialize renderer
-            this.initRenderer();
-            this.initComposer();
-            this.initDefaultPasses(this.schematicRenderer.options);
-            
-            // Update sizes
-            this.updateCanvasSize();
-            
-            // Reload HDRI if it was previously set
-            if (this.hdriPath) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                this.loadHDRI(this.hdriPath, this.hdriBackgroundOnly);
-            }
+				const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
+				this.currentEnvMap = envMap;
+				texture.dispose();
 
-            this.eventEmitter.emit('webglContextRestored');
+				if (backgroundOnly) {
+					const backgroundTexture = new THREE.WebGLCubeRenderTarget(
+						1024
+					).fromEquirectangularTexture(this.renderer, texture);
+					this.schematicRenderer.sceneManager.scene.background =
+						backgroundTexture.texture;
+				} else {
+					this.schematicRenderer.sceneManager.scene.environment = envMap;
+					this.schematicRenderer.sceneManager.scene.background = envMap;
+				}
 
-            // Force a new render after everything is reinitialized
-            requestAnimationFrame(() => {
-                if (!this.contextLost) {
-                    this.render();
-                }
-            });
-        } catch (error) {
-            console.error("Error during context restoration:", error);
-            this.eventEmitter.emit('webglContextError', { error });
-        }
-    }
+				this.pmremGenerator.dispose();
 
-    private initDefaultPasses(options: any): void {
-        // Gamma Correction Effect
-        const gammaCorrectionEffect = new GammaCorrectionEffect(
-            options.gamma ?? 0.5
-        );
-        this.passes.set("gammaCorrection", gammaCorrectionEffect);
+				this.eventEmitter.emit("hdriLoaded", { path: hdriPath });
+			},
+			(progress) => {
+				this.eventEmitter.emit("hdriProgress", {
+					loaded: progress.loaded,
+					total: progress.total,
+				});
+			},
+			(error) => {
+				console.error("HDRI loading failed:", error);
+				this.eventEmitter.emit("hdriError", { error });
+			}
+		);
+	}
 
-        // SMAA Effect
-        const smaaEffect = new SMAAEffect();
-        this.passes.set("smaa", smaaEffect);
+	private handleContextLost = (event: Event): void => {
+		event.preventDefault();
+		this.contextLost = true;
+		this.isRendering = false;
+		console.log("WebGL context lost. Suspending render operations...");
+		this.eventEmitter.emit("webglContextLost");
+	};
 
-        // SSAO Effect
-        const ssaoEffect = new SSAOEffect(
-            this.composer,
-            this.schematicRenderer.cameraManager.activeCamera.camera,
-            this.schematicRenderer.sceneManager.scene
-        );
-        this.passes.set("ssao", ssaoEffect);
+	private handleContextRestored = async (): Promise<void> => {
+		console.log("WebGL context restored. Reinitializing renderer...");
 
-        // Create an EffectPass with all effects
-        const effectPass = new EffectPass(
-            this.schematicRenderer.cameraManager.activeCamera.camera,
-            gammaCorrectionEffect,
-            smaaEffect,
-            ssaoEffect
-        );
-        effectPass.renderToScreen = true;
-        this.composer.addPass(effectPass);
-        this.passes.set("effectPass", effectPass);
-    }
+		try {
+			// Wait a bit before reinitializing
+			await new Promise((resolve) => setTimeout(resolve, 300));
 
-    private setupEventListeners(): void {
-        window.addEventListener("resize", () => {
-            if (this.resizeTimeout) {
-                window.cancelAnimationFrame(this.resizeTimeout);
-            }
-            this.resizeTimeout = window.requestAnimationFrame(() => {
-                this.updateCanvasSize();
-                this.resizeTimeout = null;
-            });
-        });
-    }
+			this.contextLost = false;
 
-    public updateCanvasSize(): void {
-        const canvas = this.schematicRenderer.canvas;
-        const parent = canvas.parentElement;
-        if (!parent) return;
+			// Reinitialize renderer
+			this.initRenderer();
+			this.initComposer();
+			this.initDefaultPasses(this.schematicRenderer.options);
 
-        const width = parent.clientWidth;
-        const height = parent.clientHeight;
+			// Update sizes
+			this.updateCanvasSize();
 
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        
-        // Only update renderer and composer if context isn't lost
-        if (!this.contextLost) {
-            this.renderer.setSize(width, height, false);
-            this.composer.setSize(width, height);
+			// Reload HDRI if it was previously set
+			if (this.hdriPath) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				this.loadHDRI(this.hdriPath, this.hdriBackgroundOnly);
+			}
 
-            const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-        }
-    }
+			this.eventEmitter.emit("webglContextRestored");
 
-    public enableEffect(effectName: string): void {
-        const effect = this.passes.get(effectName);
-        if (effect) {
-            effect.enabled = true;
-        }
-    }
+			// Force a new render after everything is reinitialized
+			requestAnimationFrame(() => {
+				if (!this.contextLost) {
+					this.render();
+				}
+			});
+		} catch (error) {
+			console.error("Error during context restoration:", error);
+			this.eventEmitter.emit("webglContextError", { error });
+		}
+	};
 
-    public disableEffect(effectName: string): void {
-        const effect = this.passes.get(effectName);
-        if (effect) {
-            effect.enabled = false;
-        }
-    }
+	private initDefaultPasses(options: any): void {
+		// Gamma Correction Effect
+		const gammaCorrectionEffect = new GammaCorrectionEffect(
+			options.gamma ?? 0.5
+		);
+		this.passes.set("gammaCorrection", gammaCorrectionEffect);
 
-    public setGamma(value: number): void {
-        const gammaEffect = this.passes.get("gammaCorrection");
-        if (gammaEffect) {
-            gammaEffect.setGamma(value);
-        }
-    }
+		// SMAA Effect
+		const smaaEffect = new SMAAEffect();
+		this.passes.set("smaa", smaaEffect);
 
-    public setSSAOParameters(params: any): void {
-        const ssaoEffect = this.passes.get("ssao");
-        if (ssaoEffect) {
-            Object.assign(ssaoEffect, params);
-        }
-    }
+		// SSAO Effect
+		const ssaoEffect = new SSAOEffect(
+			this.composer,
+			this.schematicRenderer.cameraManager.activeCamera.camera,
+			this.schematicRenderer.sceneManager.scene
+		);
+		this.passes.set("ssao", ssaoEffect);
 
-    public render(): void {
-        if (this.isRendering || this.contextLost || this.disposed) return;
-        
-        try {
-            this.isRendering = true;
-            
-            const gl = this.renderer.getContext();
-            if (!gl || gl.isContextLost()) {
-                console.warn("Attempted to render with lost WebGL context");
-                this.contextLost = true;
-                return;
-            }
-            
-            this.composer.render();
-        } catch (error) {
-            console.error("Render error:", error);
-            this.eventEmitter.emit('renderError', { error });
-        } finally {
-            this.isRendering = false;
-        }
-    }
+		// Create an EffectPass with all effects
+		const effectPass = new EffectPass(
+			this.schematicRenderer.cameraManager.activeCamera.camera,
+			gammaCorrectionEffect,
+			smaaEffect,
+			ssaoEffect
+		);
+		effectPass.renderToScreen = true;
+		this.composer.addPass(effectPass);
+		this.passes.set("effectPass", effectPass);
+	}
 
-    public resize(width: number, height: number): void {
-        if (this.contextLost) return;
-        
-        this.renderer.setSize(width, height, false);
-        this.composer.setSize(width, height);
-        
-        const camera = this.schematicRenderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
-    }
+	private setupEventListeners(): void {
+		window.addEventListener("resize", () => {
+			if (this.resizeTimeout) {
+				window.cancelAnimationFrame(this.resizeTimeout);
+			}
+			this.resizeTimeout = window.requestAnimationFrame(() => {
+				this.updateCanvasSize();
+				this.resizeTimeout = null;
+			});
+		});
+	}
 
-    public updateCamera(camera: THREE.Camera): void {
-        const renderPass = this.passes.get("renderPass");
-        if (renderPass) {
-            renderPass.camera = camera;
-        }
+	public updateCanvasSize(): void {
+		const canvas = this.schematicRenderer.canvas;
+		const parent = canvas.parentElement;
+		if (!parent) return;
 
-        const effectPass = this.passes.get("effectPass");
-        if (effectPass) {
-            effectPass.camera = camera;
-        }
+		const width = parent.clientWidth;
+		const height = parent.clientHeight;
 
-        const ssaoEffect = this.passes.get("ssao");
-        if (ssaoEffect && ssaoEffect.setCamera) {
-            ssaoEffect.setCamera(camera);
-        }
-    }
+		canvas.style.width = `${width}px`;
+		canvas.style.height = `${height}px`;
 
-    public getRenderer(): THREE.WebGLRenderer {
-        return this.renderer;
-    }
+		// Only update renderer and composer if context isn't lost
+		if (!this.contextLost) {
+			this.renderer.setSize(width, height, false);
+			this.composer.setSize(width, height);
 
-    public getEffect(effectName: string): any {
-        return this.passes.get(effectName);
-    }
+			const camera = this.schematicRenderer.cameraManager.activeCamera
+				.camera as THREE.PerspectiveCamera;
+			camera.aspect = width / height;
+			camera.updateProjectionMatrix();
+		}
+	}
 
-    public dispose(): void {
-        this.disposed = true;
-        this.contextLost = true;
+	public enableEffect(effectName: string): void {
+		const effect = this.passes.get(effectName);
+		if (effect) {
+			effect.enabled = true;
+		}
+	}
 
-        // Clear resize timeout if it exists
-        if (this.resizeTimeout !== null) {
-            window.cancelAnimationFrame(this.resizeTimeout);
-            this.resizeTimeout = null;
-        }
+	public disableEffect(effectName: string): void {
+		const effect = this.passes.get(effectName);
+		if (effect) {
+			effect.enabled = false;
+		}
+	}
 
-        window.removeEventListener("resize", this.updateCanvasSize);
-        const canvas = this.renderer.domElement;
-        canvas.removeEventListener('webglcontextlost', this.handleContextLost);
-        canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+	public setGamma(value: number): void {
+		const gammaEffect = this.passes.get("gammaCorrection");
+		if (gammaEffect) {
+			gammaEffect.setGamma(value);
+		}
+	}
 
-        this.passes.forEach(pass => {
-            if (pass.dispose) pass.dispose();
-        });
-        this.passes.clear();
+	public setSSAOParameters(params: any): void {
+		const ssaoEffect = this.passes.get("ssao");
+		if (ssaoEffect) {
+			Object.assign(ssaoEffect, params);
+		}
+	}
 
-        if (this.composer) {
-            this.composer.dispose();
-        }
+	public requestRender(): void {
+		if (!this.renderRequested && !this.contextLost && !this.disposed) {
+			this.renderRequested = true;
 
-        if (this.pmremGenerator && !this.isPMREMGeneratorDisposed()) {
-            this.pmremGenerator.dispose();
-        }
+			requestAnimationFrame(() => {
+				if (!this.contextLost && !this.disposed) {
+					this.render();
+				}
+				this.renderRequested = false;
+			});
+		}
+	}
 
-        if (this.currentEnvMap) {
-            this.currentEnvMap.dispose();
-        }
+	public render(): void {
+		if (this.isRendering || this.contextLost || this.disposed) return;
 
-        this.renderer.dispose();
-    }
+		try {
+			this.isRendering = true;
+
+			const gl = this.renderer.getContext();
+			if (!gl || gl.isContextLost()) {
+				console.warn("Attempted to render with lost WebGL context");
+				this.contextLost = true;
+				return;
+			}
+
+			this.composer.render();
+		} catch (error) {
+			console.error("Render error:", error);
+			this.eventEmitter.emit("renderError", { error });
+		} finally {
+			this.isRendering = false;
+		}
+	}
+
+	public resize(width: number, height: number): void {
+		if (this.contextLost) return;
+
+		this.renderer.setSize(width, height, false);
+		this.composer.setSize(width, height);
+
+		const camera = this.schematicRenderer.cameraManager.activeCamera
+			.camera as THREE.PerspectiveCamera;
+		camera.aspect = width / height;
+		camera.updateProjectionMatrix();
+	}
+
+	public updateCamera(camera: THREE.Camera): void {
+		const renderPass = this.passes.get("renderPass");
+		if (renderPass) {
+			renderPass.camera = camera;
+		}
+
+		const effectPass = this.passes.get("effectPass");
+		if (effectPass) {
+			effectPass.camera = camera;
+		}
+
+		const ssaoEffect = this.passes.get("ssao");
+		if (ssaoEffect && ssaoEffect.setCamera) {
+			ssaoEffect.setCamera(camera);
+		}
+	}
+
+	public getRenderer(): THREE.WebGLRenderer {
+		return this.renderer;
+	}
+
+	public getEffect(effectName: string): any {
+		return this.passes.get(effectName);
+	}
+
+	public dispose(): void {
+		this.disposed = true;
+		this.contextLost = true;
+
+		// Clear resize timeout if it exists
+		if (this.resizeTimeout !== null) {
+			window.cancelAnimationFrame(this.resizeTimeout);
+			this.resizeTimeout = null;
+		}
+
+		window.removeEventListener("resize", this.updateCanvasSize);
+		const canvas = this.renderer.domElement;
+		canvas.removeEventListener("webglcontextlost", this.handleContextLost);
+		canvas.removeEventListener(
+			"webglcontextrestored",
+			this.handleContextRestored
+		);
+
+		this.passes.forEach((pass) => {
+			if (pass.dispose) pass.dispose();
+		});
+		this.passes.clear();
+
+		if (this.composer) {
+			this.composer.dispose();
+		}
+
+		if (this.pmremGenerator && !this.isPMREMGeneratorDisposed()) {
+			this.pmremGenerator.dispose();
+		}
+
+		if (this.currentEnvMap) {
+			this.currentEnvMap.dispose();
+		}
+
+		this.renderer.dispose();
+	}
 }

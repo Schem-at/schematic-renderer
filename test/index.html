@@ -5,7 +5,6 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Schematic Renderer Pro</title>
 
-
 		<!-- Include your main JavaScript file -->
 		<script type="module" src="./main.ts"></script>
 
@@ -208,7 +207,6 @@
 										>Change Background Color</a
 									>
 								</li>
-								
 							</ul>
 						</div>
 						<!-- Camera Dropdown -->
@@ -391,7 +389,7 @@
 							class="w-full"
 						/>
 					</div>
-					
+
 					<!-- Button to start/stop the camera animation -->
 					<button
 						class="btn btn-primary w-full"
@@ -507,7 +505,6 @@
 						document
 							.getElementById("canvas")
 							.addEventListener("rendererInitialized", () => {
-								console.log("Renderer initialized");
 								this.renderer =
 									document.getElementById("canvas").schematicRenderer;
 
@@ -568,7 +565,6 @@
 										this.updateSchematicsList();
 									}
 								);
-
 
 								// Load resource packs
 								this.updateResourcePacksList();
@@ -762,7 +758,6 @@
 						input.click();
 					},
 
-
 					resetCamera() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
@@ -817,117 +812,129 @@
 							},
 						});
 					},
-          startVideoRecording() {
-            if (!this.renderer) {
-                console.warn("Renderer not initialized");
-                return;
-            }
-        
-            if (this.isRecording) {
-                console.warn("Recording is already in progress.");
-                return;
-            }
-			this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics("circularPath")
+					startVideoRecording() {
+						if (!this.renderer) {
+							console.warn("Renderer not initialized");
+							return;
+						}
 
-        
-            this.isRecording = true;
-            const duration = this.cameraPathParams.orbitTime || 5;
-        
-            // Hide UI elements during recording
-            this.renderer.cameraManager.cameraPathManager.hidePathVisualization("circularPath");
-            this.renderer.sceneManager.showAxes = false;
-            //this.renderer.sceneManager.showGrid = false;
-            this.showCameraControls = false;
-        
-            // Start recording
-            this.renderer.cameraManager.recordingManager.startRecording(duration, {
-                width: 1920,
-                height: 1080,
-                frameRate: 24,
-				//videoBitsPerSecond: 2500000,
+						if (this.isRecording) {
+							console.warn("Recording is already in progress.");
+							return;
+						}
+						this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics(
+							"circularPath"
+						);
 
-                onProgress: (progress) => {
-                    this.recordingProgress = Math.round(progress * 100);
-                },
-                onComplete: (blob) => {
-                    this.isRecording = false;
-                    this.recordingProgress = 0;
-        
-                    // Download the recorded video
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.style.display = "none";
-                    a.href = url;
-                    a.download = "animation.webm";
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-        
-                    // Restore UI elements
-                    if (this.showCameraControls) {
-                        this.renderer.cameraManager.cameraPathManager.showPathVisualization("circularPath");
-                    }
-                }
-            }).catch((error) => {
-                console.error("Recording failed:", error);
-                this.isRecording = false;
-                this.recordingProgress = 0;
-                
-                // Restore UI elements
-                if (this.showCameraControls) {
-                    this.renderer.cameraManager.cameraPathManager.showPathVisualization("circularPath");
-                }
-                
-                // Show error to user
-                alert(`Recording failed: ${error.message}`);
-            });
-        },
-        
-        // Optional: You can also update the toggleCameraAnimation function to show how to animate without recording
-        toggleCameraAnimation() {
-            if (!this.renderer) {
-                console.warn("Renderer not initialized");
-                return;
-            }
-        
-            if (this.isAnimating) {
-                // Stop the animation
-                this.renderer.cameraManager.stopAnimation();
-                this.isAnimating = false;
-            } else {
-                // Start the animation without recording
-                this.renderer.cameraManager.animateCameraAlongPath({
-                    duration: this.cameraPathParams.orbitTime,
-                    lookAtTarget: true,
-                    updateControls: true,
-                    onUpdate: (progress) => {
-                        // Optional: Add any progress updates for the animation
-                    },
-                    onComplete: () => {
-                        this.isAnimating = false;
-                    }
-                });
-                this.isAnimating = true;
-            }
-        },
+						this.isRecording = true;
+						const duration = this.cameraPathParams.orbitTime || 5;
+
+						// Hide UI elements during recording
+						this.renderer.cameraManager.cameraPathManager.hidePathVisualization(
+							"circularPath"
+						);
+						this.renderer.sceneManager.showAxes = false;
+						//this.renderer.sceneManager.showGrid = false;
+						this.showCameraControls = false;
+
+						// Start recording
+						this.renderer.cameraManager.recordingManager
+							.startRecording(duration, {
+								width: 1920,
+								height: 1080,
+								frameRate: 24,
+								//videoBitsPerSecond: 2500000,
+
+								onProgress: (progress) => {
+									this.recordingProgress = Math.round(progress * 100);
+								},
+								onComplete: (blob) => {
+									this.isRecording = false;
+									this.recordingProgress = 0;
+
+									// Download the recorded video
+									const url = URL.createObjectURL(blob);
+									const a = document.createElement("a");
+									a.style.display = "none";
+									a.href = url;
+									a.download = "animation.webm";
+									document.body.appendChild(a);
+									a.click();
+									window.URL.revokeObjectURL(url);
+									document.body.removeChild(a);
+
+									// Restore UI elements
+									if (this.showCameraControls) {
+										this.renderer.cameraManager.cameraPathManager.showPathVisualization(
+											"circularPath"
+										);
+									}
+								},
+							})
+							.catch((error) => {
+								console.error("Recording failed:", error);
+								this.isRecording = false;
+								this.recordingProgress = 0;
+
+								// Restore UI elements
+								if (this.showCameraControls) {
+									this.renderer.cameraManager.cameraPathManager.showPathVisualization(
+										"circularPath"
+									);
+								}
+
+								// Show error to user
+								alert(`Recording failed: ${error.message}`);
+							});
+					},
+
+					// Optional: You can also update the toggleCameraAnimation function to show how to animate without recording
+					toggleCameraAnimation() {
+						if (!this.renderer) {
+							console.warn("Renderer not initialized");
+							return;
+						}
+
+						if (this.isAnimating) {
+							// Stop the animation
+							this.renderer.cameraManager.stopAnimation();
+							this.isAnimating = false;
+						} else {
+							// Start the animation without recording
+							this.renderer.cameraManager.animateCameraAlongPath({
+								duration: this.cameraPathParams.orbitTime,
+								lookAtTarget: true,
+								updateControls: true,
+								onUpdate: (progress) => {
+									// Optional: Add any progress updates for the animation
+								},
+								onComplete: () => {
+									this.isAnimating = false;
+								},
+							});
+							this.isAnimating = true;
+						}
+					},
 					updateCameraPathParameters() {
 						if (!this.renderer) {
 							console.warn("Renderer not initialized");
 							return;
 						}
 						// Call the renderer method to update camera path parameters
-						this.renderer.cameraManager.cameraPathManager.updatePathParameters("circularPath", {
-							height: this.cameraPathParams.height,
-							radius: this.cameraPathParams.radius,
-							target: [
-								this.cameraPathParams.targetX,
-								this.cameraPathParams.targetY,
-								this.cameraPathParams.targetZ,
-							],
-						});
+						this.renderer.cameraManager.cameraPathManager.updatePathParameters(
+							"circularPath",
+							{
+								height: this.cameraPathParams.height,
+								radius: this.cameraPathParams.radius,
+								target: [
+									this.cameraPathParams.targetX,
+									this.cameraPathParams.targetY,
+									this.cameraPathParams.targetZ,
+								],
+							}
+						);
 					},
-					
+
 					toggleDarkMode() {
 						this.isDarkMode = !this.isDarkMode;
 						document.documentElement.setAttribute(

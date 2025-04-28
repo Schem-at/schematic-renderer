@@ -100,11 +100,9 @@ export class SchematicManager {
 		});
 
 		const schematicObject = new SchematicObject(
+			this.schematicRenderer,
 			name,
 			schematicWrapper,
-			this.worldMeshBuilder,
-			this.eventEmitter,
-			this.sceneManager,
 			properties
 		);
 
@@ -126,7 +124,11 @@ export class SchematicManager {
 		}
 		this.addSchematic(schematicObject);
 		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
-		if (properties?.focused || !properties || properties.focused === undefined) {
+		if (
+			properties?.focused ||
+			!properties ||
+			properties.focused === undefined
+		) {
 			this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
 		}
 
@@ -135,8 +137,6 @@ export class SchematicManager {
 			progress: 100,
 			message: "Complete",
 		});
-		
-
 	}
 
 	public async removeAllSchematics() {
@@ -170,7 +170,6 @@ export class SchematicManager {
 						key
 					);
 				});
-				
 			}
 		}
 	}
@@ -183,12 +182,15 @@ export class SchematicManager {
 	): Promise<void> {
 		try {
 			// Start showing progress in UI if enabled
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
-				this.schematicRenderer.uiManager.showProgressBar(`Loading ${file.name}`);
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.showProgressBar(
+					`Loading ${file.name}`
+				);
 			}
-			
+
 			// File reading stage
 			const arrayBuffer = await this.readFileWithProgress(file, (progress) => {
 				// Update progress callback if provided
@@ -197,11 +199,12 @@ export class SchematicManager {
 					progress,
 					message: "Reading file...",
 				});
-				
+
 				// Update UI progress bar
-				if (this.schematicRenderer.options.enableProgressBar && 
-					this.schematicRenderer.uiManager) {
-					
+				if (
+					this.schematicRenderer.options.enableProgressBar &&
+					this.schematicRenderer.uiManager
+				) {
 					this.schematicRenderer.uiManager.updateProgress(
 						progress / 100, // Convert to 0-1 range
 						`Reading ${file.name}...`
@@ -215,14 +218,15 @@ export class SchematicManager {
 				onProgress: (progress) => {
 					// Update progress callback if provided
 					options?.onProgress?.(progress);
-					
+
 					// Update UI progress bar
-					if (this.schematicRenderer.options.enableProgressBar && 
-						this.schematicRenderer.uiManager) {
-						
+					if (
+						this.schematicRenderer.options.enableProgressBar &&
+						this.schematicRenderer.uiManager
+					) {
 						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
-						const overallProgress = 0.2 + (progress.progress / 100 * 0.8);
-						
+						const overallProgress = 0.2 + (progress.progress / 100) * 0.8;
+
 						this.schematicRenderer.uiManager.updateProgress(
 							overallProgress,
 							progress.message
@@ -232,9 +236,10 @@ export class SchematicManager {
 			});
 
 			// Hide progress bar when complete
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 
@@ -242,12 +247,13 @@ export class SchematicManager {
 			this.eventEmitter.emit("schematicLoaded", { id });
 		} catch (error) {
 			// Hide progress bar on error
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
-			
+
 			this.eventEmitter.emit("schematicLoadError", { error });
 			throw error;
 		}
@@ -270,60 +276,73 @@ export class SchematicManager {
 	): Promise<void> {
 		try {
 			// Generate a name for display
-			const displayName = name || new URL(url).pathname.split("/").pop() || "schematic";
-			
+			const displayName =
+				name || new URL(url).pathname.split("/").pop() || "schematic";
+
 			// Start showing progress in UI if enabled
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
-				this.schematicRenderer.uiManager.showProgressBar(`Loading ${displayName}`);
-				this.schematicRenderer.uiManager.updateProgress(0, "Fetching schematic from URL...");
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.showProgressBar(
+					`Loading ${displayName}`
+				);
+				this.schematicRenderer.uiManager.updateProgress(
+					0,
+					"Fetching schematic from URL..."
+				);
 			}
-			
+
 			// File reading stage
 			options?.onProgress?.({
 				stage: "file_reading",
 				progress: 0,
 				message: "Fetching schematic from URL...",
 			});
-	
+
 			// Fetch the schematic
 			const response = await fetch(url);
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
-			
+
 			// Update progress to 20% after fetch completes
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
-				this.schematicRenderer.uiManager.updateProgress(0.2, "Download complete, processing schematic...");
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.updateProgress(
+					0.2,
+					"Download complete, processing schematic..."
+				);
 			}
-			
+
 			options?.onProgress?.({
 				stage: "file_reading",
 				progress: 100,
 				message: "Download complete, processing schematic...",
 			});
-	
+
 			const arrayBuffer = await response.arrayBuffer();
-	
+
 			// Generate a name if none provided
-			const schematicName = name || new URL(url).pathname.split("/").pop() || "schematic_from_url";
-	
+			const schematicName =
+				name || new URL(url).pathname.split("/").pop() || "schematic_from_url";
+
 			// Load the schematic with progress tracking
 			await this.loadSchematic(schematicName, arrayBuffer, properties, {
 				onProgress: (progress) => {
 					// Update progress callback if provided
 					options?.onProgress?.(progress);
-					
+
 					// Update UI progress bar
-					if (this.schematicRenderer.options.enableProgressBar && 
-						this.schematicRenderer.uiManager) {
-						
+					if (
+						this.schematicRenderer.options.enableProgressBar &&
+						this.schematicRenderer.uiManager
+					) {
 						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
-						const overallProgress = 0.2 + (progress.progress / 100 * 0.8);
-						
+						const overallProgress = 0.2 + (progress.progress / 100) * 0.8;
+
 						this.schematicRenderer.uiManager.updateProgress(
 							overallProgress,
 							progress.message
@@ -331,24 +350,26 @@ export class SchematicManager {
 					}
 				},
 			});
-	
+
 			// Hide progress bar when complete
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
-	
+
 			// Emit completion event
 			this.eventEmitter.emit("schematicLoaded", { id: schematicName });
 		} catch (error) {
 			// Hide progress bar on error
-			if (this.schematicRenderer.options.enableProgressBar && 
-				this.schematicRenderer.uiManager) {
-				
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
-			
+
 			this.eventEmitter.emit("schematicLoadError", { error });
 			throw error;
 		}
@@ -357,22 +378,25 @@ export class SchematicManager {
 	public async removeSchematic(name: string) {
 		const schematicObject = this.schematics.get(name);
 		if (!schematicObject) return;
-		
+
 		try {
 			// Remove from map first to prevent any new operations on this schematic
 			this.schematics.delete(name);
-			
+
 			// Get meshes - if this fails, at least the schematic is removed from the map
 			const meshes = await schematicObject.getMeshes();
-			console.log('Before removal - scene children:', this.sceneManager.scene.children.length);
-			console.log('Meshes to remove:', meshes.length);
+			console.log(
+				"Before removal - scene children:",
+				this.sceneManager.scene.children.length
+			);
+			console.log("Meshes to remove:", meshes.length);
 			// Use traverse to ensure we catch all nested objects
 			schematicObject.group.traverse((object) => {
 				if (object instanceof THREE.Mesh) {
 					this.sceneManager.scene.remove(object);
 					if (object.geometry) object.geometry.dispose();
 					if (Array.isArray(object.material)) {
-						object.material.forEach(m => m.dispose());
+						object.material.forEach((m) => m.dispose());
 					} else if (object.material) {
 						object.material.dispose();
 					}
@@ -380,10 +404,10 @@ export class SchematicManager {
 			});
 
 			schematicObject.group.clear(); // Clear the group to remove all children
-			
+
 			// Remove the group last
 			this.sceneManager.scene.remove(schematicObject.group);
-			
+
 			this.eventEmitter.emit("schematicRemoved", { id: name });
 		} catch (error) {
 			console.error("Error removing schematic:", error);
@@ -391,8 +415,11 @@ export class SchematicManager {
 			this.schematics.set(name, schematicObject);
 		}
 
-		console.log('After removal - scene children:', this.sceneManager.scene.children.length);
-		
+		console.log(
+			"After removal - scene children:",
+			this.sceneManager.scene.children.length
+		);
+
 		if (this.isEmpty() && this.schematicRenderer.uiManager) {
 			this.schematicRenderer.uiManager.showEmptyState();
 		}

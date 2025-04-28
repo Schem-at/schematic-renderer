@@ -53,8 +53,8 @@ const renderer = new SchematicRenderer(
 	canvas,
 	{
 		// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
-		"schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
-		// "xor": () => Promise.resolve(base64ToArrayBuffer(xor)),
+		// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+		xor: () => Promise.resolve(base64ToArrayBuffer(xor)),
 		// "diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
 	{},
@@ -73,7 +73,7 @@ const renderer = new SchematicRenderer(
 		dragAndDropOptions: {
 			acceptedFileTypes: ["schematic", "nbt", "schem", "litematic"],
 		},
-		hdri: "/minecraft_day.hdr",
+		// hdri: "/minecraft_day.hdr",
 
 		showAxes: false,
 		showGrid: true,
