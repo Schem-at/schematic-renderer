@@ -21,6 +21,7 @@ export class JsChunksIterator {
   free(): void;
   constructor(schematic_wrapper: SchematicWrapper, chunk_width: number, chunk_height: number, chunk_length: number);
   next(): any;
+  countNonEmptyChunks(): number;
 }
 export class MchprsWorldWrapper {
   free(): void;
@@ -81,6 +82,7 @@ export interface InitOutput {
   readonly __wbg_jschunksiterator_free: (a: number, b: number) => void;
   readonly jschunksiterator_new: (a: number, b: number, c: number, d: number) => number;
   readonly jschunksiterator_next: (a: number) => any;
+  readonly jschunksiterator_countNonEmptyChunks: (a: number) => number;
   readonly schematicwrapper_new: () => number;
   readonly schematicwrapper_create_simulation_world: (a: number) => number;
   readonly schematicwrapper_from_data: (a: number, b: number, c: number) => [number, number];

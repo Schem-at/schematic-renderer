@@ -440,6 +440,13 @@ export class JsChunksIterator {
         const ret = wasm.jschunksiterator_next(this.__wbg_ptr);
         return ret;
     }
+    /**
+     * @returns {number}
+     */
+    countNonEmptyChunks() {
+        const ret = wasm.jschunksiterator_countNonEmptyChunks(this.__wbg_ptr);
+        return ret;
+    }
 }
 
 const MchprsWorldWrapperFinalization = (typeof FinalizationRegistry === 'undefined')

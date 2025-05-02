@@ -15,6 +15,7 @@ export const __wbg_blockstatewrapper_free: (a: number, b: number) => void;
 export const __wbg_jschunksiterator_free: (a: number, b: number) => void;
 export const jschunksiterator_new: (a: number, b: number, c: number, d: number) => number;
 export const jschunksiterator_next: (a: number) => any;
+export const jschunksiterator_countNonEmptyChunks: (a: number) => number;
 export const schematicwrapper_new: () => number;
 export const schematicwrapper_create_simulation_world: (a: number) => number;
 export const schematicwrapper_from_data: (a: number, b: number, c: number) => [number, number];

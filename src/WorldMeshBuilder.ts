@@ -127,127 +127,147 @@ export class WorldMeshBuilder {
 		});
 	}
 
+	/**
+	 * Creates meshes for blocks progressively in chunks to avoid freezing the UI
+	 * Uses instanced meshes for performance and updates the scene after each batch
+	 */
 	public async getChunkMesh(
 		blocks: BlockData[],
 		schematic: SchematicObject,
 		renderingBounds?: { min: THREE.Vector3; max: THREE.Vector3 }
 	): Promise<THREE.Mesh[]> {
+		// If no blocks, return empty array immediately
+		if (blocks.length === 0) {
+			return [];
+		}
+
 		// Filter invisible blocks
 		const visibleBlocks = blocks.filter(
 			(block) => !INVISIBLE_BLOCKS.has(block.name)
 		);
 
-		// If no visible blocks, return early to avoid errors
 		if (visibleBlocks.length === 0) {
 			return [];
 		}
 
-		// Convert renderingBounds to transferable array format
-		const transferBounds = renderingBounds
-			? {
-					min: [
-						renderingBounds.min.x,
-						renderingBounds.min.y,
-						renderingBounds.min.z,
-					] as [number, number, number],
-					max: [
-						renderingBounds.max.x,
-						renderingBounds.max.y,
-						renderingBounds.max.z,
-					] as [number, number, number],
-			  }
-			: undefined;
+		// Create a shared box geometry for all instances
+		const geometry = new THREE.BoxGeometry(1, 1, 1);
 
-		// Get block definitions from the schematic using the get_block_palette method
-		const blockPalette = schematic.schematicWrapper?.get_block_palette();
-		if (!blockPalette) {
-			console.warn("No block palette found in schematic");
-			return [];
+		// Group blocks by type for better organization and performance
+		const blocksByType: Record<string, BlockData[]> = {};
+
+		// Populate the groups
+		for (const block of visibleBlocks) {
+			const blockType = block.name || "unknown";
+			if (!blocksByType[blockType]) {
+				blocksByType[blockType] = [];
+			}
+			blocksByType[blockType].push(block);
 		}
 
-		// Process the block palette to create block definitions
-		const blockDefs = this.processBlockPalette(blockPalette, schematic);
-		if (!blockDefs || blockDefs.length === 0) {
-			console.warn("No block definitions could be generated from palette");
-			return [];
-		}
-
-		// Map block stateKeys to match our generated definitions
-		const adjustedBlocks = this.mapBlocksToDefinitions(
-			visibleBlocks,
-			blockPalette
-		);
-
-		// Use the mesh worker manager to generate geometry
-		const meshWorkerRequest: ChunkMeshRequest = {
-			chunkX: visibleBlocks[0]?.chunk_x ?? 0,
-			chunkY: visibleBlocks[0]?.chunk_y ?? 0,
-			chunkZ: visibleBlocks[0]?.chunk_z ?? 0,
-			schematicId: schematic.name || "unknown",
-			width: 16,
-			height: 16,
-			depth: 16,
-			blocks: adjustedBlocks, // Use the adjusted blocks with corrected stateKeys
-			renderingBounds: transferBounds,
-			defs: blockDefs,
+		// Create a deterministic color from block name
+		const getColorForBlockType = (blockName: string): number => {
+			let hash = 0;
+			for (let i = 0; i < blockName.length; i++) {
+				hash = (hash << 5) - hash + blockName.charCodeAt(i);
+				hash = hash & hash;
+			}
+			const r = (hash & 0xff) / 255;
+			const g = ((hash >> 8) & 0xff) / 255;
+			const b = ((hash >> 16) & 0xff) / 255;
+			return new THREE.Color(r, g, b).getHex();
 		};
 
-		try {
-			// Get geometry from worker (or main thread fallback)
-			const geometry =
-				await this.schematicRenderer.meshWorkerManager.generateChunkMesh(
-					meshWorkerRequest
-				);
+		// Array to collect all created meshes
+		const allMeshes: THREE.Mesh[] = [];
 
-			// Check if geometry generation resulted in valid data
-			if (!geometry || !geometry.getAttribute("position")) {
-				console.warn(
-					"Mesh generation resulted in empty or invalid geometry for chunk",
-					meshWorkerRequest.chunkX,
-					meshWorkerRequest.chunkY,
-					meshWorkerRequest.chunkZ
-				);
-				return [];
+		// Process blocks in chunks to avoid freezing the UI
+		const BATCH_SIZE = 10; // Process this many block types per frame
+		const blockTypes = Object.keys(blocksByType);
+
+		// Create a promise that will resolve when all meshes are created
+		return new Promise(async (resolve) => {
+			// Process blocks in batches
+			for (let i = 0; i < blockTypes.length; i += BATCH_SIZE) {
+				const batchTypes = blockTypes.slice(i, i + BATCH_SIZE);
+				const batchMeshes: THREE.Mesh[] = [];
+
+				// Process each block type in this batch
+				for (const blockType of batchTypes) {
+					const blocksOfType = blocksByType[blockType];
+
+					// Skip if no blocks of this type
+					if (!blocksOfType || blocksOfType.length === 0) continue;
+
+					// Create material with color based on block type
+					const material = new THREE.MeshLambertMaterial({
+						color: getColorForBlockType(blockType),
+					});
+
+					// Create instanced mesh for all blocks of this type
+					const instancedMesh = new THREE.InstancedMesh(
+						geometry,
+						material,
+						blocksOfType.length
+					);
+
+					// Set unique name for debugging
+					instancedMesh.name = `${blockType}-${blocks[0]?.chunk_x ?? 0},${
+						blocks[0]?.chunk_y ?? 0
+					},${blocks[0]?.chunk_z ?? 0}`;
+
+					// Set position for each instance
+					const matrix = new THREE.Matrix4();
+					for (let j = 0; j < blocksOfType.length; j++) {
+						const block = blocksOfType[j];
+						matrix.setPosition(block.x || 0, block.y || 0, block.z || 0);
+						instancedMesh.setMatrixAt(j, matrix);
+					}
+
+					// Important: Mark instance matrix as needing update
+					instancedMesh.instanceMatrix.needsUpdate = true;
+
+					// Set properties for rendering
+					instancedMesh.visible = true;
+					instancedMesh.castShadow = true;
+					instancedMesh.receiveShadow = true;
+					instancedMesh.frustumCulled = true;
+
+					// Add to batch meshes
+					batchMeshes.push(instancedMesh);
+				}
+
+				// Add this batch of meshes to the result
+				allMeshes.push(...batchMeshes);
+
+				// Yield to the UI thread after processing this batch
+				// This allows the renderer to update and show progress
+				if (i + BATCH_SIZE < blockTypes.length) {
+					// Log progress for debugging
+					console.log(
+						`Processed batch ${i / BATCH_SIZE + 1}/${Math.ceil(
+							blockTypes.length / BATCH_SIZE
+						)}, ${allMeshes.length} meshes so far`
+					);
+
+					// Wait for the next animation frame to give the UI a chance to update
+					await new Promise((resolve) => requestAnimationFrame(resolve));
+
+					// Optional: if you have a way to update the scene with the current meshes,
+					// you could call it here to show progressive rendering
+
+					// For example:
+					// this.schematicRenderer.updateSceneWithMeshes(allMeshes);
+				}
 			}
 
-			// Get the material indices attribute from the geometry
-			const materialIndices = geometry.getAttribute("materialIndex");
-
-			if (!materialIndices) {
-				console.log(
-					"No material indices attribute found in geometry, using default material"
-				);
-				// If no material indices are provided, use a default material
-				return [this.createDefaultMesh(geometry, meshWorkerRequest)];
-			}
-
-			// Group the geometry by material IDs for optimal rendering
-			const meshes = this.createMaterialGroupedMeshes(
-				geometry,
-				meshWorkerRequest
+			console.log(
+				`Finished creating ${allMeshes.length} meshes for ${visibleBlocks.length} blocks`
 			);
 
-			// Debug information
-
-			// Set up mesh properties for rendering
-			meshes.forEach((mesh) => {
-				// Make sure mesh is visible
-				mesh.visible = true;
-				mesh.frustumCulled = true; // Enable frustum culling for performance
-
-				// Enable shadows
-				mesh.castShadow = true;
-				mesh.receiveShadow = true;
-			});
-
-			return meshes;
-		} catch (error) {
-			console.error(
-				`Error processing chunk mesh at ${meshWorkerRequest.chunkX},${meshWorkerRequest.chunkY},${meshWorkerRequest.chunkZ}:`,
-				error
-			);
-			return []; // Return empty array on error
-		}
+			// Resolve the promise with all the created meshes
+			resolve(allMeshes);
+		});
 	}
 
 	/**

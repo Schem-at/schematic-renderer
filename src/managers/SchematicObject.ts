@@ -543,6 +543,7 @@ export class SchematicObject extends EventEmitter {
 					);
 
 					const chunkTime = performance.now() - chunkStartTime;
+					console.log("hi");
 
 					if (chunkMeshes && chunkMeshes.length > 0) {
 						console.log(
