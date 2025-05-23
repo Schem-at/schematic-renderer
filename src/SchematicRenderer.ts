@@ -14,7 +14,6 @@ import {
 import { HighlightManager } from "./managers/HighlightManager";
 import { SchematicManager } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
-import { ResourceLoader } from "./ResourceLoader";
 import { EventEmitter } from "events";
 import {
 	ResourcePackManager,
@@ -33,12 +32,12 @@ import { UIManager } from "./managers/UIManager";
 import { CreativeControls } from "three-creative-controls";
 
 import { AssetWorkerManager } from "./managers/AssetWorkerManager";
-import { MeshWorkerManager } from "./managers/MeshWorkerManager";
+
+import { Cubane } from "cubane";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
 	public assetWorkerManager: AssetWorkerManager;
-	public meshWorkerManager: MeshWorkerManager;
 	public clock: THREE.Clock;
 	public options: SchematicRendererOptions;
 	public eventEmitter: EventEmitter;
@@ -52,12 +51,12 @@ export class SchematicRenderer {
 	public schematicManager: SchematicManager | undefined;
 	public worldMeshBuilder: WorldMeshBuilder | undefined;
 	public gizmoManager: GizmoManager | undefined;
-	public resourceLoader: ResourceLoader | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
 	// @ts-ignore
 	private wasmModule: any;
+	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
 	};
@@ -76,16 +75,6 @@ export class SchematicRenderer {
 			createWorker: options.createAssetWorker,
 		});
 
-		this.meshWorkerManager = new MeshWorkerManager({
-			disableWorkers: options.disableWorkers,
-			workerPath: options.meshWorkerPath,
-			createWorker: options.createMeshWorker,
-		});
-		// Log worker status
-		console.log("Schematic Renderer initialized:", {
-			usingAssetWorkers: this.assetWorkerManager.isUsingWorkers(),
-			usingMeshWorkers: this.meshWorkerManager.isUsingWorkers(),
-		});
 		this.options = merge({}, DEFAULT_OPTIONS, options);
 		this.clock = new THREE.Clock();
 		this.materialMap = new Map();
@@ -120,6 +109,8 @@ export class SchematicRenderer {
 			this.uiManager.showProgressBar("Initializing renderer...");
 			this.uiManager.updateProgress(0.1);
 		}
+
+		this.cubane = new Cubane();
 
 		// Start the initialization process
 		this.initialize(schematicData, defaultResourcePacks);
@@ -184,17 +175,9 @@ export class SchematicRenderer {
 			showProgress("Initializing resource packs...", 0.3);
 			await this.initializeResourcePacks(defaultResourcePacks);
 
-			// Step 3: Initialize resource loader
-			showProgress("Loading block models and textures...", 0.45);
-			this.resourceLoader = new ResourceLoader(
-				this.options.resourcePackBlobs,
-				this
-			);
-			await this.resourceLoader.initialize();
-
 			// Step 4: Initialize builders and managers
 			showProgress("Setting up renderer components...", 0.6);
-			this.worldMeshBuilder = new WorldMeshBuilder(this);
+			this.worldMeshBuilder = new WorldMeshBuilder(this, this.cubane);
 			this.schematicManager = new SchematicManager(this, {
 				singleSchematicMode: this.options.singleSchematicMode,
 			});
@@ -326,10 +309,29 @@ export class SchematicRenderer {
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	): Promise<void> {
 		await this.resourcePackManager.initPromise;
-		this.options.resourcePackBlobs =
+
+		// Get resource pack blobs from your existing system
+		const resourcePackBlobs =
 			await this.resourcePackManager.getResourcePackBlobs(
 				defaultResourcePacks || {}
 			);
+
+		// Load each resource pack into Cubane
+		// Cubane loads packs in order, with later packs having higher priority
+		for (let i = 0; i < resourcePackBlobs.length; i++) {
+			const blob = resourcePackBlobs[i];
+			try {
+				await this.cubane.loadResourcePack(blob);
+				console.log(
+					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
+				);
+			} catch (error) {
+				console.error(`Failed to load resource pack ${i + 1}:`, error);
+			}
+		}
+
+		// Store the blobs for backward compatibility if needed
+		this.options.resourcePackBlobs = resourcePackBlobs;
 	}
 
 	private animate(): void {
@@ -486,7 +488,9 @@ export class SchematicRenderer {
 	 * @param schematicId ID of the schematic
 	 * @returns The dimensions as an array [width, height, depth] or null if schematic not found
 	 */
-	public getSchematicDimensions(schematicId: string): Int32Array | null {
+	public getSchematicDimensions(
+		schematicId: string
+	): Int32Array | number[] | null {
 		const schematic = this.schematicManager?.getSchematic(schematicId);
 		if (!schematic) {
 			console.error(`Schematic with ID ${schematicId} not found`);
@@ -553,16 +557,35 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.1, "Processing pack file...");
 		}
 
+		// Add to your existing system
 		await this.resourcePackManager.uploadPack(file);
 
 		if (this.options.enableProgressBar && this.uiManager) {
-			this.uiManager.updateProgress(
-				0.3,
-				"Resource pack added, reloading resources..."
-			);
+			this.uiManager.updateProgress(0.3, "Loading into Cubane...");
 		}
 
-		await this.reloadResources();
+		// Also load directly into Cubane for immediate use
+		try {
+			await this.cubane.loadResourcePack(file);
+		} catch (error) {
+			console.error("Failed to load new resource pack into Cubane:", error);
+		}
+
+		if (this.options.enableProgressBar && this.uiManager) {
+			this.uiManager.updateProgress(0.6, "Rebuilding meshes...");
+		}
+
+		// Rebuild world meshes if needed
+		if (this.worldMeshBuilder && this.schematicManager) {
+			for (const schematic of this.schematicManager.getAllSchematics()) {
+				await this.worldMeshBuilder.rebuildSchematic(schematic.id);
+			}
+		}
+
+		if (this.options.enableProgressBar && this.uiManager) {
+			this.uiManager.updateProgress(1.0, "Resource pack added");
+			setTimeout(() => this.uiManager?.hideProgressBar(), 500);
+		}
 	}
 
 	public async toggleResourcePackEnabled(
@@ -598,17 +621,26 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.2, "Processing resource packs...");
 		}
 
+		// Clear Cubane's existing resources
+		this.cubane.dispose();
+		this.cubane = new Cubane(); // Recreate fresh instance
+
+		// Reinitialize resource packs in Cubane
 		await this.initializeResourcePacks();
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(0.5, "Loading textures and models...");
 		}
 
-		this.resourceLoader = new ResourceLoader(
-			this.options.resourcePackBlobs,
-			this
-		);
-		await this.resourceLoader.initialize();
+		// Rebuild world meshes with new resources
+		if (this.worldMeshBuilder && this.schematicManager) {
+			this.uiManager?.updateProgress(0.7, "Rebuilding schematic meshes...");
+
+			// Trigger rebuild of all schematic meshes
+			for (const schematic of this.schematicManager.getAllSchematics()) {
+				await this.worldMeshBuilder.rebuildSchematic(schematic.id);
+			}
+		}
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(1.0, "Resources loaded");
@@ -632,12 +664,16 @@ export class SchematicRenderer {
 		if (!this.uiManager) {
 			return;
 		}
+
 		this.highlightManager.dispose();
 		this.renderManager.renderer.dispose();
-
 		this.dragAndDropManager?.dispose();
 		this.uiManager.dispose();
 		this.cameraManager.dispose();
+
+		// Clean up Cubane resources
+		this.cubane.dispose();
+
 		// Cleanup event listeners
 		this.eventEmitter.removeAllListeners();
 	}

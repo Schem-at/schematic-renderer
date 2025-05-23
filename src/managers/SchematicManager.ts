@@ -14,6 +14,7 @@ export class SchematicManager {
 	public schematics: Map<string, SchematicObject> = new Map();
 	public schematicRenderer: SchematicRenderer;
 	public eventEmitter: EventEmitter;
+	//@ts-ignore
 	private worldMeshBuilder: WorldMeshBuilder;
 	private sceneManager: SceneManager;
 	private singleSchematicMode: boolean;
@@ -510,11 +511,9 @@ export class SchematicManager {
 	public createEmptySchematic(name: string): SchematicObject {
 		const schematicWrapper = new SchematicWrapper();
 		const schematicObject = new SchematicObject(
+			this.schematicRenderer,
 			name,
-			schematicWrapper,
-			this.worldMeshBuilder,
-			this.eventEmitter,
-			this.sceneManager
+			schematicWrapper
 		);
 		this.addSchematic(schematicObject);
 		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();

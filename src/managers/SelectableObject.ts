@@ -1,3 +1,4 @@
+import * as THREE from "three";
 export interface SelectableObject {
 	id: string;
 	position: THREE.Vector3;

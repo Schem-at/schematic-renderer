@@ -8,6 +8,7 @@ import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty";
 import { castToEuler, castToVector3 } from "../utils/Casts";
 import { resetPerformanceMetrics } from "../monitoring";
 import { SchematicRenderer } from "../SchematicRenderer";
+import type { BlockData } from "../types";
 
 export class SchematicObject extends EventEmitter {
 	public name: string;
@@ -18,7 +19,7 @@ export class SchematicObject extends EventEmitter {
 	private worldMeshBuilder: WorldMeshBuilder;
 	private eventEmitter: EventEmitter;
 	private sceneManager: SceneManager;
-	private chunkMeshes: Map<string, THREE.Mesh[]> = new Map();
+	private chunkMeshes: Map<string, THREE.Object3D[]> = new Map();
 	private chunkDimensions: any = {
 		chunkWidth: 16,
 		chunkHeight: 16,
@@ -348,6 +349,41 @@ export class SchematicObject extends EventEmitter {
 		});
 	}
 
+	// Helper method to safely apply properties to meshes/objects
+	private applyPropertiesToObjects(objects: THREE.Object3D[]) {
+		objects.forEach((obj) => {
+			// Traverse the object to find all meshes
+			obj.traverse((child) => {
+				if (child instanceof THREE.Mesh) {
+					// Apply material properties
+					const material = child.material;
+					if (material) {
+						if (Array.isArray(material)) {
+							material.forEach((mat) => {
+								mat.opacity = this.opacity;
+								mat.transparent = this.opacity < 1.0;
+							});
+						} else {
+							material.opacity = this.opacity;
+							material.transparent = this.opacity < 1.0;
+						}
+					}
+
+					// Apply visibility
+					child.visible = this.visible;
+
+					// Apply other mesh properties
+					child.castShadow = true;
+					child.receiveShadow = true;
+					child.frustumCulled = true;
+				}
+			});
+
+			// Apply visibility to the root object as well
+			obj.visible = this.visible;
+		});
+	}
+
 	private async buildMeshes(): Promise<void> {
 		if (!this.visible) {
 			return;
@@ -358,24 +394,17 @@ export class SchematicObject extends EventEmitter {
 		);
 		this.chunkMeshes = chunkMap;
 
-		meshes.forEach((mesh) => {
-			// Adjust the mesh position relative to the group
-			// mesh.position.sub(this.position);
+		// Apply properties to all objects
+		this.applyPropertiesToObjects(meshes);
 
-			const material = mesh.material as THREE.Material;
-			material.opacity = this.opacity;
-			material.transparent = this.opacity < 1.0;
-			mesh.visible = this.visible;
-
-			// Compute the bounding box for the geometry
-			mesh.geometry.computeBoundingBox();
-
-			this.group.add(mesh);
+		// Add to group
+		meshes.forEach((obj) => {
+			this.group.add(obj);
 		});
 
 		this.updateTransform(); // This will apply position, rotation, and scale to the group
 		this.group.visible = this.visible;
-		this.meshes = meshes;
+		this.meshes = meshes as THREE.Mesh[]; // Keep for backward compatibility
 
 		this.group.updateMatrixWorld(true);
 		this.group.updateWorldMatrix(true, true);
@@ -385,10 +414,6 @@ export class SchematicObject extends EventEmitter {
 			this.createRenderingBoundsHelper();
 		}
 
-		// const box = new THREE.Box3().setFromObject(this.group);
-		// console.log("Updated bounding box min:", box.min);
-		// console.log("Updated bounding box max:", box.max);
-		// console.log("Updated bounding box size:", box.getSize(new THREE.Vector3()));
 		this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(
 			this.name
 		);
@@ -430,198 +455,290 @@ export class SchematicObject extends EventEmitter {
 		}
 	}
 
-	// managers/SchematicObject.ts
-
 	public async buildSchematicMeshes(
-		schematicObject: SchematicObject,
+		schematicObject: SchematicObject, // `this` will be passed here
 		chunkDimensions: any = {
 			chunkWidth: 16,
-			chunkHeight: 16,
+			chunkHeight: 16, // This is the logical chunk height from WASM
 			chunkLength: 16,
 		}
-	): Promise<{ meshes: THREE.Mesh[]; chunkMap: Map<string, THREE.Mesh[]> }> {
-		console.log("Building schematic meshes for:", schematicObject.name);
-		const schematic = schematicObject.schematicWrapper;
-
-		const startTime = performance.now();
-		const chunks = schematic.chunks(
-			chunkDimensions.chunkWidth,
-			chunkDimensions.chunkHeight,
-			chunkDimensions.chunkLength
-		);
-
+	): Promise<{
+		meshes: THREE.Object3D[];
+		chunkMap: Map<string, THREE.Object3D[]>;
+	}> {
 		console.log(
-			"Chunk processing time:",
-			(performance.now() - startTime).toFixed(2),
-			"ms"
+			`[SchematicObject:${schematicObject.id}] Starting buildSchematicMeshes (Time-Budgeted Live Update with Render Stats).`
+		);
+		const schematic = schematicObject.schematicWrapper;
+		const overallStartTime = performance.now();
+		const renderer = this.schematicRenderer.renderer; // Get the THREE.WebGLRenderer instance
+
+		// Get all logical chunks upfront
+		const allLogicalChunks = Array.from(
+			schematic.chunks(
+				chunkDimensions.chunkWidth,
+				chunkDimensions.chunkHeight,
+				chunkDimensions.chunkLength
+			)
 		);
 
-		const schematicMeshes: THREE.Mesh[] = [];
-		const chunkMap: Map<string, THREE.Mesh[]> = new Map();
-		const maxChunks = -1;
-
-		console.log(`Processing ${chunks.length} chunks...`);
-		let index = 0;
-
-		// Show progress bar at the start of chunk processing
-		if (this.schematicRenderer.options.enableProgressBar) {
+		if (allLogicalChunks.length === 0) {
+			console.log(
+				`[SchematicObject:${schematicObject.id}] No logical chunks to process.`
+			);
 			this.reportBuildProgress(
-				"Building schematic meshes",
+				"Schematic build complete (no chunks)",
+				1.0,
 				0,
-				chunks.length,
 				0
 			);
+			if (this.schematicRenderer.options.enableProgressBar) {
+				setTimeout(
+					() => this.schematicRenderer.uiManager?.hideProgressBar(),
+					800
+				);
+			}
+			return { meshes: [], chunkMap: new Map() };
 		}
 
-		// Get the rendering bounds if they exist and are enabled
+		console.log(
+			`[SchematicObject:${schematicObject.id}] Schematic divided into ${allLogicalChunks.length} logical chunks.`
+		);
+
+		const allGeneratedMeshesAccumulator: THREE.Object3D[] = []; // Accumulates all meshes for the final return value
+		const chunkMap: Map<string, THREE.Object3D[]> = new Map(); // For your existing chunkMap logic
+
+		this.reportBuildProgress(
+			"Processing schematic chunks...",
+			0,
+			allLogicalChunks.length,
+			0
+		);
+
 		const renderingBounds = schematicObject.renderingBounds?.enabled
 			? schematicObject.renderingBounds
 			: undefined;
 
-		// Use concurrency to process chunks
-		const concurrencyLimit = navigator.hardwareConcurrency || 4;
-		let processedCount = 0;
+		let processedChunkCount = 0;
+		let currentChunkIndex = 0;
+		// Initial budget. We might adjust this later.
+		let currentFrameJsBudget = 10; // ms - Start with a slightly more generous budget (e.g., 8-12ms)
+		const TARGET_FRAME_TIME = 16.66; // For 60 FPS, ~33.33 for 30 FPS
 
-		// Process chunks with limited concurrency
-		const processConcurrently = async <T, R>(
-			items: T[],
-			concurrency: number,
-			processor: (item: T, index: number) => Promise<R>
-		): Promise<R[]> => {
-			const results: R[] = new Array(items.length);
-			let nextIndex = 0;
+		let lastRenderTimeMs = 0;
+		let frameCounterForLog = 0;
+		const LOG_INTERVAL_FRAMES = 30; // How often to log detailed stats
 
-			const workers = Array.from(
-				{ length: Math.min(concurrency, items.length) },
-				async () => {
-					while (nextIndex < items.length) {
-						const index = nextIndex++;
-						results[index] = await processor(items[index], index);
-					}
-				}
-			);
-
-			await Promise.all(workers);
-			return results;
-		};
-
-		await processConcurrently(
-			Array.from(chunks),
-			concurrencyLimit,
-			async (chunkData, idx) => {
-				const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
-
-				// Skip chunks that are completely outside the rendering bounds
-				if (renderingBounds) {
-					const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
-					const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
-					const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
-					const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
-					const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
-					const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
-
-					if (
-						chunkMaxX <= renderingBounds.min.x ||
-						chunkMinX >= renderingBounds.max.x ||
-						chunkMaxY <= renderingBounds.min.y ||
-						chunkMinY >= renderingBounds.max.y ||
-						chunkMaxZ <= renderingBounds.min.z ||
-						chunkMinZ >= renderingBounds.max.z
-					) {
-						return null;
-					}
-				}
+		// Return a promise that resolves when all chunks are processed
+		return new Promise((resolvePromise, rejectPromise) => {
+			const processNextFrame = async () => {
+				const frameProcessingStartTime = performance.now(); // Time for JS processing this frame
+				const meshesComputedThisFrame: THREE.Object3D[] = [];
 
 				try {
-					// Track chunk processing
-					const chunkStartTime = performance.now();
+					while (currentChunkIndex < allLogicalChunks.length) {
+						// Check time budget *before* processing the next chunk
+						// If we have items from previous iteration in this frame, and budget is tight, break
+						if (
+							meshesComputedThisFrame.length > 0 &&
+							performance.now() - frameProcessingStartTime >=
+								currentFrameJsBudget
+						) {
+							// console.log(`[SchematicObject:${schematicObject.id}] JS Time budget hit for frame. Will process ${meshesComputedThisFrame.length} meshes this frame.`);
+							break;
+						}
 
-					const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
-						blocks as any[],
-						schematicObject,
-						renderingBounds
-					);
+						const chunkData = allLogicalChunks[currentChunkIndex];
+						// const originalIndexForThisChunk = currentChunkIndex; // For logging/debugging
+						currentChunkIndex++; // Consume the chunk for the next iteration/frame
 
-					const chunkTime = performance.now() - chunkStartTime;
-					console.log("hi");
+						const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 
-					if (chunkMeshes && chunkMeshes.length > 0) {
-						console.log(
-							`${++processedCount}/${
-								chunks.length
-							} Processed chunk at ${chunk_x},${chunk_y},${chunk_z} (${chunkTime.toFixed(
-								2
-							)}ms)`
-						);
+						// Rendering bounds check for the logical chunk
+						if (renderingBounds) {
+							const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
+							const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
+							const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
+							const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
+							const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
+							const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+							if (
+								chunkMaxX <= renderingBounds.min.x ||
+								chunkMinX >= renderingBounds.max.x ||
+								chunkMaxY <= renderingBounds.min.y ||
+								chunkMinY >= renderingBounds.max.y ||
+								chunkMaxZ <= renderingBounds.min.z ||
+								chunkMinZ >= renderingBounds.max.z
+							) {
+								processedChunkCount++;
+								if (this.schematicRenderer.options.enableProgressBar) {
+									const progress =
+										processedChunkCount / allLogicalChunks.length;
+									this.reportBuildProgress(
+										"Processing schematic chunks (bounds culled)...",
+										progress,
+										allLogicalChunks.length,
+										processedChunkCount
+									);
+								}
+								continue; // Skip this chunk
+							}
+						}
 
-						const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
+						// const chunkProcStartTime = performance.now();
+						const chunkBlockData = blocks as BlockData[];
 
-						// Apply materials and properties to the meshes
-						chunkMeshes.forEach((mesh) => {
-							const material = mesh.material as THREE.Material;
-							material.opacity = this.opacity;
-							material.transparent = this.opacity < 1.0;
-							mesh.visible = this.visible;
+						// This is the primary async work per chunk
+						const computedChunkObjects =
+							await this.worldMeshBuilder.getChunkMesh(
+								chunkBlockData,
+								schematicObject, // Pass `this`
+								renderingBounds // Pass schematic's overall rendering bounds
+							);
+						// const chunkProcTime = performance.now() - chunkProcStartTime;
+						processedChunkCount++;
 
-							// Compute the bounding box for the geometry
-							mesh.geometry.computeBoundingBox();
+						if (computedChunkObjects && computedChunkObjects.length > 0) {
+							// console.log(`[SchematicObject:${schematicObject.id}] Computed chunk ${originalIndexForThisChunk} (${chunk_x},${chunk_y},${chunk_z}) - ${computedChunkObjects.length} meshes (${chunkProcTime.toFixed(2)}ms)`);
+							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
+							chunkMap.set(chunkKey, computedChunkObjects);
+							meshesComputedThisFrame.push(...computedChunkObjects);
+						}
 
-							// Add the mesh to the group immediately
-							this.group.add(mesh);
-						});
-
-						// Store the meshes in the chunk map
-						chunkMap.set(chunkKey, chunkMeshes);
-						schematicMeshes.push(...chunkMeshes);
-
-						// Update progress
 						if (this.schematicRenderer.options.enableProgressBar) {
-							const progress = processedCount / chunks.length;
+							const progress = processedChunkCount / allLogicalChunks.length;
 							this.reportBuildProgress(
-								"Building schematic meshes",
+								"Processing schematic chunks...",
 								progress,
-								chunks.length,
-								processedCount
+								allLogicalChunks.length,
+								processedChunkCount
+							);
+						}
+					} // End of while loop (processing chunks for this frame)
+
+					// Add meshes computed in *this frame* to the scene
+					if (meshesComputedThisFrame.length > 0) {
+						this.applyPropertiesToObjects(meshesComputedThisFrame); // Apply opacity, visibility from SchematicObject
+						meshesComputedThisFrame.forEach((obj) => {
+							this.group.add(obj);
+						});
+						allGeneratedMeshesAccumulator.push(...meshesComputedThisFrame); // Add to overall list
+
+						// Update this.meshes for backward compatibility or other direct uses if needed
+						// this.meshes.push(...meshesComputedThisFrame.filter(obj => obj instanceof THREE.Mesh) as THREE.Mesh[]);
+					}
+
+					// --- Render and Log Stats ---
+					if (this.schematicRenderer.renderManager && renderer) {
+						// Ensure renderer is available
+						const renderStartTime = performance.now();
+						this.schematicRenderer.renderManager.renderSingleFrame(); // Force a render
+						lastRenderTimeMs = performance.now() - renderStartTime;
+					}
+
+					frameCounterForLog++;
+					if (
+						frameCounterForLog % LOG_INTERVAL_FRAMES === 0 ||
+						currentChunkIndex >= allLogicalChunks.length
+					) {
+						console.log(
+							`--- Frame Batch Log (Processed ${processedChunkCount}/${allLogicalChunks.length} chunks) ---`
+						);
+						const jsTimeThisFrame =
+							performance.now() - frameProcessingStartTime;
+						console.log(
+							`  JS Work This Frame: ${jsTimeThisFrame.toFixed(
+								2
+							)}ms (Budget: ${currentFrameJsBudget.toFixed(2)}ms)`
+						);
+						console.log(`  Last Render Time: ${lastRenderTimeMs.toFixed(2)}ms`);
+						if (renderer && renderer.info) {
+							// Check if renderer.info is available
+							console.log(
+								`  Draw Calls: ${renderer.info.render.calls}, Tris: ${renderer.info.render.triangles}`
+							);
+							console.log(
+								`  Geometries: ${renderer.info.memory.geometries}, Textures: ${
+									renderer.info.memory.textures
+								}, Programs: ${renderer.info.programs?.length || "N/A"}`
+							);
+						} else {
+							console.log("  Renderer info not available for detailed stats.");
+						}
+						console.log(
+							`  Total Meshes in Scene Group: ${this.group.children.length}`
+						);
+						// Add these methods to WorldMeshBuilder:
+						// public getCubaneCacheSize(): number { return this.cubaneBlockMeshCache.size; }
+						// public getExtractedDataCacheSize(): number { return this.extractedBlockDataCache.size; }
+						if (
+							this.worldMeshBuilder.getCubaneCacheSize &&
+							this.worldMeshBuilder.getExtractedDataCacheSize
+						) {
+							console.log(
+								`  WMB Cubane Cache: ${this.worldMeshBuilder.getCubaneCacheSize()}, Extracted Cache: ${this.worldMeshBuilder.getExtractedDataCacheSize()}`
 							);
 						}
 
-						// Request a render to show the new chunk
-						this.schematicRenderer.renderManager.requestRender();
+						// --- Optional: Dynamic budget adjustment (very basic example) ---
+						// Be cautious with this, can lead to instability if not tuned well.
+						// const combinedTime = jsTimeThisFrame + lastRenderTimeMs;
+						// if (combinedTime > TARGET_FRAME_TIME * 1.2 && currentFrameJsBudget > 4) { // Significantly over target
+						//     currentFrameJsBudget = Math.max(4, currentFrameJsBudget * 0.9);
+						//     console.log(`  --> Frame work heavy, reducing JS budget to: ${currentFrameJsBudget.toFixed(2)}ms`);
+						// } else if (combinedTime < TARGET_FRAME_TIME * 0.6 && currentFrameJsBudget < 16) { // Well under target
+						//     currentFrameJsBudget = Math.min(16, currentFrameJsBudget * 1.05);
+						//     console.log(`  --> Frame work light, increasing JS budget to: ${currentFrameJsBudget.toFixed(2)}ms`);
+						// }
+						// --- End Dynamic Budget Adjustment ---
 					}
+					// --- End Render and Log Stats ---
 
-					return chunkMeshes;
+					if (currentChunkIndex < allLogicalChunks.length) {
+						requestAnimationFrame(processNextFrame); // Schedule the next frame's work
+					} else {
+						// All chunks are processed
+						console.log(
+							`[SchematicObject:${schematicObject.id}] All ${
+								allLogicalChunks.length
+							} chunks processed. Total time: ${(
+								performance.now() - overallStartTime
+							).toFixed(2)}ms.`
+						);
+						this.group.updateMatrixWorld(true); // Final update for the whole group
+
+						if (renderer && renderer.info) {
+							// Final stats
+							console.log(
+								`FINAL SCENE STATS - Draw Calls: ${renderer.info.render.calls}, Tris: ${renderer.info.render.triangles}`
+							);
+						}
+						if (this.schematicRenderer.options.enableProgressBar) {
+							this.reportBuildProgress(
+								"Schematic build complete",
+								1.0,
+								allLogicalChunks.length,
+								processedChunkCount
+							);
+							setTimeout(() => {
+								if (this.schematicRenderer.uiManager) {
+									this.schematicRenderer.uiManager.hideProgressBar();
+								}
+							}, 800);
+						}
+						resolvePromise({ meshes: allGeneratedMeshesAccumulator, chunkMap });
+					}
 				} catch (error) {
 					console.error(
-						`Error processing chunk at ${chunk_x},${chunk_y},${chunk_z}:`,
+						`[SchematicObject:${schematicObject.id}] Critical error during time-budgeted chunk processing:`,
 						error
 					);
-					return null;
+					rejectPromise(error); // Reject the main promise
 				}
-			}
-		);
+			};
 
-		// Final progress update
-		if (this.schematicRenderer.options.enableProgressBar) {
-			this.reportBuildProgress(
-				"Schematic build complete",
-				1.0,
-				chunks.length,
-				processedCount
-			);
-
-			// Slight delay before hiding
-			setTimeout(() => {
-				if (this.schematicRenderer.uiManager) {
-					this.schematicRenderer.uiManager.hideProgressBar();
-				}
-			}, 800);
-		}
-
-		// Update world matrices
-		this.group.updateMatrixWorld(true);
-		this.group.updateWorldMatrix(true, true);
-
-		return { meshes: schematicMeshes, chunkMap };
+			requestAnimationFrame(processNextFrame); // Start the first frame processing
+		});
 	}
 
 	/**
@@ -698,19 +815,40 @@ export class SchematicObject extends EventEmitter {
 		);
 	}
 
-	public async getMeshes(): Promise<THREE.Mesh[]> {
+	public async getMeshes(): Promise<THREE.Object3D[]> {
 		await this.meshesReady;
-		return Array.from(this.group.children) as THREE.Mesh[];
+		return Array.from(this.group.children);
 	}
 
-	// Methods to manage chunk meshes
+	// Update chunk management methods to handle Object3D
+	public getChunkObjectsAt(
+		chunkX: number,
+		chunkY: number,
+		chunkZ: number
+	): THREE.Object3D[] | null {
+		const key = `${chunkX},${chunkY},${chunkZ}`;
+		return this.chunkMeshes.get(key) || null;
+	}
+
+	public setChunkObjectsAt(
+		chunkX: number,
+		chunkY: number,
+		chunkZ: number,
+		objects: THREE.Object3D[]
+	) {
+		const key = `${chunkX},${chunkY},${chunkZ}`;
+		this.chunkMeshes.set(key, objects);
+	}
+
+	// Keep the old method names for backward compatibility
 	public getChunkMeshAt(
 		chunkX: number,
 		chunkY: number,
 		chunkZ: number
 	): THREE.Mesh[] | null {
-		const key = `${chunkX},${chunkY},${chunkZ}`;
-		return this.chunkMeshes.get(key) || null;
+		return this.getChunkObjectsAt(chunkX, chunkY, chunkZ) as
+			| THREE.Mesh[]
+			| null;
 	}
 
 	public setChunkMeshAt(
@@ -719,16 +857,24 @@ export class SchematicObject extends EventEmitter {
 		chunkZ: number,
 		meshes: THREE.Mesh[]
 	) {
-		const key = `${chunkX},${chunkY},${chunkZ}`;
-		this.chunkMeshes.set(key, meshes);
+		this.setChunkObjectsAt(chunkX, chunkY, chunkZ, meshes);
 	}
 
 	private updateMeshMaterials(property: "opacity") {
 		this.group.traverse((child) => {
 			if (child instanceof THREE.Mesh) {
-				const material = child.material as THREE.Material;
-				material.opacity = this.opacity;
-				material.transparent = this.opacity < 1.0;
+				const material = child.material;
+				if (material) {
+					if (Array.isArray(material)) {
+						material.forEach((mat) => {
+							mat.opacity = this.opacity;
+							mat.transparent = this.opacity < 1.0;
+						});
+					} else {
+						material.opacity = this.opacity;
+						material.transparent = this.opacity < 1.0;
+					}
+				}
 			}
 		});
 		// Emit event if necessary
@@ -1012,7 +1158,7 @@ export class SchematicObject extends EventEmitter {
 				chunkMaxZ <= this.renderingBounds.min.z ||
 				chunkOffset.z >= this.renderingBounds.max.z
 			) {
-				this.removeChunkMeshes(chunkX, chunkY, chunkZ);
+				this.removeChunkObjects(chunkX, chunkY, chunkZ);
 				return;
 			}
 		}
@@ -1027,53 +1173,46 @@ export class SchematicObject extends EventEmitter {
 			this.chunkDimensions.chunkLength
 		);
 
-		// Remove old chunk meshes from the scene
-		this.removeChunkMeshes(chunkX, chunkY, chunkZ);
+		// Remove old chunk objects from the scene
+		this.removeChunkObjects(chunkX, chunkY, chunkZ);
 
-		// Build new chunk meshes, passing the rendering bounds
-		const newChunkMeshes = await this.worldMeshBuilder.getChunkMesh(
+		// Build new chunk objects, passing the rendering bounds
+		const newChunkObjects = await this.worldMeshBuilder.getChunkMesh(
 			chunkBlocks,
 			this,
 			this.renderingBounds
 		);
 
-		// Apply properties to the new meshes
-		this.applyPropertiesToMeshes(newChunkMeshes);
+		// Apply properties to the new objects
+		this.applyPropertiesToObjects(newChunkObjects);
 
-		newChunkMeshes.forEach((mesh) => {
-			this.group.add(mesh);
+		newChunkObjects.forEach((obj) => {
+			this.group.add(obj);
 		});
 
-		// Update the chunk mesh reference in chunkMeshes map
-		this.setChunkMeshAt(chunkX, chunkY, chunkZ, newChunkMeshes);
+		// Update the chunk object reference in chunkMeshes map
+		this.setChunkObjectsAt(chunkX, chunkY, chunkZ, newChunkObjects);
 	}
 
-	private removeChunkMeshes(chunkX: number, chunkY: number, chunkZ: number) {
-		const oldChunkMeshes = this.getChunkMeshAt(chunkX, chunkY, chunkZ);
-		if (oldChunkMeshes) {
-			oldChunkMeshes.forEach((mesh) => {
-				this.group.remove(mesh);
-				mesh.geometry.dispose();
-				if (Array.isArray(mesh.material)) {
-					mesh.material.forEach((material) => material.dispose());
-				} else {
-					mesh.material.dispose();
-				}
+	private removeChunkObjects(chunkX: number, chunkY: number, chunkZ: number) {
+		const oldChunkObjects = this.getChunkObjectsAt(chunkX, chunkY, chunkZ);
+		if (oldChunkObjects) {
+			oldChunkObjects.forEach((obj) => {
+				this.group.remove(obj);
+				// Dispose of geometries and materials within the object
+				obj.traverse((child) => {
+					if (child instanceof THREE.Mesh) {
+						child.geometry?.dispose();
+						if (Array.isArray(child.material)) {
+							child.material.forEach((material) => material.dispose());
+						} else {
+							child.material?.dispose();
+						}
+					}
+				});
 			});
 			this.chunkMeshes.delete(`${chunkX},${chunkY},${chunkZ}`);
 		}
-	}
-
-	private applyPropertiesToMeshes(meshes: THREE.Mesh[]) {
-		meshes.forEach((mesh) => {
-			// The position is relative to the group
-			mesh.rotation.copy(this.rotation);
-			mesh.scale.copy(this.scale);
-			const material = mesh.material as THREE.Material;
-			material.opacity = this.opacity;
-			material.transparent = this.opacity < 1.0;
-			mesh.visible = this.visible;
-		});
 	}
 
 	public containsPosition(position: THREE.Vector3): boolean {
@@ -1165,6 +1304,55 @@ export class SchematicObject extends EventEmitter {
 		const min = positionArray;
 		const max = positionArray.map((v, i) => v + boundingBox[i]);
 		return [min, max];
+	}
+
+	// TODO: Use nucleation optimisation
+	public getAllBlocks(): BlockData[] {
+		const dimensions = this.schematicWrapper.get_dimensions();
+		const blocks: BlockData[] = [];
+
+		for (let x = 0; x < dimensions[0]; x++) {
+			for (let y = 0; y < dimensions[1]; y++) {
+				for (let z = 0; z < dimensions[2]; z++) {
+					const blockName = this.schematicWrapper.get_block(x, y, z);
+					if (blockName && blockName !== "minecraft:air") {
+						// Get block properties using the correct method name
+						let properties = {};
+						try {
+							const blockWithProps =
+								this.schematicWrapper.get_block_with_properties?.(x, y, z);
+							if (blockWithProps) {
+								// Extract properties from BlockStateWrapper if available
+								properties = blockWithProps.properties || {};
+							}
+						} catch (error) {
+							// Fallback to empty properties if method doesn't exist or fails
+							properties = {};
+						}
+
+						blocks.push({
+							x,
+							y,
+							z,
+							name: blockName,
+							properties: properties,
+							chunk_x: Math.floor(x / this.chunkDimensions.chunkWidth),
+							chunk_y: Math.floor(y / this.chunkDimensions.chunkHeight),
+							chunk_z: Math.floor(z / this.chunkDimensions.chunkLength),
+							stateKey: `${blockName}${
+								Object.keys(properties).length > 0
+									? `[${Object.entries(properties)
+											.map(([k, v]) => `${k}=${v}`)
+											.join(",")}]`
+									: ""
+							}`, // Generate stateKey
+						});
+					}
+				}
+			}
+		}
+
+		return blocks;
 	}
 
 	/**

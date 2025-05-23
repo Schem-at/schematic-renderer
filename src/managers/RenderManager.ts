@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { EffectComposer, RenderPass, EffectPass } from "postprocessing";
 import { SMAAEffect } from "postprocessing";
 // @ts-ignore
-import { SSAOEffect } from "realism-effects";
+import { N8AOPostPass } from "n8ao"; // Modern SSAO solution
 import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
@@ -241,20 +241,39 @@ export class RenderManager {
 		const smaaEffect = new SMAAEffect();
 		this.passes.set("smaa", smaaEffect);
 
-		// SSAO Effect
-		const ssaoEffect = new SSAOEffect(
-			this.composer,
-			this.schematicRenderer.cameraManager.activeCamera.camera,
-			this.schematicRenderer.sceneManager.scene
-		);
-		this.passes.set("ssao", ssaoEffect);
+		// N8AO SSAO Effect - Modern and compatible
+		try {
+			const parent = this.schematicRenderer.canvas.parentElement;
+			const width = parent ? parent.clientWidth : window.innerWidth;
+			const height = parent ? parent.clientHeight : window.innerHeight;
 
-		// Create an EffectPass with all effects
+			const n8aoPass = new N8AOPostPass(
+				this.schematicRenderer.sceneManager.scene,
+				this.schematicRenderer.cameraManager.activeCamera.camera,
+				width,
+				height
+			) as any;
+
+			// Configure N8AO settings for Minecraft-style scenes
+			n8aoPass.configuration.aoRadius = 1.0; // Good for block-based scenes
+			n8aoPass.configuration.distanceFalloff = 0.4; // Prevents haloing
+			n8aoPass.configuration.intensity = 3.0; // Noticeable but not overwhelming
+			n8aoPass.configuration.gammaCorrection = false; // We handle gamma separately
+			n8aoPass.setQualityMode("Medium"); // Good balance of performance/quality
+
+			this.passes.set("ssao", n8aoPass);
+			this.composer.addPass(n8aoPass);
+
+			console.log("N8AO SSAO enabled successfully");
+		} catch (error) {
+			console.warn("Failed to initialize N8AO SSAO:", error);
+		}
+
+		// Create an EffectPass with available effects
 		const effectPass = new EffectPass(
 			this.schematicRenderer.cameraManager.activeCamera.camera,
 			gammaCorrectionEffect,
-			smaaEffect,
-			ssaoEffect
+			smaaEffect
 		);
 		effectPass.renderToScreen = true;
 		this.composer.addPass(effectPass);
@@ -293,6 +312,12 @@ export class RenderManager {
 				.camera as THREE.PerspectiveCamera;
 			camera.aspect = width / height;
 			camera.updateProjectionMatrix();
+
+			// Update N8AO pass size if it exists
+			const ssaoPass = this.passes.get("ssao");
+			if (ssaoPass && ssaoPass.setSize) {
+				ssaoPass.setSize(width, height);
+			}
 		}
 	}
 
@@ -317,27 +342,93 @@ export class RenderManager {
 		}
 	}
 
-	public setSSAOParameters(params: any): void {
+	public setSSAOParameters(params: {
+		aoRadius?: number;
+		distanceFalloff?: number;
+		intensity?: number;
+		qualityMode?: "Performance" | "Low" | "Medium" | "High" | "Ultra";
+	}): void {
 		const ssaoEffect = this.passes.get("ssao");
-		if (ssaoEffect) {
-			Object.assign(ssaoEffect, params);
+		if (ssaoEffect && ssaoEffect.configuration) {
+			// N8AO configuration
+			if (params.aoRadius !== undefined) {
+				ssaoEffect.configuration.aoRadius = params.aoRadius;
+			}
+			if (params.distanceFalloff !== undefined) {
+				ssaoEffect.configuration.distanceFalloff = params.distanceFalloff;
+			}
+			if (params.intensity !== undefined) {
+				ssaoEffect.configuration.intensity = params.intensity;
+			}
+			if (params.qualityMode !== undefined) {
+				ssaoEffect.setQualityMode(params.qualityMode);
+			}
 		}
 	}
 
-	public requestRender(): void {
-		if (!this.renderRequested && !this.contextLost && !this.disposed) {
-			this.renderRequested = true;
-
-			requestAnimationFrame(() => {
-				if (!this.contextLost && !this.disposed) {
-					this.render();
-				}
-				this.renderRequested = false;
-			});
+	public renderSingleFrameAndGetStats(): {
+		renderTimeMs: number;
+		rendererInfo: THREE.WebGLInfo | null;
+	} {
+		if (this.isRendering || this.contextLost || this.disposed) {
+			console.warn(
+				"[RenderManager] Attempted renderSingleFrameAndGetStats while busy, context lost, or disposed."
+			);
+			return { renderTimeMs: 0, rendererInfo: null };
 		}
+
+		// Ensure renderer and scene/camera are valid before attempting to render
+		const scene = this.schematicRenderer.sceneManager.scene;
+		const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+		const renderer = this.renderer; // Ensure this.renderer is valid
+
+		if (!renderer || !scene || !camera) {
+			console.error(
+				"[RenderManager] Renderer, scene, or camera not available for renderSingleFrameAndGetStats."
+			);
+			return { renderTimeMs: 0, rendererInfo: renderer ? renderer.info : null };
+		}
+
+		const gl = renderer.getContext();
+		if (!gl || gl.isContextLost()) {
+			console.warn(
+				"[RenderManager] Attempted to render with lost WebGL context for stats."
+			);
+			this.contextLost = true; // Update contextLost state
+			return { renderTimeMs: 0, rendererInfo: renderer.info };
+		}
+
+		// Temporarily disable auto-clearing of info if you want to see cumulative stats
+		// or ensure it's reset if you want per-frame stats.
+		// For per-frame, it's usually fine as composer.render() implies a new frame.
+		// renderer.info.autoReset = true; // Ensure it resets for each render call by the composer
+
+		const renderStartTime = performance.now();
+		try {
+			this.isRendering = true; // Prevent re-entrancy for this synchronous call
+			this.composer.render(); // This is the synchronous render call
+		} catch (error) {
+			console.error(
+				"[RenderManager] Error during renderSingleFrameAndGetStats:",
+				error
+			);
+			this.eventEmitter.emit("renderError", { error });
+			return {
+				renderTimeMs: performance.now() - renderStartTime,
+				rendererInfo: renderer.info,
+			};
+		} finally {
+			this.isRendering = false;
+		}
+		const renderTimeMs = performance.now() - renderStartTime;
+
+		// renderer.info should now be updated by the composer.render() call
+		return { renderTimeMs, rendererInfo: renderer.info };
 	}
 
+	// Your existing render method for the main loop
 	public render(): void {
+		// This is the one typically called by your main animation loop or requestRender
 		if (this.isRendering || this.contextLost || this.disposed) return;
 
 		try {
@@ -359,6 +450,18 @@ export class RenderManager {
 		}
 	}
 
+	public requestRender(): void {
+		if (!this.renderRequested && !this.contextLost && !this.disposed) {
+			this.renderRequested = true;
+			requestAnimationFrame(() => {
+				if (!this.contextLost && !this.disposed) {
+					this.render(); // Calls the main render method
+				}
+				this.renderRequested = false;
+			});
+		}
+	}
+
 	public resize(width: number, height: number): void {
 		if (this.contextLost) return;
 
@@ -369,6 +472,12 @@ export class RenderManager {
 			.camera as THREE.PerspectiveCamera;
 		camera.aspect = width / height;
 		camera.updateProjectionMatrix();
+
+		// Update N8AO pass size
+		const ssaoPass = this.passes.get("ssao");
+		if (ssaoPass && ssaoPass.setSize) {
+			ssaoPass.setSize(width, height);
+		}
 	}
 
 	public updateCamera(camera: THREE.Camera): void {
@@ -383,8 +492,8 @@ export class RenderManager {
 		}
 
 		const ssaoEffect = this.passes.get("ssao");
-		if (ssaoEffect && ssaoEffect.setCamera) {
-			ssaoEffect.setCamera(camera);
+		if (ssaoEffect && ssaoEffect.camera) {
+			ssaoEffect.camera = camera;
 		}
 	}
 

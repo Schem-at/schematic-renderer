@@ -53,7 +53,7 @@ export interface BlockData {
 	chunk_x?: number; // Optional, used for request info
 	chunk_y?: number; // Optional, used for request info
 	chunk_z?: number; // Optional, used for request info
-	// Add other properties as needed
+	properties?: Record<string, string>; // Optional, used for request info
 }
 
 export interface BakedBlockDef {

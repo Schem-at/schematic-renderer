@@ -1,781 +1,768 @@
-// WorldMeshBuilder.ts
+// WorldMeshBuilder.ts - Optimized with geometry buffer reuse and material registry
 import * as THREE from "three";
-import { SchematicRenderer } from "./SchematicRenderer";
-import { INVISIBLE_BLOCKS } from "./utils";
-import { SchematicObject } from "./managers/SchematicObject";
-import { hashTextureKey } from "./meshing/chunkMesher";
-// Import necessary types
-import type { ChunkMeshRequest, BakedBlockDef, BlockData } from "./types";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { SchematicRenderer } from "./SchematicRenderer"; // Adjust path
+import { SchematicObject } from "./managers/SchematicObject"; // Adjust path
+import { MaterialRegistry } from "./MaterialRegistry"; // Import the material registry
+import type { BlockData } from "./types"; // Adjust path
+// @ts-ignore
+import { Cubane } from "cubane"; // Adjust path
+
+const INVISIBLE_BLOCKS = new Set([
+	"minecraft:air",
+	"minecraft:cave_air",
+	"minecraft:void_air",
+	"minecraft:structure_void",
+	"minecraft:light",
+	"minecraft:barrier",
+]);
+
+interface ChunkMeshes {
+	// Represents categories within a single call to getChunkMesh
+	solid: THREE.Mesh | null;
+	water: THREE.Mesh | null;
+	redstone: THREE.Mesh | null;
+	transparent: THREE.Mesh | null;
+	emissive: THREE.Mesh | null;
+}
+
+interface ProcessedBlockGeometry {
+	geometry: THREE.BufferGeometry; // Transformed, ready-to-be-cloned geometry for a part of a block
+	material: THREE.Material;
+}
 
 export class WorldMeshBuilder {
 	private schematicRenderer: SchematicRenderer;
-	private materialCache: Map<number, THREE.Material> = new Map();
-	private textureKeyMap: Map<number, string> = new Map(); // Maps material IDs to texture keys
+	private cubane: Cubane;
 
-	constructor(schematicRenderer: SchematicRenderer) {
+	// Cache for Cubane's raw Object3D output (keyed by blockString:biome)
+	private cubaneBlockMeshCache: Map<string, THREE.Object3D> = new Map();
+	// Cache for our processed geometry data from Cubane's Object3D (keyed by blockString:biome)
+	private extractedBlockDataCache: Map<string, ProcessedBlockGeometry[]> =
+		new Map();
+
+	constructor(schematicRenderer: SchematicRenderer, cubane: Cubane) {
+		this.cubane = cubane;
 		this.schematicRenderer = schematicRenderer;
 	}
 
 	/**
-	 * Maps a texture key to its hashed material ID and stores the mapping
-	 * This allows for retrieving the original texture key when creating materials
-	 */
-	private registerTextureKey(textureKey: string): number {
-		const materialId = hashTextureKey(textureKey);
-		this.textureKeyMap.set(materialId, textureKey);
-		return materialId;
-	}
-
-	/**
-	 * Generates meshes for a set of blocks belonging to a schematic.
-	 * @param blocks Array of block data objects for this chunk/area.
-	 * @param schematic The SchematicObject containing block definitions.
-	 * @param renderingBounds Optional bounds to limit meshing.
-	 * @returns A promise resolving to an array of THREE.Mesh objects.
-	 */
-	/**
-	 * Modifies stateKeys in block data to match the numeric palette indices
-	 * This ensures the mesh worker can find the correct block definitions
-	 */
-	private mapBlocksToDefinitions(
-		blocks: BlockData[],
-		blockPalette: any[]
-	): BlockData[] {
-		// First, let's understand what's in the blocks data
-
-		// Count blocks with undefined stateKey
-		const undefinedCount = blocks.filter(
-			(b) => b.stateKey === undefined
-		).length;
-
-		// Map of block IDs to their numeric index in the palette
-		const paletteMap = new Map<string, number>();
-
-		if (Array.isArray(blockPalette)) {
-			blockPalette.forEach((id, index) => {
-				// Map both the full ID and the numeric index
-				if (typeof id === "string") {
-					paletteMap.set(id, index);
-				}
-				paletteMap.set(index.toString(), index);
-			});
-		}
-
-		// Map of block names to their palette index (for fallback)
-		const nameToIndex = new Map<string, number>();
-		if (Array.isArray(blockPalette)) {
-			blockPalette.forEach((id, index) => {
-				if (typeof id === "string") {
-					// Extract the base name without properties
-					const baseName = id.replace(/minecraft:/, "").split("[")[0];
-					nameToIndex.set(baseName, index);
-				}
-			});
-		}
-
-		// Copy blocks and adjust stateKeys to match definitions
-		return blocks.map((block) => {
-			const adjusted = { ...block };
-
-			// Handle undefined stateKey
-			if (block.stateKey === undefined) {
-				// Try to use the block name to find a matching palette entry
-				if (block.name) {
-					const baseName = block.name.replace(/minecraft:/, "").split("[")[0];
-					if (nameToIndex.has(baseName)) {
-						adjusted.stateKey = nameToIndex.get(baseName)!.toString();
-						// Uncomment if there are many warnings
-						// console.log(`Fixed undefined stateKey for block ${block.name} -> ${adjusted.stateKey}`);
-					} else {
-						// Can't find a match, use '0' as a last resort (likely air)
-						adjusted.stateKey = "0";
-						console.warn(
-							`No palette match for block name ${block.name}, using '0'`
-						);
-					}
-				} else {
-					// No name or stateKey, assume it's air (index 0)
-					adjusted.stateKey = "0";
-					console.warn("Block has no name or stateKey, assuming air (0)");
-				}
-			} else if (paletteMap.has(block.stateKey)) {
-				// Use the numeric index as stateKey
-				adjusted.stateKey = paletteMap.get(block.stateKey)!.toString();
-			} else if (/^\d+$/.test(block.stateKey)) {
-				// If stateKey is already a number string, leave it as is
-			} else {
-				// Try to match by block name as fallback
-				if (block.name) {
-					const baseName = block.name.replace(/minecraft:/, "").split("[")[0];
-					if (nameToIndex.has(baseName)) {
-						adjusted.stateKey = nameToIndex.get(baseName)!.toString();
-						console.log(
-							`Matched block ${block.name} to palette index ${adjusted.stateKey}`
-						);
-					} else {
-						console.warn(`Block has stateKey "${block.stateKey}" not found in palette, 
-						  and name "${block.name}" couldn't be matched`);
-					}
-				} else {
-					console.warn(
-						`Block has stateKey "${block.stateKey}" not found in palette`
-					);
-				}
-			}
-
-			return adjusted;
-		});
-	}
-
-	/**
-	 * Creates meshes for blocks progressively in chunks to avoid freezing the UI
-	 * Uses instanced meshes for performance and updates the scene after each batch
+	 * Public method called by SchematicObject for each of its logical chunks.
+	 * schematicObject is passed for context (e.g., its ID for logging, or if WMB needed more info from it).
+	 * renderingBounds is passed from SchematicObject and applied here.
 	 */
 	public async getChunkMesh(
-		blocks: BlockData[],
-		schematic: SchematicObject,
-		renderingBounds?: { min: THREE.Vector3; max: THREE.Vector3 }
-	): Promise<THREE.Mesh[]> {
-		// If no blocks, return empty array immediately
-		if (blocks.length === 0) {
-			return [];
+		blocksInLogicalChunk: BlockData[],
+		schematicObject: SchematicObject, // The calling SchematicObject
+		renderingBounds?: {
+			min: THREE.Vector3;
+			max: THREE.Vector3;
+			enabled?: boolean;
 		}
+	): Promise<THREE.Object3D[]> {
+		if (blocksInLogicalChunk.length === 0) return [];
 
-		// Filter invisible blocks
-		const visibleBlocks = blocks.filter(
-			(block) => !INVISIBLE_BLOCKS.has(block.name)
+		// 1. Filter by INVISIBLE_BLOCKS
+		let visibleBlocks = blocksInLogicalChunk.filter(
+			(b) => !INVISIBLE_BLOCKS.has(b.name)
 		);
 
-		if (visibleBlocks.length === 0) {
-			return [];
-		}
-
-		// Create a shared box geometry for all instances
-		const geometry = new THREE.BoxGeometry(1, 1, 1);
-
-		// Group blocks by type for better organization and performance
-		const blocksByType: Record<string, BlockData[]> = {};
-
-		// Populate the groups
-		for (const block of visibleBlocks) {
-			const blockType = block.name || "unknown";
-			if (!blocksByType[blockType]) {
-				blocksByType[blockType] = [];
-			}
-			blocksByType[blockType].push(block);
-		}
-
-		// Create a deterministic color from block name
-		const getColorForBlockType = (blockName: string): number => {
-			let hash = 0;
-			for (let i = 0; i < blockName.length; i++) {
-				hash = (hash << 5) - hash + blockName.charCodeAt(i);
-				hash = hash & hash;
-			}
-			const r = (hash & 0xff) / 255;
-			const g = ((hash >> 8) & 0xff) / 255;
-			const b = ((hash >> 16) & 0xff) / 255;
-			return new THREE.Color(r, g, b).getHex();
-		};
-
-		// Array to collect all created meshes
-		const allMeshes: THREE.Mesh[] = [];
-
-		// Process blocks in chunks to avoid freezing the UI
-		const BATCH_SIZE = 10; // Process this many block types per frame
-		const blockTypes = Object.keys(blocksByType);
-
-		// Create a promise that will resolve when all meshes are created
-		return new Promise(async (resolve) => {
-			// Process blocks in batches
-			for (let i = 0; i < blockTypes.length; i += BATCH_SIZE) {
-				const batchTypes = blockTypes.slice(i, i + BATCH_SIZE);
-				const batchMeshes: THREE.Mesh[] = [];
-
-				// Process each block type in this batch
-				for (const blockType of batchTypes) {
-					const blocksOfType = blocksByType[blockType];
-
-					// Skip if no blocks of this type
-					if (!blocksOfType || blocksOfType.length === 0) continue;
-
-					// Create material with color based on block type
-					const material = new THREE.MeshLambertMaterial({
-						color: getColorForBlockType(blockType),
-					});
-
-					// Create instanced mesh for all blocks of this type
-					const instancedMesh = new THREE.InstancedMesh(
-						geometry,
-						material,
-						blocksOfType.length
-					);
-
-					// Set unique name for debugging
-					instancedMesh.name = `${blockType}-${blocks[0]?.chunk_x ?? 0},${
-						blocks[0]?.chunk_y ?? 0
-					},${blocks[0]?.chunk_z ?? 0}`;
-
-					// Set position for each instance
-					const matrix = new THREE.Matrix4();
-					for (let j = 0; j < blocksOfType.length; j++) {
-						const block = blocksOfType[j];
-						matrix.setPosition(block.x || 0, block.y || 0, block.z || 0);
-						instancedMesh.setMatrixAt(j, matrix);
-					}
-
-					// Important: Mark instance matrix as needing update
-					instancedMesh.instanceMatrix.needsUpdate = true;
-
-					// Set properties for rendering
-					instancedMesh.visible = true;
-					instancedMesh.castShadow = true;
-					instancedMesh.receiveShadow = true;
-					instancedMesh.frustumCulled = true;
-
-					// Add to batch meshes
-					batchMeshes.push(instancedMesh);
-				}
-
-				// Add this batch of meshes to the result
-				allMeshes.push(...batchMeshes);
-
-				// Yield to the UI thread after processing this batch
-				// This allows the renderer to update and show progress
-				if (i + BATCH_SIZE < blockTypes.length) {
-					// Log progress for debugging
-					console.log(
-						`Processed batch ${i / BATCH_SIZE + 1}/${Math.ceil(
-							blockTypes.length / BATCH_SIZE
-						)}, ${allMeshes.length} meshes so far`
-					);
-
-					// Wait for the next animation frame to give the UI a chance to update
-					await new Promise((resolve) => requestAnimationFrame(resolve));
-
-					// Optional: if you have a way to update the scene with the current meshes,
-					// you could call it here to show progressive rendering
-
-					// For example:
-					// this.schematicRenderer.updateSceneWithMeshes(allMeshes);
-				}
-			}
-
-			console.log(
-				`Finished creating ${allMeshes.length} meshes for ${visibleBlocks.length} blocks`
-			);
-
-			// Resolve the promise with all the created meshes
-			resolve(allMeshes);
-		});
-	}
-
-	/**
-	 * Creates a default mesh with a single material when material indices are not available.
-	 */
-	private createDefaultMesh(
-		geometry: THREE.BufferGeometry,
-		request: ChunkMeshRequest
-	): THREE.Mesh {
-		const defaultMaterial = new THREE.MeshStandardMaterial({
-			color: 0xcccccc,
-			roughness: 0.7,
-			metalness: 0.2,
-		});
-
-		const mesh = new THREE.Mesh(geometry, defaultMaterial);
-
-		// Ensure mesh is properly configured for rendering
-		mesh.visible = true;
-		mesh.frustumCulled = true;
-		mesh.castShadow = true;
-		mesh.receiveShadow = true;
-
-		// Compute bounding information for performance
-		if (!geometry.boundingSphere) {
-			geometry.computeBoundingSphere();
-		}
-
-		mesh.userData = {
-			chunkX: request.chunkX,
-			chunkY: request.chunkY,
-			chunkZ: request.chunkZ,
-			isDefaultMesh: true,
-		};
-
-		console.log(
-			"Created default mesh with bounding sphere radius:",
-			geometry.boundingSphere?.radius
-		);
-
-		return mesh;
-	}
-
-	/**
-	 * Creates separate meshes for different materials to optimize rendering.
-	 * This approach groups faces by material ID to minimize material switches during rendering.
-	 */
-	private createMaterialGroupedMeshes(
-		geometry: THREE.BufferGeometry,
-		request: ChunkMeshRequest
-	): THREE.Mesh[] {
-		// Get the material indices from the geometry
-		const materialIndices = geometry.getAttribute("materialIndex");
-		const indices = geometry.getIndex();
-
-		if (!indices) {
-			console.warn("Geometry missing indices, using default mesh");
-			return [this.createDefaultMesh(geometry, request)];
-		}
-
-		// Find all unique material IDs
-		const uniqueMaterialIds = new Set<number>();
-		for (let i = 0; i < materialIndices.count; i++) {
-			uniqueMaterialIds.add(materialIndices.getX(i));
-		}
-
-		// If only one material ID is used, we can use the geometry as is
-		if (uniqueMaterialIds.size === 1) {
-			const materialId = uniqueMaterialIds.values().next().value;
-			const material = this.getMaterial(materialId);
-
-			const mesh = new THREE.Mesh(geometry, material);
-			mesh.userData = {
-				chunkX: request.chunkX,
-				chunkY: request.chunkY,
-				chunkZ: request.chunkZ,
-				materialId,
-			};
-
-			return [mesh];
-		}
-
-		// Group faces by material ID
-		const meshes: THREE.Mesh[] = [];
-
-		// Each unique material ID will get its own mesh
-		uniqueMaterialIds.forEach((materialId) => {
-			// Create a new index buffer for this material
-			const faceIndices: number[] = [];
-
-			// Go through all the indices to find faces using this material
-			for (let i = 0; i < indices.count; i += 3) {
-				// Get the first vertex of this triangle
-				const v1 = indices.getX(i);
-
-				// Get the material ID for this vertex
-				const mat = materialIndices.getX(v1);
-
-				// If this face uses our current material, add all three indices
-				if (mat === materialId) {
-					faceIndices.push(
-						indices.getX(i),
-						indices.getX(i + 1),
-						indices.getX(i + 2)
-					);
-				}
-			}
-
-			// If no faces use this material, skip creating a mesh
-			if (faceIndices.length === 0) return;
-
-			// Create a new geometry for this material group
-			const materialGeometry = new THREE.BufferGeometry();
-
-			// Instead of cloning all attributes, let's create a new geometry with only the vertices we need
-			// This resolves the "vertex buffer not big enough" WebGL errors
-
-			// Get the positions, normals, and UVs attributes
-			const positions = geometry.getAttribute("position");
-			const normals = geometry.getAttribute("normal");
-			const uvs = geometry.getAttribute("uv");
-
-			// Create maps to track which vertices we're using
-			const vertexMap = new Map<number, number>();
-			const newPositions: number[] = [];
-			const newNormals: number[] = [];
-			const newUvs: number[] = [];
-			const newIndices: number[] = [];
-
-			// Process each face (triangle)
-			for (let i = 0; i < faceIndices.length; i += 3) {
-				// Get the original indices for this triangle
-				const idx1 = faceIndices[i];
-				const idx2 = faceIndices[i + 1];
-				const idx3 = faceIndices[i + 2];
-
-				// Safety check: make sure indices are valid
-				if (
-					idx1 >= positions.count ||
-					idx2 >= positions.count ||
-					idx3 >= positions.count
-				) {
-					console.warn(
-						`Invalid index detected: ${idx1}, ${idx2}, ${idx3} (limit: ${positions.count}). Skipping triangle.`
-					);
-					continue;
-				}
-
-				// Map original vertices to new indices
-				for (const idx of [idx1, idx2, idx3]) {
-					if (!vertexMap.has(idx)) {
-						// Add this vertex to our new geometry
-						const newIdx = newPositions.length / 3;
-						vertexMap.set(idx, newIdx);
-
-						// Copy position
-						newPositions.push(
-							positions.getX(idx),
-							positions.getY(idx),
-							positions.getZ(idx)
-						);
-
-						// Copy normal
-						newNormals.push(
-							normals.getX(idx),
-							normals.getY(idx),
-							normals.getZ(idx)
-						);
-
-						// Copy UV
-						newUvs.push(uvs.getX(idx), uvs.getY(idx));
-					}
-
-					// Add index to new triangle
-					newIndices.push(vertexMap.get(idx)!);
-				}
-			}
-
-			// Create new attribute buffers
-			materialGeometry.setAttribute(
-				"position",
-				new THREE.Float32BufferAttribute(newPositions, 3)
-			);
-			materialGeometry.setAttribute(
-				"normal",
-				new THREE.Float32BufferAttribute(newNormals, 3)
-			);
-			materialGeometry.setAttribute(
-				"uv",
-				new THREE.Float32BufferAttribute(newUvs, 2)
-			);
-
-			// Set the index buffer
-			materialGeometry.setIndex(newIndices);
-
-			// console.log(
-			// 	`Created geometry for material ${materialId} with ${
-			// 		newIndices.length / 3
-			// 	} triangles, ${newPositions.length / 3} vertices`
-			// );
-
-			// Get or create the material for this ID
-			const material = this.getMaterial(materialId);
-
-			// Create the mesh with this geometry and material
-			const mesh = new THREE.Mesh(materialGeometry, material);
-			mesh.userData = {
-				chunkX: request.chunkX,
-				chunkY: request.chunkY,
-				chunkZ: request.chunkZ,
-				materialId,
-			};
-
-			// Optimize the mesh for rendering
-			materialGeometry.computeBoundingSphere();
-
-			meshes.push(mesh);
-		});
-
-		return meshes;
-	}
-
-	/**
-	 * Gets or creates a material for the given material ID.
-	 * This method attempts to use the asset worker to load textures when possible,
-	 * and falls back to a unique color for debugging when textures aren't available.
-	 */
-	private getMaterial(materialId: number): THREE.Material {
-		// Check if this material is already cached
-		if (this.materialCache.has(materialId)) {
-			return this.materialCache.get(materialId)!;
-		}
-
-		// In a full implementation, this would get the actual texture name from a mapping
-		const textureName = this.textureKeyMap.get(materialId);
-
-		// Generate a unique color based on the material ID for visualization
-		const hue = (materialId % 360) / 360;
-		const saturation = 0.7;
-		const lightness = 0.6;
-
-		// For transparent blocks (if we know about them)
-		const isTransparent =
-			textureName?.includes("glass") ||
-			textureName?.includes("water") ||
-			textureName?.includes("leaves") ||
-			textureName?.includes("ice");
-
-		// Create a new material with a color derived from the material ID
-		const material = new THREE.MeshStandardMaterial({
-			color: new THREE.Color().setHSL(hue, saturation, lightness),
-			roughness: 0.8,
-			metalness: 0.1,
-			transparent: isTransparent || false,
-			side: isTransparent ? THREE.DoubleSide : THREE.FrontSide,
-			// Slightly move transparent materials forward to avoid z-fighting
-			polygonOffset: isTransparent,
-			polygonOffsetFactor: isTransparent ? -1 : 0,
-		});
-
-		// Cache the material for reuse
-		this.materialCache.set(materialId, material);
-
-		// Asynchronously try to load a texture for this material ID
-		this.loadTextureForMaterial(materialId, material);
-
-		return material;
-	}
-
-	/**
-	 * Attempts to asynchronously load a texture for the given material ID.
-	 * This method updates the material once the texture is loaded.
-	 */
-	private async loadTextureForMaterial(
-		materialId: number,
-		material: THREE.MeshStandardMaterial
-	): Promise<void> {
-		try {
-			// Get the original texture key from our mapping
-			const textureKey = this.textureKeyMap.get(materialId);
-			if (!textureKey) {
-				console.debug(
-					`No texture key mapping found for materialId: ${materialId}`
+		// 2. Filter by schematicObject's renderingBounds if enabled and provided
+		if (renderingBounds && renderingBounds.enabled) {
+			visibleBlocks = visibleBlocks.filter((block) => {
+				const x = block.x || 0;
+				const y = block.y || 0;
+				const z = block.z || 0;
+				return (
+					x >= renderingBounds.min.x &&
+					x <= renderingBounds.max.x &&
+					y >= renderingBounds.min.y &&
+					y <= renderingBounds.max.y &&
+					z >= renderingBounds.min.z &&
+					z <= renderingBounds.max.z
 				);
-				return;
+			});
+		}
+
+		if (visibleBlocks.length === 0) return [];
+
+		// console.log(`[WMB] Building meshes for a logical chunk of ${schematicObject.id} with ${visibleBlocks.length} visible blocks.`);
+		const startTime = performance.now();
+
+		// 3. Categorize blocks
+		const categories = this.categorizeBlocks(visibleBlocks);
+
+		// 4. Pre-process unique block types found in this logical chunk's blocks
+		const uniqueBlockStringsWithBiome = new Set<string>();
+		Object.values(categories).forEach((blockList) => {
+			blockList.forEach((block) => {
+				// Assuming biome is 'plains' for now, or needs to be passed/determined
+				const biome = "plains";
+				uniqueBlockStringsWithBiome.add(
+					this.createBlockStringWithBiome(block, biome)
+				);
+			});
+		});
+
+		await this.preprocessUniqueBlockTypes(
+			Array.from(uniqueBlockStringsWithBiome)
+		);
+
+		// 5. Create categorized meshes
+		const chunkCategoryMeshes = await this.createCategorizedMeshes(
+			categories,
+			`schem_${schematicObject.id}_logicalChunk` // Mesh naming prefix
+		);
+
+		const resultMeshes: THREE.Object3D[] = [];
+		const meshOrder = [
+			"solid",
+			"transparent",
+			"water",
+			"redstone",
+			"emissive",
+		] as const;
+		for (const category of meshOrder) {
+			const mesh = chunkCategoryMeshes[category];
+			if (mesh) resultMeshes.push(mesh);
+		}
+
+		// console.log(`[WMB] Meshing for logical chunk of ${schematicObject.id} took ${(performance.now() - startTime).toFixed(2)}ms, ${resultMeshes.length} category meshes produced.`);
+		// this.logCategoryStats(chunkCategoryMeshes, categories, schematicObject.id);
+		return resultMeshes;
+	}
+
+	private async preprocessUniqueBlockTypes(
+		blockStringsWithBiome: string[]
+	): Promise<void> {
+		const keysToProcess: string[] = [];
+		for (const key of blockStringsWithBiome) {
+			// Process if Cubane object OR extracted data is missing for this key
+			if (
+				!this.cubaneBlockMeshCache.has(key) ||
+				!this.extractedBlockDataCache.has(key)
+			) {
+				keysToProcess.push(key);
+			}
+		}
+
+		if (keysToProcess.length === 0) return;
+
+		// console.log(`[WMB] Preprocessing ${keysToProcess.length} unique block types...`);
+
+		const CONCURRENCY_LIMIT_PREPROCESS = 8; // Tune this
+		let currentIndex = 0;
+
+		const processKey = async (key: string) => {
+			const [blockString, biome] = this.parseBlockStringWithBiome(key);
+			try {
+				let cubaneObj = this.cubaneBlockMeshCache.get(key);
+				if (!cubaneObj) {
+					cubaneObj = await this.cubane.getBlockMesh(blockString, biome, true);
+					this.cubaneBlockMeshCache.set(key, cubaneObj);
+				}
+
+				if (!this.extractedBlockDataCache.has(key)) {
+					// Check again, might have been processed by another concurrent call if not careful
+					if (cubaneObj) {
+						// cubaneObj should exist here
+						const extractedData = this.extractAllMeshData(cubaneObj);
+						this.extractedBlockDataCache.set(key, extractedData);
+					} else {
+						// Fallback if cubaneObj somehow ended up null
+						const fallbackObj = this.createFallbackObject3D(blockString);
+						this.cubaneBlockMeshCache.set(key, fallbackObj); // Cache fallback cubane obj
+						this.extractedBlockDataCache.set(
+							key,
+							this.extractAllMeshData(fallbackObj)
+						);
+					}
+				}
+			} catch (error) {
+				console.warn(`[WMB] Error during preprocessing for ${key}:`, error);
+				// Ensure fallback is cached for both if not already
+				if (!this.cubaneBlockMeshCache.has(key)) {
+					this.cubaneBlockMeshCache.set(
+						key,
+						this.createFallbackObject3D(blockString)
+					);
+				}
+				if (!this.extractedBlockDataCache.has(key)) {
+					const objToExtract = this.cubaneBlockMeshCache.get(key)!;
+					this.extractedBlockDataCache.set(
+						key,
+						this.extractAllMeshData(objToExtract)
+					);
+				}
+			}
+		};
+
+		// Simple concurrency limiting loop
+		const workerPromises: Promise<void>[] = [];
+		while (currentIndex < keysToProcess.length || workerPromises.length > 0) {
+			while (
+				workerPromises.length < CONCURRENCY_LIMIT_PREPROCESS &&
+				currentIndex < keysToProcess.length
+			) {
+				const keyToProcess = keysToProcess[currentIndex++];
+				const promise = processKey(keyToProcess).then(() => {
+					// Remove itself from workerPromises once done
+					const index = workerPromises.indexOf(promise);
+					if (index > -1) workerPromises.splice(index, 1);
+				});
+				workerPromises.push(promise);
+			}
+			if (workerPromises.length > 0) {
+				await Promise.race(workerPromises.map((p) => p.catch(() => {}))); // Wait for one to complete or fail
+			} else if (currentIndex >= keysToProcess.length) {
+				break; // All processed and all workers done
+			}
+		}
+	}
+
+	private categorizeBlocks(blocks: BlockData[]): {
+		solid: BlockData[];
+		water: BlockData[];
+		redstone: BlockData[];
+		transparent: BlockData[];
+		emissive: BlockData[];
+	} {
+		const categories = {
+			solid: [] as BlockData[],
+			water: [] as BlockData[],
+			redstone: [] as BlockData[],
+			transparent: [] as BlockData[],
+			emissive: [] as BlockData[],
+		};
+		for (const block of blocks) {
+			const category = this.getBlockCategory(block.name);
+			categories[category].push(block);
+		}
+		return categories;
+	}
+
+	private getBlockCategory(blockName: string): keyof ChunkMeshes {
+		if (blockName.includes("water") || blockName.includes("lava"))
+			return "water";
+		if (
+			blockName.includes("redstone") ||
+			blockName.includes("repeater") ||
+			blockName.includes("comparator") ||
+			blockName.includes("observer") ||
+			blockName.includes("piston")
+		)
+			return "redstone";
+		if (
+			blockName.includes("glass") ||
+			blockName.includes("leaves") ||
+			blockName.includes("ice") ||
+			blockName === "minecraft:barrier"
+		)
+			return "transparent";
+		if (
+			blockName.includes("torch") ||
+			blockName.includes("lantern") ||
+			blockName.includes("glowstone") ||
+			blockName.includes("sea_lantern") ||
+			blockName.includes("shroomlight")
+		)
+			return "emissive";
+		return "solid";
+	}
+
+	private async createCategorizedMeshes(
+		categories: {
+			solid: BlockData[];
+			water: BlockData[];
+			redstone: BlockData[];
+			transparent: BlockData[];
+			emissive: BlockData[];
+		},
+		meshPrefix: string
+	): Promise<ChunkMeshes> {
+		return {
+			solid: await this.createCategoryMesh(
+				categories.solid,
+				"solid",
+				meshPrefix
+			),
+			water: await this.createCategoryMesh(
+				categories.water,
+				"water",
+				meshPrefix
+			),
+			redstone: await this.createCategoryMesh(
+				categories.redstone,
+				"redstone",
+				meshPrefix
+			),
+			transparent: await this.createCategoryMesh(
+				categories.transparent,
+				"transparent",
+				meshPrefix
+			),
+			emissive: await this.createCategoryMesh(
+				categories.emissive,
+				"emissive",
+				meshPrefix
+			),
+		};
+	}
+
+	// OPTIMIZED VERSION with geometry buffer reuse and material registry
+	private async createCategoryMesh(
+		blocks: BlockData[],
+		category: string,
+		meshPrefix: string
+	): Promise<THREE.Mesh | null> {
+		if (blocks.length === 0) return null;
+
+		const materialToGeometries = new Map<
+			THREE.Material,
+			THREE.BufferGeometry[]
+		>();
+		const biome = "plains";
+
+		for (const block of blocks) {
+			const blockStringWithBiomeKey = this.createBlockStringWithBiome(
+				block,
+				biome
+			);
+			const cachedExtractedDatas = this.extractedBlockDataCache.get(
+				blockStringWithBiomeKey
+			);
+
+			if (!cachedExtractedDatas || cachedExtractedDatas.length === 0) {
+				continue;
 			}
 
-			// Log the texture key we would load - in a production implementation, this would
-			// actually load the texture from the asset worker
+			const blockPosition = new THREE.Vector3(
+				block.x || 0,
+				block.y || 0,
+				block.z || 0
+			);
 
-			// Example of how the texture would be loaded in production:
-			// if (this.schematicRenderer.assetWorkerManager) {
-			//     try {
-			//         // Get the texture path - in Minecraft format it would be like "block/stone"
-			//         // but the asset worker might need "textures/block/stone.png"
-			//         const texturePath = `textures/${textureKey}.png`;
-			//
-			//         // Request the texture from the asset worker
-			//         const texture = await this.schematicRenderer.assetWorkerManager.getTexture(texturePath);
-			//
-			//         // Apply the texture to the material
-			//         material.map = texture;
-			//         material.needsUpdate = true;
-			//
-			//         // Request a render update
-			//         this.schematicRenderer.renderManager.requestRender();
-			//     } catch (workerError) {
-			//         console.warn(`Asset worker failed to load texture: ${textureKey}`, workerError);
-			//     }
-			// }
+			for (const { geometry: baseGeo, material } of cachedExtractedDatas) {
+				if (baseGeo.attributes.position.count === 0) continue;
 
-			// When the renderer eventually implements a texture atlas system:
-			// 1. Instead of loading individual textures, we would use UV coordinates
-			//    mapped to positions in a texture atlas
-			// 2. The materialId would map to UV rect coordinates within the atlas
-			// 3. A shared atlas material would be used with custom UVs per mesh
+				// Get the shared material from the registry
+				const sharedMaterial = MaterialRegistry.getMaterial(material);
+
+				// Create positioned geometry without cloning
+				const positionedGeometry = this.createPositionedGeometry(
+					baseGeo,
+					blockPosition
+				);
+
+				if (!materialToGeometries.has(sharedMaterial)) {
+					materialToGeometries.set(sharedMaterial, []);
+				}
+				materialToGeometries.get(sharedMaterial)!.push(positionedGeometry);
+			}
+		}
+
+		if (materialToGeometries.size === 0) return null;
+
+		// Build the final mesh using the optimized merge
+		const materials: THREE.Material[] = [];
+		const allGeometries: THREE.BufferGeometry[] = [];
+
+		materialToGeometries.forEach((geometries, material) => {
+			const materialIndex = materials.length;
+			materials.push(material);
+
+			geometries.forEach((geo) => {
+				// Tag each geometry with its material index for merging
+				(geo as any).__materialIndex = materialIndex;
+				allGeometries.push(geo);
+			});
+		});
+
+		// Merge geometries
+		let mergedGeometry: THREE.BufferGeometry | null = null;
+		try {
+			mergedGeometry = this.mergeGeometriesOptimized(allGeometries);
 		} catch (error) {
-			console.warn(
-				`Failed to load texture for materialId: ${materialId}`,
+			console.error(
+				`[WMB] Error merging geometries for ${meshPrefix}-${category}:`,
 				error
 			);
 		}
-	}
 
-	/**
-	 * Processes the block palette from the schematic to create block definitions
-	 * This converts the raw palette data into the format expected by the mesh worker
-	 */
-	private processBlockPalette(
-		blockPalette: any,
-		schematic: SchematicObject
-	): [string, BakedBlockDef][] {
-		const blockDefs: [string, BakedBlockDef][] = [];
+		// Clean up temporary geometries
+		allGeometries.forEach((geo) => geo.dispose());
+
+		if (!mergedGeometry || mergedGeometry.attributes.position.count === 0) {
+			mergedGeometry?.dispose();
+			return null;
+		}
 
 		try {
-			// Check if the block palette is empty
-			if (!blockPalette) {
-				console.warn("Empty block palette");
-				return [];
-			}
+			const mergedMesh = new THREE.Mesh(mergedGeometry, materials);
+			mergedMesh.name = `${meshPrefix}-${category}-${blocks.length}b-${materials.length}m`;
+			this.configureMeshForCategory(mergedMesh, category as keyof ChunkMeshes);
 
-			// Get the block definitions from the schematic's existing data if available
-			if (
-				schematic.blockDefinitionMap &&
-				schematic.blockDefinitionMap.size > 0
-			) {
-				// Convert Map to array of [key, value] pairs
-				return Array.from(schematic.blockDefinitionMap.entries());
-			}
+			// Track mesh for cleanup
+			mergedMesh.userData.materialRegistry = true;
 
-			// If blockPalette is an array of strings (the expected format from get_block_palette),
-			// process each block string
-			if (Array.isArray(blockPalette)) {
-				for (let i = 0; i < blockPalette.length; i++) {
-					const blockId = blockPalette[i];
-
-					// Use both the index and the full block ID as stateKeys
-					// This way we'll match regardless of how the block data is referencing the palette
-					const stateKey = i.toString();
-
-					// Block IDs typically look like 'minecraft:stone' or 'minecraft:redstone_wire[power=0,...]'
-					// Extract the base name for the texture
-					let textureName = "block/stone"; // Default texture
-
-					if (typeof blockId === "string") {
-						// Remove the minecraft: prefix and any state properties in brackets
-						const blockNameWithoutPrefix = blockId.replace("minecraft:", "");
-						const baseName = blockNameWithoutPrefix.split("[")[0];
-
-						// Use this base name for the texture key
-						textureName = `block/${baseName}`;
-					}
-
-					// Create a block definition with all 6 faces
-					const simpleCubeDef: BakedBlockDef = {
-						faces: [
-							this.createSimpleFace("north", textureName, [0, 0, -1]),
-							this.createSimpleFace("south", textureName, [0, 0, 1]),
-							this.createSimpleFace("east", textureName, [1, 0, 0]),
-							this.createSimpleFace("west", textureName, [-1, 0, 0]),
-							this.createSimpleFace("up", textureName, [0, 1, 0]),
-							this.createSimpleFace("down", textureName, [0, -1, 0]),
-						],
-						bbox: [0, 0, 0, 16, 16, 16], // Full block bounding box
-					};
-
-					blockDefs.push([stateKey, simpleCubeDef]);
-				}
-			}
-			// If it's an object mapping indices to block names
-			else if (
-				typeof blockPalette === "object" &&
-				!Array.isArray(blockPalette)
-			) {
-				for (const [index, blockId] of Object.entries(blockPalette)) {
-					// Use the index as stateKey
-					const stateKey = index;
-
-					// Extract base name from the block ID
-					let textureName = "block/stone"; // Default
-
-					if (typeof blockId === "string") {
-						// Remove minecraft: prefix and any state properties
-						const blockNameWithoutPrefix = blockId.replace("minecraft:", "");
-						const baseName = blockNameWithoutPrefix.split("[")[0];
-
-						textureName = `block/${baseName}`;
-						console.log(
-							`Block at index ${index} is ${blockId}, using texture: ${textureName}`
-						);
-					}
-
-					// Create a block definition with all 6 faces
-					const simpleCubeDef: BakedBlockDef = {
-						faces: [
-							this.createSimpleFace("north", textureName, [0, 0, -1]),
-							this.createSimpleFace("south", textureName, [0, 0, 1]),
-							this.createSimpleFace("east", textureName, [1, 0, 0]),
-							this.createSimpleFace("west", textureName, [-1, 0, 0]),
-							this.createSimpleFace("up", textureName, [0, 1, 0]),
-							this.createSimpleFace("down", textureName, [0, -1, 0]),
-						],
-						bbox: [0, 0, 0, 16, 16, 16], // Full block bounding box
-					};
-
-					blockDefs.push([stateKey, simpleCubeDef]);
-				}
-			} else {
-				console.warn("Unexpected block palette format:", typeof blockPalette);
-				return [];
-			}
-
-			return blockDefs;
+			return mergedMesh;
 		} catch (error) {
-			console.error("Error processing block palette:", error);
-			return [];
+			console.error(
+				`[WMB] Failed to create final mesh for ${meshPrefix}-${category}:`,
+				error
+			);
+			mergedGeometry?.dispose();
+			return null;
 		}
 	}
 
-	/**
-	 * Creates a simplified face definition for placeholder blocks
-	 */
-	private createSimpleFace(
-		direction: string,
-		texKey: string,
-		normal: [number, number, number]
-	): any {
-		// Calculate vertices based on direction
-		let pos: number[];
-		const uvs = [0, 0, 1, 0, 0, 1, 1, 1]; // Default UVs
+	// Helper to create positioned geometry without cloning
+	private createPositionedGeometry(
+		baseGeometry: THREE.BufferGeometry,
+		position: THREE.Vector3
+	): THREE.BufferGeometry {
+		const positionAttribute = baseGeometry.attributes.position;
+		const normalAttribute = baseGeometry.attributes.normal;
+		const uvAttribute = baseGeometry.attributes.uv;
+		const indexAttribute = baseGeometry.index;
 
-		// The order of vertices is important to ensure correct face orientation
-		// We need to ensure the vertices are ordered counter-clockwise when viewed from outside
-		switch (direction) {
-			case "north": // -Z face
-				// For north face, use counter-clockwise winding when viewed from outside (-Z)
-				pos = [16, 0, 0, 0, 0, 0, 16, 16, 0, 0, 16, 0];
-				break;
-			case "south": // +Z face
-				// For south face, use counter-clockwise winding when viewed from outside (+Z)
-				pos = [0, 0, 16, 16, 0, 16, 0, 16, 16, 16, 16, 16];
-				break;
-			case "east": // +X face
-				// For east face, use counter-clockwise winding when viewed from outside (+X)
-				pos = [16, 0, 16, 16, 0, 0, 16, 16, 16, 16, 16, 0];
-				break;
-			case "west": // -X face
-				// For west face, use counter-clockwise winding when viewed from outside (-X)
-				pos = [0, 0, 0, 0, 0, 16, 0, 16, 0, 0, 16, 16];
-				break;
-			case "up": // +Y face (top)
-				// For top face, use counter-clockwise winding when viewed from above
-				pos = [0, 16, 16, 16, 16, 16, 0, 16, 0, 16, 16, 0];
-				break;
-			case "down": // -Y face (bottom)
-				// For bottom face, use counter-clockwise winding when viewed from below
-				pos = [0, 0, 0, 16, 0, 0, 0, 0, 16, 16, 0, 16];
-				break;
-			default:
-				pos = [0, 0, 0, 16, 0, 0, 0, 16, 0, 16, 16, 0];
+		// Create new geometry with same structure
+		const newGeometry = new THREE.BufferGeometry();
+
+		// Copy and translate positions
+		const positions = new Float32Array(positionAttribute.array.length);
+		for (let i = 0; i < positionAttribute.array.length; i += 3) {
+			positions[i] = positionAttribute.array[i] + position.x;
+			positions[i + 1] = positionAttribute.array[i + 1] + position.y;
+			positions[i + 2] = positionAttribute.array[i + 2] + position.z;
+		}
+		newGeometry.setAttribute(
+			"position",
+			new THREE.BufferAttribute(positions, 3)
+		);
+
+		// Copy normals directly (they don't change with translation)
+		if (normalAttribute) {
+			newGeometry.setAttribute(
+				"normal",
+				new THREE.BufferAttribute(new Float32Array(normalAttribute.array), 3)
+			);
 		}
 
-		// Register this texture key in our lookup map
-		this.registerTextureKey(texKey);
+		// Copy UVs directly
+		if (uvAttribute) {
+			newGeometry.setAttribute(
+				"uv",
+				new THREE.BufferAttribute(new Float32Array(uvAttribute.array), 2)
+			);
+		}
 
-		return {
-			pos,
-			uv: uvs,
-			normal: normal, // Using the normal passed in
-			texKey,
-		};
+		// Copy index
+		if (indexAttribute) {
+			newGeometry.setIndex(
+				new THREE.BufferAttribute(new Uint16Array(indexAttribute.array), 1)
+			);
+		}
+
+		return newGeometry;
 	}
 
-	/**
-	 * Cleans up resources used by the mesh builder.
-	 */
-	public dispose(): void {
-		// Dispose all cached materials
-		this.materialCache.forEach((material) => {
-			if (material instanceof THREE.Material) {
-				material.dispose();
+	// Custom merge that preserves material groups
+	private mergeGeometriesOptimized(
+		geometries: THREE.BufferGeometry[]
+	): THREE.BufferGeometry {
+		if (geometries.length === 0) return new THREE.BufferGeometry();
+
+		// Calculate total counts
+		let totalPositions = 0;
+		let totalIndices = 0;
+
+		geometries.forEach((geo) => {
+			totalPositions += geo.attributes.position.count;
+			if (geo.index) {
+				totalIndices += geo.index.count;
+			} else {
+				totalIndices += geo.attributes.position.count;
 			}
 		});
 
-		// Clear the caches
-		this.materialCache.clear();
-		this.textureKeyMap.clear();
+		// Allocate buffers
+		const positions = new Float32Array(totalPositions * 3);
+		const normals = new Float32Array(totalPositions * 3);
+		const uvs = new Float32Array(totalPositions * 2);
+		const indices = new Uint32Array(totalIndices);
 
-		console.log("WorldMeshBuilder disposed.");
+		// Track offsets
+		let positionOffset = 0;
+		let indexOffset = 0;
+		let vertexOffset = 0;
+
+		// Groups for materials
+		const groups: { start: number; count: number; materialIndex: number }[] =
+			[];
+		let currentGroup: {
+			start: number;
+			count: number;
+			materialIndex: number;
+		} | null = null;
+
+		// Merge geometries
+		for (const geo of geometries) {
+			const materialIndex = (geo as any).__materialIndex || 0;
+			const posAttr = geo.attributes.position;
+			const normAttr = geo.attributes.normal;
+			const uvAttr = geo.attributes.uv;
+
+			// Copy positions
+			positions.set(posAttr.array, positionOffset);
+
+			// Copy normals
+			if (normAttr) {
+				normals.set(normAttr.array, positionOffset);
+			}
+
+			// Copy UVs
+			if (uvAttr) {
+				uvs.set(uvAttr.array, (positionOffset / 3) * 2);
+			}
+
+			// Copy indices
+			let indexCount = 0;
+			if (geo.index) {
+				const geoIndices = geo.index.array;
+				for (let i = 0; i < geoIndices.length; i++) {
+					indices[indexOffset + i] = geoIndices[i] + vertexOffset;
+				}
+				indexCount = geoIndices.length;
+			} else {
+				// Generate indices for non-indexed geometry
+				for (let i = 0; i < posAttr.count; i++) {
+					indices[indexOffset + i] = vertexOffset + i;
+				}
+				indexCount = posAttr.count;
+			}
+
+			// Update groups
+			if (!currentGroup || currentGroup.materialIndex !== materialIndex) {
+				if (currentGroup) {
+					groups.push(currentGroup);
+				}
+				currentGroup = {
+					start: indexOffset,
+					count: indexCount,
+					materialIndex: materialIndex,
+				};
+			} else {
+				currentGroup.count += indexCount;
+			}
+
+			positionOffset += posAttr.array.length;
+			indexOffset += indexCount;
+			vertexOffset += posAttr.count;
+		}
+
+		if (currentGroup) {
+			groups.push(currentGroup);
+		}
+
+		// Create merged geometry
+		const mergedGeometry = new THREE.BufferGeometry();
+		mergedGeometry.setAttribute(
+			"position",
+			new THREE.BufferAttribute(positions, 3)
+		);
+		mergedGeometry.setAttribute(
+			"normal",
+			new THREE.BufferAttribute(normals, 3)
+		);
+		mergedGeometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+		mergedGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+		mergedGeometry.groups = groups;
+
+		return mergedGeometry;
+	}
+
+	private configureMeshForCategory(
+		mesh: THREE.Mesh,
+		category: keyof ChunkMeshes
+	): void {
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+		mesh.frustumCulled = true;
+		const materials = Array.isArray(mesh.material)
+			? mesh.material
+			: [mesh.material];
+		materials.forEach((mat) => {
+			if (!(mat instanceof THREE.Material)) return;
+			switch (category) {
+				case "water":
+					mesh.renderOrder = 1;
+					mat.transparent = true;
+					if ("opacity" in mat) (mat as any).opacity = 0.8;
+					break;
+				case "transparent":
+					mesh.renderOrder = 2;
+					mat.transparent = true;
+					break;
+				case "emissive":
+					mesh.renderOrder = 3;
+					break;
+				case "redstone":
+					mesh.userData.isDynamic = true;
+					break;
+			}
+		});
+	}
+
+	private extractAllMeshData(
+		rootCubaneObject: THREE.Object3D
+	): ProcessedBlockGeometry[] {
+		const allMeshData: ProcessedBlockGeometry[] = [];
+		rootCubaneObject.updateWorldMatrix(true, false);
+
+		rootCubaneObject.traverse((child) => {
+			if (
+				child instanceof THREE.Mesh &&
+				child.geometry &&
+				child.material &&
+				child.visible
+			) {
+				const material = Array.isArray(child.material)
+					? child.material[0]
+					: child.material;
+				if (!material || !(material instanceof THREE.Material)) return;
+
+				const geometry = child.geometry.clone();
+				// matrixWorld of child is its transform relative to scene origin.
+				// matrixWorld of rootCubaneObject is its transform relative to scene origin.
+				// To get child's transform relative to rootCubaneObject: child.matrixWorld * inv(rootCubaneObject.matrixWorld)
+				const matrixRelativeToRoot = child.matrixWorld
+					.clone()
+					.multiply(
+						new THREE.Matrix4().copy(rootCubaneObject.matrixWorld).invert()
+					);
+				geometry.applyMatrix4(matrixRelativeToRoot);
+
+				if (geometry.attributes.position.count > 0) {
+					allMeshData.push({ geometry, material });
+				} else {
+					geometry.dispose();
+				}
+			}
+		});
+		return allMeshData;
+	}
+
+	// Helper to create a consistent cache key including biome
+	private createBlockStringWithBiome(block: BlockData, biome: string): string {
+		return `${this.createBlockString(block)}:${biome}`;
+	}
+
+	private parseBlockStringWithBiome(key: string): [string, string] {
+		const lastColon = key.lastIndexOf(":");
+		if (lastColon === -1) return [key, "plains"]; // Should not happen if created with helper
+		return [key.substring(0, lastColon), key.substring(lastColon + 1)];
+	}
+
+	private createBlockString(block: BlockData): string {
+		let blockString = block.name || "minecraft:stone";
+		if (!blockString.includes(":")) blockString = `minecraft:${blockString}`;
+		if (block.properties && Object.keys(block.properties).length > 0) {
+			const props = Object.entries(block.properties)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(",");
+			blockString += `[${props}]`;
+		}
+		return blockString;
+	}
+
+	private createFallbackObject3D(blockString: string): THREE.Object3D {
+		const mesh = new THREE.Mesh(
+			new THREE.BoxGeometry(0.7, 0.7, 0.7),
+			new THREE.MeshBasicMaterial({
+				color: 0xee00ee,
+				wireframe: true,
+				name: `fallback-mat-${blockString}`,
+			})
+		);
+		mesh.name = `fallback-mesh-${blockString}`;
+		const group = new THREE.Group(); // Cubane returns an Object3D (often a Group)
+		group.add(mesh);
+		group.name = `fallback-object-${blockString}`;
+		return group;
+	}
+
+	public clearCaches(): void {
+		// Dispose geometries in our extracted data cache
+		this.extractedBlockDataCache.forEach((datas) => {
+			datas.forEach(({ geometry }) => geometry.dispose());
+		});
+		this.extractedBlockDataCache.clear();
+
+		// Dispose Object3Ds from Cubane that we cached (traversing to dispose their content)
+		this.cubaneBlockMeshCache.forEach((obj) => {
+			obj.traverse((child) => {
+				if (child instanceof THREE.Mesh) {
+					child.geometry?.dispose();
+					if (Array.isArray(child.material)) {
+						child.material.forEach((m) => m?.dispose());
+					} else {
+						child.material?.dispose();
+					}
+				}
+			});
+		});
+		this.cubaneBlockMeshCache.clear();
+		console.log("[WMB] Internal caches cleared and resources disposed.");
+	}
+
+	public dispose(): void {
+		// Clear caches first
+		this.clearCaches();
+
+		// Log material registry stats before cleanup
+		console.log("[WMB] Material Registry stats before disposal:");
+		MaterialRegistry.logStats();
+
+		// Note: You might want to keep materials if other chunks are still using them
+		// Only clear if this is the last WorldMeshBuilder instance
+		// MaterialRegistry.clear();
+
+		console.log("[WMB] Disposed.");
+	}
+
+	// Add method to get optimization statistics
+	public getOptimizationStats(): {
+		cacheStats: { extractedDataCount: number; cubaneObjectCount: number };
+		materialStats: ReturnType<typeof MaterialRegistry.getStats>;
+	} {
+		return {
+			cacheStats: {
+				extractedDataCount: this.extractedBlockDataCache.size,
+				cubaneObjectCount: this.cubaneBlockMeshCache.size,
+			},
+			materialStats: MaterialRegistry.getStats(),
+		};
+	}
+
+	// Optional: Logging for category stats within a getChunkMesh call
+	private logCategoryStats(
+		chunkMeshes: ChunkMeshes,
+		categories: any,
+		schematicId: string
+	): void {
+		const stats = Object.entries(categories)
+			.map(([category, blocks]: [string, any]) => ({
+				category,
+				count: blocks.length,
+				hasMesh: chunkMeshes[category as keyof ChunkMeshes] !== null,
+			}))
+			.filter((stat) => stat.count > 0);
+
+		console.log(`  📊 Logical Chunk for ${schematicId} category breakdown:`);
+		stats.forEach((stat) => {
+			const status = stat.hasMesh ? "✅" : "❌";
+			console.log(`    ${status} ${stat.category}: ${stat.count} blocks`);
+		});
 	}
 }
