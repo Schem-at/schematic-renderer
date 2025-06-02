@@ -1,6 +1,5 @@
 // WorldMeshBuilder.ts - Optimized with geometry buffer reuse and material registry
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { SchematicRenderer } from "./SchematicRenderer"; // Adjust path
 import { SchematicObject } from "./managers/SchematicObject"; // Adjust path
 import { MaterialRegistry } from "./MaterialRegistry"; // Import the material registry
@@ -32,11 +31,13 @@ interface ProcessedBlockGeometry {
 }
 
 export class WorldMeshBuilder {
+	// @ts-ignore
 	private schematicRenderer: SchematicRenderer;
 	private cubane: Cubane;
 
 	// Cache for Cubane's raw Object3D output (keyed by blockString:biome)
-	private cubaneBlockMeshCache: Map<string, THREE.Object3D> = new Map();
+	private cubaneBlockMeshCache: Map<string, THREE.Object3D | undefined> =
+		new Map();
 	// Cache for our processed geometry data from Cubane's Object3D (keyed by blockString:biome)
 	private extractedBlockDataCache: Map<string, ProcessedBlockGeometry[]> =
 		new Map();
@@ -85,9 +86,6 @@ export class WorldMeshBuilder {
 		}
 
 		if (visibleBlocks.length === 0) return [];
-
-		// console.log(`[WMB] Building meshes for a logical chunk of ${schematicObject.id} with ${visibleBlocks.length} visible blocks.`);
-		const startTime = performance.now();
 
 		// 3. Categorize blocks
 		const categories = this.categorizeBlocks(visibleBlocks);
@@ -148,17 +146,19 @@ export class WorldMeshBuilder {
 
 		if (keysToProcess.length === 0) return;
 
-		// console.log(`[WMB] Preprocessing ${keysToProcess.length} unique block types...`);
-
 		const CONCURRENCY_LIMIT_PREPROCESS = 8; // Tune this
 		let currentIndex = 0;
 
 		const processKey = async (key: string) => {
 			const [blockString, biome] = this.parseBlockStringWithBiome(key);
+
 			try {
 				let cubaneObj = this.cubaneBlockMeshCache.get(key);
 				if (!cubaneObj) {
 					cubaneObj = await this.cubane.getBlockMesh(blockString, biome, true);
+					if (!cubaneObj) {
+						console.warn(`[WMB] Cubane returned null for ${key}`);
+					}
 					this.cubaneBlockMeshCache.set(key, cubaneObj);
 				}
 
@@ -618,14 +618,17 @@ export class WorldMeshBuilder {
 		rootCubaneObject: THREE.Object3D
 	): ProcessedBlockGeometry[] {
 		const allMeshData: ProcessedBlockGeometry[] = [];
-		rootCubaneObject.updateWorldMatrix(true, false);
+		// We still need to ensure children's world matrices are up-to-date
+		// relative to the rootCubaneObject if it's assumed to be at origin.
+		rootCubaneObject.updateMatrixWorld(true); // Update world matrix of root and its descendants
 
 		rootCubaneObject.traverse((child) => {
 			if (
 				child instanceof THREE.Mesh &&
 				child.geometry &&
 				child.material &&
-				child.visible
+				child.visible &&
+				child !== rootCubaneObject // Don't process the root if it happens to be a mesh
 			) {
 				const material = Array.isArray(child.material)
 					? child.material[0]
@@ -633,9 +636,19 @@ export class WorldMeshBuilder {
 				if (!material || !(material instanceof THREE.Material)) return;
 
 				const geometry = child.geometry.clone();
-				// matrixWorld of child is its transform relative to scene origin.
-				// matrixWorld of rootCubaneObject is its transform relative to scene origin.
-				// To get child's transform relative to rootCubaneObject: child.matrixWorld * inv(rootCubaneObject.matrixWorld)
+
+				// SIMPLIFIED ASSUMPTION: rootCubaneObject.matrixWorld is identity.
+				// Therefore, child.matrixWorld IS the transform relative to root's origin.
+				// However, it's usually better to get the matrix that transforms from child's local
+				// space to the root's local space. This is child.matrix IF child is a direct
+				// descendant of rootCubaneObject AND rootCubaneObject has no transform itself.
+				// If child is nested deeper, we need its matrix relative to rootCubaneObject.
+
+				// Let's find the matrix of 'child' relative to 'rootCubaneObject'
+				// This is tricky without iterating upwards or using the original robust formula.
+				// The original formula is the most reliable way.
+
+				// Sticking to the original robust formula as it's safer:
 				const matrixRelativeToRoot = child.matrixWorld
 					.clone()
 					.multiply(
@@ -701,6 +714,7 @@ export class WorldMeshBuilder {
 
 		// Dispose Object3Ds from Cubane that we cached (traversing to dispose their content)
 		this.cubaneBlockMeshCache.forEach((obj) => {
+			if (!obj) return; // Skip if undefined
 			obj.traverse((child) => {
 				if (child instanceof THREE.Mesh) {
 					child.geometry?.dispose();
@@ -743,26 +757,5 @@ export class WorldMeshBuilder {
 			},
 			materialStats: MaterialRegistry.getStats(),
 		};
-	}
-
-	// Optional: Logging for category stats within a getChunkMesh call
-	private logCategoryStats(
-		chunkMeshes: ChunkMeshes,
-		categories: any,
-		schematicId: string
-	): void {
-		const stats = Object.entries(categories)
-			.map(([category, blocks]: [string, any]) => ({
-				category,
-				count: blocks.length,
-				hasMesh: chunkMeshes[category as keyof ChunkMeshes] !== null,
-			}))
-			.filter((stat) => stat.count > 0);
-
-		console.log(`  📊 Logical Chunk for ${schematicId} category breakdown:`);
-		stats.forEach((stat) => {
-			const status = stat.hasMesh ? "✅" : "❌";
-			console.log(`    ${status} ${stat.category}: ${stat.count} blocks`);
-		});
 	}
 }

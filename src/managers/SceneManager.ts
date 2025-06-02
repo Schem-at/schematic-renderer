@@ -19,10 +19,13 @@ export class SceneManager extends EventEmitter {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.scene = new THREE.Scene();
+
 		this._showGrid = this.schematicRenderer.options.showGrid ?? false;
 		this._showAxes = this.schematicRenderer.options.showAxes ?? false;
-
-
+		//if the scene has a background color set, use it
+		if (this.schematicRenderer.options.backgroundColor) {
+			this.setBackgroundColor(this.schematicRenderer.options.backgroundColor);
+		}
 		// Add ambient light
 		const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
 		this.scene.add(ambientLight);
@@ -62,60 +65,65 @@ export class SceneManager extends EventEmitter {
 		const helper = new THREE.CameraHelper(camera);
 		helper.name = name;
 		this.scene.add(helper);
-	  }
-	  
-	  public removeCameraHelper(name: string): void {
+	}
+
+	public removeCameraHelper(name: string): void {
 		const helper = this.scene.getObjectByName(name);
 		if (helper) {
-		  this.scene.remove(helper);
+			this.scene.remove(helper);
 		}
-	  }
-	
-	  // Method to add a target indicator
-	  public addTargetIndicator(position: THREE.Vector3, name: string = 'targetIndicator'): void {
+	}
+
+	// Method to add a target indicator
+	public addTargetIndicator(
+		position: THREE.Vector3,
+		name: string = "targetIndicator"
+	): void {
 		// Remove existing target indicator if any
 		this.removeTargetIndicator(name);
-	
+
 		// Create a visual representation of the target (e.g., a sphere)
 		const geometry = new THREE.SphereGeometry(0.5, 16, 16);
 		const material = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow color
 		const sphere = new THREE.Mesh(geometry, material);
 		sphere.position.copy(position);
 		sphere.name = name;
-	
+
 		// Add the sphere to the scene
 		this.scene.add(sphere);
-	  }
-	
-	  // Method to remove the target indicator
-	  public removeTargetIndicator(name: string = 'targetIndicator'): void {
-		const object = this.scene.getObjectByName(name);
-		if (object) {
-		  this.scene.remove(object);
-		}
-	  }
-	
-	  // Optional: Method to update the target indicator position
-	  public updateTargetIndicatorPosition(position: THREE.Vector3, name: string = 'targetIndicator'): void {
-		const object = this.scene.getObjectByName(name);
-		if (object) {
-		  object.position.copy(position);
-		}
-	  }
-	
+	}
 
-	  public addPathVisualization(group: THREE.Group, name: string): void {
+	// Method to remove the target indicator
+	public removeTargetIndicator(name: string = "targetIndicator"): void {
+		const object = this.scene.getObjectByName(name);
+		if (object) {
+			this.scene.remove(object);
+		}
+	}
+
+	// Optional: Method to update the target indicator position
+	public updateTargetIndicatorPosition(
+		position: THREE.Vector3,
+		name: string = "targetIndicator"
+	): void {
+		const object = this.scene.getObjectByName(name);
+		if (object) {
+			object.position.copy(position);
+		}
+	}
+
+	public addPathVisualization(group: THREE.Group, name: string): void {
 		group.name = name;
 		this.scene.add(group);
-	  }
-	
-	  public removePathVisualization(name: string): void {
+	}
+
+	public removePathVisualization(name: string): void {
 		const object = this.scene.getObjectByName(name);
 		if (object) {
-		  this.scene.remove(object);
+			this.scene.remove(object);
 		}
-	  }
-	
+	}
+
 	// Light Management Methods
 	public addLight(name: string, light: THREE.Light): void {
 		if (this.lights.has(name)) {
@@ -156,19 +164,40 @@ export class SceneManager extends EventEmitter {
 			this.gridHelper = new Grid(
 				this.schematicRenderer.cameraManager.activeCamera.camera
 			);
+
+			// EXCLUDE GRID FROM SSAO - This prevents artifacts!
+			this.gridHelper.userData.cannotReceiveAO = true;
+			this.gridHelper.userData.treatAsOpaque = false;
+
+			// If the grid has children, apply to them too
+			this.gridHelper.traverse((child) => {
+				child.userData.cannotReceiveAO = true;
+				child.userData.treatAsOpaque = false;
+			});
+
 			this.scene.add(this.gridHelper);
 		} else if (!show && this.gridHelper) {
 			this.scene.remove(this.gridHelper);
 			this.gridHelper = null;
 		}
 	}
-
 	toggleAxes(show: boolean) {
 		if (show && !this.axesHelper) {
 			this.axesHelper = new Axes(
 				5,
 				this.schematicRenderer.cameraManager.activeCamera.camera
 			);
+
+			// EXCLUDE AXES FROM SSAO TOO
+			this.axesHelper.userData.cannotReceiveAO = true;
+			this.axesHelper.userData.treatAsOpaque = false;
+
+			// Apply to children
+			this.axesHelper.traverse((child) => {
+				child.userData.cannotReceiveAO = true;
+				child.userData.treatAsOpaque = false;
+			});
+
 			this.scene.add(this.axesHelper);
 		} else if (!show && this.axesHelper) {
 			this.scene.remove(this.axesHelper);
@@ -228,21 +257,21 @@ export class SceneManager extends EventEmitter {
 	public removeObject(name: string): void {
 		const object = this.scene.getObjectByName(name);
 		if (object) {
-		  this.scene.remove(object);
-		  
-		  // Dispose resources
-		  if (object instanceof THREE.Mesh) {
-			if (object.geometry) object.geometry.dispose();
-			if (Array.isArray(object.material)) {
-			  object.material.forEach(m => m.dispose());
-			} else {
-			  object.material.dispose();
+			this.scene.remove(object);
+
+			// Dispose resources
+			if (object instanceof THREE.Mesh) {
+				if (object.geometry) object.geometry.dispose();
+				if (Array.isArray(object.material)) {
+					object.material.forEach((m) => m.dispose());
+				} else {
+					object.material.dispose();
+				}
 			}
-		  }
-		  
-		  this.emit("objectRemoved", { name });
+
+			this.emit("objectRemoved", { name });
 		}
-	  }
+	}
 
 	public getObjectByName(name: string): THREE.Object3D | undefined {
 		return this.scene.getObjectByName(name);

@@ -2,8 +2,6 @@ import { SchematicRenderer } from "../src/SchematicRenderer";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL } from "@ffmpeg/util";
 
-const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-
 const schematicBase64 =
 	"H4sIAAAAAAAAA11P20rEQAw9ncHtdrx8hJ8h6IO44IOLguJ6QSS2aRvsTqETUF/9UT9FM6ywYiAk53BykgRU13XPa1KpS1Snw1i/npESgLkliqJwDrNzlq5X5PaCY6c9XMB8yUqNiT2q1eKybRPr3bfFH3z/Dz9kU+xitoHWexN8WT2x+hlQXtHAquyxv5bI9UStHpFM+RaPwy3XTZTS80s++DHF8e3juKUh8VP29zjYChPFxjhnbPg1X9J7VlXYu5GBF1FFhVPYjJa3PCUZY97osLOSJr+LH/Ay+vAqAQAA";
 const adderSchematicBase64String =
@@ -48,6 +46,7 @@ const initFFmpeg = async () => {
 	});
 };
 initFFmpeg();
+const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
 const renderer = new SchematicRenderer(
 	canvas,
@@ -57,7 +56,13 @@ const renderer = new SchematicRenderer(
 		xor: () => Promise.resolve(base64ToArrayBuffer(xor)),
 		// "diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
-	{},
+	{
+		vanillaPack: async () => {
+			const response = await fetch("http://localhost:3002/pack.zip");
+			const buffer = await response.arrayBuffer();
+			return new Blob([buffer], { type: "application/zip" });
+		},
+	},
 
 	{
 		ffmpeg: ffmpeg,
@@ -86,7 +91,7 @@ const renderer = new SchematicRenderer(
 			onSchematicDropSuccess: async (file) => {
 				console.log("Schematic dropped successfully:", file);
 			},
-			onRendererInitialized: async () => {
+			onRendererInitialized: async (renderer: SchematicRenderer) => {
 				console.log("Renderer initialized");
 			},
 			onSchematicLoaded: (schematicName: string) => {

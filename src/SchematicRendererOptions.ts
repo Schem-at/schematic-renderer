@@ -5,6 +5,7 @@ import { DragAndDropManagerOptions } from "./managers/DragAndDropManager";
 import { GizmoManagerOptions } from "./managers/GizmoManager";
 import { CameraManagerOptions } from "./managers/CameraManager";
 import { SelectableObject } from "./managers/SelectableObject";
+import { SchematicRenderer } from "./SchematicRenderer";
 
 export interface ProgressBarOptions {
 	showLabel?: boolean;
@@ -17,11 +18,7 @@ export interface ProgressBarOptions {
 }
 
 export interface SchematicRendererOptions {
-	disableWorkers?: boolean;
-	assetWorkerPath?: string;
-	meshWorkerPath?: string;
-	createAssetWorker?: () => Worker;
-	createMeshWorker?: () => Worker;
+	backgroundColor?: number | string; // Accepts hex color or CSS color string
 	hdri?: string;
 	resourcePackBlobs?: any;
 	ffmpeg?: any;
@@ -95,7 +92,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 
 export interface Callbacks {
 	// Renderer lifecycle callbacks
-	onRendererInitialized?: () => void;
+	onRendererInitialized?: (renderer: SchematicRenderer) => void;
 
 	// Schematic callbacks
 	onSchematicRendered?: (schematicName: string) => void;

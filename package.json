@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.21",
+	"version": "1.0.26",
 	"license": "AGPL-3.0-only",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
@@ -11,7 +11,7 @@
 	],
 	"scripts": {
 		"start": "vite",
-		"build": "tsc && vite build",
+		"build": "tsc --project tsconfig.build.json && vite build",
 		"build-only": "vite build",
 		"prepare": "npm run build",
 		"watch-wasm": "node watch-wasm.js",
@@ -25,11 +25,13 @@
 		"@types/lodash": "^4.17.13",
 		"@types/pako": "^2.0.3",
 		"@types/three": "^0.176.0",
+		"ajv": "^8.17.1",
 		"cors-anywhere": "^0.4.4",
 		"express": "^4.19.2",
 		"request": "^2.88.2",
 		"typescript": "^5.4.5",
 		"vite": "^4.3.5",
+		"vite-plugin-dts": "^4.5.4",
 		"vite-plugin-node-polyfills": "^0.22.0"
 	},
 	"dependencies": {
@@ -37,7 +39,7 @@
 		"@ffmpeg/util": "^0.12.2",
 		"chokidar": "^3.6.0",
 		"concurrently": "^8.2.2",
-		"cubane": "^1.0.11",
+		"cubane": "^1.0.13",
 		"deepmerge": "^4.3.1",
 		"fs-extra": "^11.2.0",
 		"gif.js.optimized": "^1.0.1",
@@ -46,6 +48,7 @@
 		"jszip": "^3.10.1",
 		"lil-gui": "^0.19.2",
 		"n8ao": "^1.10.0",
+		"nucleation": "^0.1.17",
 		"pako": "^2.1.0",
 		"postprocessing": "^6.35.4",
 		"stats-js": "^1.0.1",

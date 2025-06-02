@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import dts from 'vite-plugin-dts'; // ← Add this
 import path from 'path';
 
 export default defineConfig({
@@ -16,7 +17,7 @@ export default defineConfig({
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'SchematicRenderer',
       fileName: (format) => `schematic-renderer.${format}.js`,
-      formats: ['umd', 'es'],
+      formats: ['es'],
     },
     sourcemap: true,
     rollupOptions: {
@@ -27,12 +28,16 @@ export default defineConfig({
         },
       },
     },
-
   },
   plugins: [
     viteCommonjs(),
     wasm(),
-    topLevelAwait()
+    topLevelAwait(),
+    dts({
+      insertTypesEntry: true,
+      outDir: '../dist',
+      exclude: ['test/**/*', '**/*.test.ts']
+    }) // ← Add this plugin
   ],
   define: {
     'process.env': {},

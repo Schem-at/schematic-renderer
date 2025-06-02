@@ -1,6 +1,6 @@
 // managers/SchematicObject.ts
 import * as THREE from "three";
-import { SchematicWrapper } from "../wasm/minecraft_schematic_utils";
+import { SchematicWrapper } from "nucleation";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
@@ -8,7 +8,9 @@ import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty";
 import { castToEuler, castToVector3 } from "../utils/Casts";
 import { resetPerformanceMetrics } from "../monitoring";
 import { SchematicRenderer } from "../SchematicRenderer";
-import type { BlockData } from "../types";
+import type { BlockData, ChunkData } from "../types";
+
+// Define chunk data interface to fix TypeScript errors
 
 export class SchematicObject extends EventEmitter {
 	public name: string;
@@ -55,6 +57,10 @@ export class SchematicObject extends EventEmitter {
 	};
 
 	private meshesReady: Promise<void>;
+
+	// Cache for dimensions to avoid repeated calls
+	private _cachedDimensions: [number, number, number] | null = null;
+
 	constructor(
 		schematicRenderer: SchematicRenderer,
 		name: string,
@@ -100,7 +106,7 @@ export class SchematicObject extends EventEmitter {
 		// Set initial properties if provided
 		Object.assign(this, properties);
 
-		const schematicDimensions = this.schematicWrapper.get_dimensions();
+		const schematicDimensions = this.getDimensions();
 		console.log("Schematic dimensions:", schematicDimensions);
 		this.position = new THREE.Vector3(
 			-schematicDimensions[0] / 2,
@@ -233,7 +239,7 @@ export class SchematicObject extends EventEmitter {
 
 				// Reset to full dimensions
 				reset() {
-					const dimensions = self.schematicWrapper.get_dimensions();
+					const dimensions = self.getDimensions();
 					self.setRenderingBounds(
 						new THREE.Vector3(0, 0, 0),
 						new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
@@ -322,6 +328,15 @@ export class SchematicObject extends EventEmitter {
 		return createReactiveProxy(this as SchematicObject, propertyConfigs);
 	}
 
+	// Helper method to get cached dimensions
+	private getDimensions(): [number, number, number] {
+		if (!this._cachedDimensions) {
+			let dimensions = this.schematicWrapper.get_dimensions();
+			this._cachedDimensions = [dimensions[0], dimensions[1], dimensions[2]];
+		}
+		return this._cachedDimensions;
+	}
+
 	private emitPropertyChanged(property: string, value: any) {
 		this.eventEmitter.emit("schematicPropertyChanged", {
 			schematic: this,
@@ -349,38 +364,41 @@ export class SchematicObject extends EventEmitter {
 		});
 	}
 
-	// Helper method to safely apply properties to meshes/objects
+	// Optimized method to apply properties to objects
 	private applyPropertiesToObjects(objects: THREE.Object3D[]) {
+		// Cache material settings
+		const needsTransparency = this.opacity < 1.0;
+
 		objects.forEach((obj) => {
-			// Traverse the object to find all meshes
-			obj.traverse((child) => {
-				if (child instanceof THREE.Mesh) {
-					// Apply material properties
-					const material = child.material;
-					if (material) {
-						if (Array.isArray(material)) {
-							material.forEach((mat) => {
-								mat.opacity = this.opacity;
-								mat.transparent = this.opacity < 1.0;
-							});
-						} else {
-							material.opacity = this.opacity;
-							material.transparent = this.opacity < 1.0;
-						}
-					}
-
-					// Apply visibility
-					child.visible = this.visible;
-
-					// Apply other mesh properties
-					child.castShadow = true;
-					child.receiveShadow = true;
-					child.frustumCulled = true;
-				}
-			});
-
-			// Apply visibility to the root object as well
+			// Set visibility on root object first
 			obj.visible = this.visible;
+
+			// Traverse only if we need to update meshes
+			if (this.visible) {
+				obj.traverse((child) => {
+					if (child instanceof THREE.Mesh) {
+						// Apply visibility
+						child.visible = true; // Already handled by parent
+
+						// Apply shadow settings
+						child.castShadow = true;
+						child.receiveShadow = true;
+						child.frustumCulled = true;
+
+						// Apply material properties
+						const materials = Array.isArray(child.material)
+							? child.material
+							: [child.material];
+
+						materials.forEach((mat) => {
+							if (mat) {
+								mat.opacity = this.opacity;
+								mat.transparent = needsTransparency;
+							}
+						});
+					}
+				});
+			}
 		});
 	}
 
@@ -469,18 +487,20 @@ export class SchematicObject extends EventEmitter {
 		console.log(
 			`[SchematicObject:${schematicObject.id}] Starting buildSchematicMeshes (Time-Budgeted Live Update with Render Stats).`
 		);
-		const schematic = schematicObject.schematicWrapper;
 		const overallStartTime = performance.now();
-		const renderer = this.schematicRenderer.renderer; // Get the THREE.WebGLRenderer instance
+		// Fixed: Access renderer through renderManager
+		const renderer = this.schematicRenderer.renderManager?.renderer;
 
-		// Get all logical chunks upfront
+		const schematic = schematicObject.schematicWrapper;
+
+		// Get all logical chunks upfront - properly typed
 		const allLogicalChunks = Array.from(
 			schematic.chunks(
 				chunkDimensions.chunkWidth,
 				chunkDimensions.chunkHeight,
 				chunkDimensions.chunkLength
 			)
-		);
+		) as ChunkData[];
 
 		if (allLogicalChunks.length === 0) {
 			console.log(
@@ -523,7 +543,7 @@ export class SchematicObject extends EventEmitter {
 		let currentChunkIndex = 0;
 		// Initial budget. We might adjust this later.
 		let currentFrameJsBudget = 10; // ms - Start with a slightly more generous budget (e.g., 8-12ms)
-		const TARGET_FRAME_TIME = 16.66; // For 60 FPS, ~33.33 for 30 FPS
+		const TARGET_FRAME_TIME = 16.66; // For 60 FPS
 
 		let lastRenderTimeMs = 0;
 		let frameCounterForLog = 0;
@@ -554,7 +574,7 @@ export class SchematicObject extends EventEmitter {
 
 						const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 
-						// Rendering bounds check for the logical chunk
+						// Rendering bounds check for the logical chunk - optimized
 						if (renderingBounds) {
 							const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
 							const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
@@ -562,6 +582,8 @@ export class SchematicObject extends EventEmitter {
 							const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
 							const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
 							const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+
+							// Early exit if chunk is completely outside bounds
 							if (
 								chunkMaxX <= renderingBounds.min.x ||
 								chunkMinX >= renderingBounds.max.x ||
@@ -588,18 +610,15 @@ export class SchematicObject extends EventEmitter {
 						// const chunkProcStartTime = performance.now();
 						const chunkBlockData = blocks as BlockData[];
 
-						// This is the primary async work per chunk
 						const computedChunkObjects =
 							await this.worldMeshBuilder.getChunkMesh(
 								chunkBlockData,
-								schematicObject, // Pass `this`
-								renderingBounds // Pass schematic's overall rendering bounds
+								schematicObject,
+								renderingBounds
 							);
-						// const chunkProcTime = performance.now() - chunkProcStartTime;
 						processedChunkCount++;
 
 						if (computedChunkObjects && computedChunkObjects.length > 0) {
-							// console.log(`[SchematicObject:${schematicObject.id}] Computed chunk ${originalIndexForThisChunk} (${chunk_x},${chunk_y},${chunk_z}) - ${computedChunkObjects.length} meshes (${chunkProcTime.toFixed(2)}ms)`);
 							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
 							chunkMap.set(chunkKey, computedChunkObjects);
 							meshesComputedThisFrame.push(...computedChunkObjects);
@@ -614,25 +633,22 @@ export class SchematicObject extends EventEmitter {
 								processedChunkCount
 							);
 						}
-					} // End of while loop (processing chunks for this frame)
+					}
 
-					// Add meshes computed in *this frame* to the scene
 					if (meshesComputedThisFrame.length > 0) {
-						this.applyPropertiesToObjects(meshesComputedThisFrame); // Apply opacity, visibility from SchematicObject
+						this.applyPropertiesToObjects(meshesComputedThisFrame);
 						meshesComputedThisFrame.forEach((obj) => {
 							this.group.add(obj);
 						});
 						allGeneratedMeshesAccumulator.push(...meshesComputedThisFrame); // Add to overall list
-
-						// Update this.meshes for backward compatibility or other direct uses if needed
-						// this.meshes.push(...meshesComputedThisFrame.filter(obj => obj instanceof THREE.Mesh) as THREE.Mesh[]);
 					}
 
 					// --- Render and Log Stats ---
 					if (this.schematicRenderer.renderManager && renderer) {
 						// Ensure renderer is available
 						const renderStartTime = performance.now();
-						this.schematicRenderer.renderManager.renderSingleFrame(); // Force a render
+						// Fixed: Use render() method instead of renderSingleFrame()
+						this.schematicRenderer.renderManager.render();
 						lastRenderTimeMs = performance.now() - renderStartTime;
 					}
 
@@ -668,29 +684,41 @@ export class SchematicObject extends EventEmitter {
 						console.log(
 							`  Total Meshes in Scene Group: ${this.group.children.length}`
 						);
-						// Add these methods to WorldMeshBuilder:
-						// public getCubaneCacheSize(): number { return this.cubaneBlockMeshCache.size; }
-						// public getExtractedDataCacheSize(): number { return this.extractedBlockDataCache.size; }
-						if (
-							this.worldMeshBuilder.getCubaneCacheSize &&
-							this.worldMeshBuilder.getExtractedDataCacheSize
-						) {
+
+						// Log optimization stats if available
+						const optimizationStats =
+							this.worldMeshBuilder.getOptimizationStats?.();
+						if (optimizationStats) {
 							console.log(
-								`  WMB Cubane Cache: ${this.worldMeshBuilder.getCubaneCacheSize()}, Extracted Cache: ${this.worldMeshBuilder.getExtractedDataCacheSize()}`
+								`  WMB Cache Stats - Block Types: ${optimizationStats.cacheStats.extractedDataCount}, Materials: ${optimizationStats.materialStats.totalMaterials}`
 							);
 						}
 
-						// --- Optional: Dynamic budget adjustment (very basic example) ---
-						// Be cautious with this, can lead to instability if not tuned well.
-						// const combinedTime = jsTimeThisFrame + lastRenderTimeMs;
-						// if (combinedTime > TARGET_FRAME_TIME * 1.2 && currentFrameJsBudget > 4) { // Significantly over target
-						//     currentFrameJsBudget = Math.max(4, currentFrameJsBudget * 0.9);
-						//     console.log(`  --> Frame work heavy, reducing JS budget to: ${currentFrameJsBudget.toFixed(2)}ms`);
-						// } else if (combinedTime < TARGET_FRAME_TIME * 0.6 && currentFrameJsBudget < 16) { // Well under target
-						//     currentFrameJsBudget = Math.min(16, currentFrameJsBudget * 1.05);
-						//     console.log(`  --> Frame work light, increasing JS budget to: ${currentFrameJsBudget.toFixed(2)}ms`);
-						// }
-						// --- End Dynamic Budget Adjustment ---
+						// Dynamic budget adjustment - only if we're significantly off target
+						const combinedTime = jsTimeThisFrame + lastRenderTimeMs;
+						if (
+							combinedTime > TARGET_FRAME_TIME * 1.5 &&
+							currentFrameJsBudget > 4
+						) {
+							// Way over target
+							currentFrameJsBudget = Math.max(4, currentFrameJsBudget * 0.8);
+							console.log(
+								`  --> Reducing JS budget to: ${currentFrameJsBudget.toFixed(
+									2
+								)}ms`
+							);
+						} else if (
+							combinedTime < TARGET_FRAME_TIME * 0.5 &&
+							currentFrameJsBudget < 16
+						) {
+							// Way under target
+							currentFrameJsBudget = Math.min(16, currentFrameJsBudget * 1.2);
+							console.log(
+								`  --> Increasing JS budget to: ${currentFrameJsBudget.toFixed(
+									2
+								)}ms`
+							);
+						}
 					}
 					// --- End Render and Log Stats ---
 
@@ -707,6 +735,20 @@ export class SchematicObject extends EventEmitter {
 						);
 						this.group.updateMatrixWorld(true); // Final update for the whole group
 
+						if (typeof window !== "undefined") {
+							window.dispatchEvent(
+								new CustomEvent("schematicRenderComplete", {
+									detail: {
+										schematicId: this.id,
+										schematicName: this.name,
+										totalChunks: allLogicalChunks.length,
+										processedChunks: processedChunkCount,
+										buildTimeMs: performance.now() - overallStartTime,
+										meshCount: allGeneratedMeshesAccumulator.length,
+									},
+								})
+							);
+						}
 						if (renderer && renderer.info) {
 							// Final stats
 							console.log(
@@ -808,7 +850,7 @@ export class SchematicObject extends EventEmitter {
 	 * Resets the rendering bounds to include the full schematic
 	 */
 	public resetRenderingBounds(): void {
-		const dimensions = this.schematicWrapper.get_dimensions();
+		const dimensions = this.getDimensions();
 		this.setRenderingBounds(
 			new THREE.Vector3(0, 0, 0),
 			new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
@@ -860,21 +902,22 @@ export class SchematicObject extends EventEmitter {
 		this.setChunkObjectsAt(chunkX, chunkY, chunkZ, meshes);
 	}
 
+	// Optimized material update method
 	private updateMeshMaterials(property: "opacity") {
+		const needsTransparency = this.opacity < 1.0;
+
 		this.group.traverse((child) => {
 			if (child instanceof THREE.Mesh) {
-				const material = child.material;
-				if (material) {
-					if (Array.isArray(material)) {
-						material.forEach((mat) => {
-							mat.opacity = this.opacity;
-							mat.transparent = this.opacity < 1.0;
-						});
-					} else {
-						material.opacity = this.opacity;
-						material.transparent = this.opacity < 1.0;
+				const materials = Array.isArray(child.material)
+					? child.material
+					: [child.material];
+
+				materials.forEach((mat) => {
+					if (mat) {
+						mat.opacity = this.opacity;
+						mat.transparent = needsTransparency;
 					}
-				}
+				});
 			}
 		});
 		// Emit event if necessary
@@ -972,12 +1015,14 @@ export class SchematicObject extends EventEmitter {
 		await this.rebuildChunkAtPosition(position);
 	}
 
-	//takes an array of block positions and block types pairs
+	// Optimized batch block setting
 	public async setBlocks(blocks: [THREE.Vector3 | number[], string][]) {
 		const affectedChunks = new Set<string>();
 		let startTime = performance.now();
 		console.log("Setting blocks");
 		resetPerformanceMetrics();
+
+		// Batch all block updates first
 		for (let [position, blockType] of blocks) {
 			if (Array.isArray(position)) {
 				position = new THREE.Vector3(position[0], position[1], position[2]);
@@ -992,10 +1037,15 @@ export class SchematicObject extends EventEmitter {
 		startTime = performance.now();
 		console.log("Rebuilding chunks");
 
+		// Rebuild all affected chunks in parallel
+		const rebuildPromises: Promise<void>[] = [];
 		for (let chunk of affectedChunks) {
 			const [chunkX, chunkY, chunkZ] = chunk.split(",").map((v) => parseInt(v));
-			await this.rebuildChunk(chunkX, chunkY, chunkZ);
+			rebuildPromises.push(this.rebuildChunk(chunkX, chunkY, chunkZ));
 		}
+
+		// Wait for all chunks to rebuild
+		await Promise.all(rebuildPromises);
 		console.log("Chunks rebuilt in", performance.now() - startTime + "ms");
 	}
 
@@ -1028,7 +1078,7 @@ export class SchematicObject extends EventEmitter {
 			);
 		}
 
-		const sourceDimensions = sourceSchematic.schematicWrapper.get_dimensions();
+		const sourceDimensions = sourceSchematic.getDimensions();
 
 		if (!sourceMin) {
 			sourceMin = new THREE.Vector3(0, 0, 0);
@@ -1077,7 +1127,7 @@ export class SchematicObject extends EventEmitter {
 
 	public async replaceBlock(replaceBlock: string, newBlock: string) {
 		const blocks: [THREE.Vector3, string][] = [];
-		const dimensions = this.schematicWrapper.get_dimensions();
+		const dimensions = this.getDimensions();
 		for (let x = 0; x < dimensions[0]; x++) {
 			for (let y = 0; y < dimensions[1]; y++) {
 				for (let z = 0; z < dimensions[2]; z++) {
@@ -1217,7 +1267,7 @@ export class SchematicObject extends EventEmitter {
 
 	public containsPosition(position: THREE.Vector3): boolean {
 		// Calculate the bounds of the schematic
-		const dimensions = this.schematicWrapper.get_dimensions();
+		const dimensions = this.getDimensions();
 		const min = this.position.clone();
 		const max = min
 			.clone()
@@ -1238,7 +1288,7 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public getSchematicCenter(): THREE.Vector3 {
-		const dimensions = this.schematicWrapper.get_dimensions();
+		const dimensions = this.getDimensions();
 		return new THREE.Vector3(
 			this.position.x + Math.abs(dimensions[0] / 2),
 			this.position.y + Math.abs(dimensions[1] / 2),
@@ -1299,16 +1349,16 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public getBoundingBox(): [number[], number[]] {
-		const boundingBox = this.schematicWrapper.get_dimensions();
+		const boundingBox = this.getDimensions();
 		const positionArray = this.position.toArray();
 		const min = positionArray;
 		const max = positionArray.map((v, i) => v + boundingBox[i]);
 		return [min, max];
 	}
 
-	// TODO: Use nucleation optimisation
-	public getAllBlocks(): BlockData[] {
-		const dimensions = this.schematicWrapper.get_dimensions();
+	// Optimized getAllBlocks method with optional filtering
+	public getAllBlocks(filter?: (block: BlockData) => boolean): BlockData[] {
+		const dimensions = this.getDimensions();
 		const blocks: BlockData[] = [];
 
 		for (let x = 0; x < dimensions[0]; x++) {
@@ -1330,7 +1380,7 @@ export class SchematicObject extends EventEmitter {
 							properties = {};
 						}
 
-						blocks.push({
+						const blockData: BlockData = {
 							x,
 							y,
 							z,
@@ -1346,7 +1396,12 @@ export class SchematicObject extends EventEmitter {
 											.join(",")}]`
 									: ""
 							}`, // Generate stateKey
-						});
+						};
+
+						// Apply filter if provided
+						if (!filter || filter(blockData)) {
+							blocks.push(blockData);
+						}
 					}
 				}
 			}
@@ -1361,7 +1416,7 @@ export class SchematicObject extends EventEmitter {
 	 * @returns Settings object with properties and methods
 	 */
 	public createBoundsControls(): any {
-		const dimensions = this.schematicWrapper.get_dimensions();
+		const dimensions = this.getDimensions();
 		const [width, height, depth] = dimensions;
 
 		const settings = {

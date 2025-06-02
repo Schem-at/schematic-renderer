@@ -31,13 +31,10 @@ import { UIManager } from "./managers/UIManager";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
-import { AssetWorkerManager } from "./managers/AssetWorkerManager";
-
 import { Cubane } from "cubane";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
-	public assetWorkerManager: AssetWorkerManager;
 	public clock: THREE.Clock;
 	public options: SchematicRendererOptions;
 	public eventEmitter: EventEmitter;
@@ -68,12 +65,6 @@ export class SchematicRenderer {
 		options: SchematicRendererOptions = {}
 	) {
 		this.canvas = canvas;
-		// Initialize worker managers
-		this.assetWorkerManager = new AssetWorkerManager({
-			disableWorkers: options.disableWorkers,
-			workerPath: options.assetWorkerPath,
-			createWorker: options.createAssetWorker,
-		});
 
 		this.options = merge({}, DEFAULT_OPTIONS, options);
 		this.clock = new THREE.Clock();
@@ -207,7 +198,7 @@ export class SchematicRenderer {
 			this.animate();
 
 			// Trigger callbacks and events
-			this.options.callbacks?.onRendererInitialized?.();
+			this.options.callbacks?.onRendererInitialized?.(this);
 			this.canvas.dispatchEvent(new CustomEvent("rendererInitialized"));
 
 			// Hide progress bar after a short delay to show completion state
@@ -320,8 +311,9 @@ export class SchematicRenderer {
 		// Cubane loads packs in order, with later packs having higher priority
 		for (let i = 0; i < resourcePackBlobs.length; i++) {
 			const blob = resourcePackBlobs[i];
+
 			try {
-				await this.cubane.loadResourcePack(blob);
+				await this.cubane.loadResourcePack(blob as Blob);
 				console.log(
 					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
 				);
@@ -356,6 +348,7 @@ export class SchematicRenderer {
 		this.gizmoManager?.update();
 		this.renderManager.render();
 		this.interactionManager?.update();
+		this.cubane.updateAnimations();
 	}
 
 	// Schematic rendering bounds management
@@ -577,9 +570,9 @@ export class SchematicRenderer {
 
 		// Rebuild world meshes if needed
 		if (this.worldMeshBuilder && this.schematicManager) {
-			for (const schematic of this.schematicManager.getAllSchematics()) {
-				await this.worldMeshBuilder.rebuildSchematic(schematic.id);
-			}
+			// for (const schematic of this.schematicManager.getAllSchematics()) {
+			// 	await this.worldMeshBuilder.rebuildSchematic(schematic.id);
+			// }
 		}
 
 		if (this.options.enableProgressBar && this.uiManager) {
@@ -637,9 +630,9 @@ export class SchematicRenderer {
 			this.uiManager?.updateProgress(0.7, "Rebuilding schematic meshes...");
 
 			// Trigger rebuild of all schematic meshes
-			for (const schematic of this.schematicManager.getAllSchematics()) {
-				await this.worldMeshBuilder.rebuildSchematic(schematic.id);
-			}
+			// for (const schematic of this.schematicManager.getAllSchematics()) {
+			// 	await this.worldMeshBuilder.rebuildSchematic(schematic.id);
+			// }
 		}
 
 		if (this.options.enableProgressBar && this.uiManager) {

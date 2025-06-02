@@ -3,14 +3,14 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 
 export interface RecordingOptions {
-    width?: number;
-    height?: number;
-    frameRate?: number;
-    quality?: number;
-    onStart?: () => void;
-    onProgress?: (progress: number) => void;
-    onFfmpegProgress?: (progress: number, time: number) => void;
-    onComplete?: (blob: Blob) => void;
+	width?: number;
+	height?: number;
+	frameRate?: number;
+	quality?: number;
+	onStart?: () => void;
+	onProgress?: (progress: number) => void;
+	onFfmpegProgress?: (progress: number, time: number) => void;
+	onComplete?: (blob: Blob) => void;
 }
 export interface ScreenshotOptions {
 	width?: number;
@@ -37,7 +37,7 @@ export class RecordingManager {
 		this.schematicRenderer = schematicRenderer;
 		this.recordingCanvas = document.createElement("canvas");
 		this.ctx2d = this.recordingCanvas.getContext("2d", {
-			alpha: false,
+			alpha: true,
 			desynchronized: true,
 		});
 
@@ -57,8 +57,13 @@ export class RecordingManager {
 			this.schematicRenderer.renderManager?.renderer.domElement;
 		if (!mainCanvas) throw new Error("Main canvas not found");
 
-		// During animation, the scene is already being rendered for us
-		// so we don't need to call render() here
+		this.ctx2d.clearRect(
+			0,
+			0,
+			this.recordingCanvas.width,
+			this.recordingCanvas.height
+		);
+
 		return new Promise<Uint8Array>((resolve) => {
 			this.ctx2d!.drawImage(mainCanvas, 0, 0);
 			this.recordingCanvas.toBlob(
@@ -75,11 +80,13 @@ export class RecordingManager {
 		});
 	}
 
-
-	public  setCameraToFirstPathPoint(): void {
+	public setCameraToFirstPathPoint(): void {
 		const camera = this.schematicRenderer.cameraManager.activeCamera
 			.camera as THREE.PerspectiveCamera;
-		const path = this.schematicRenderer.cameraManager.cameraPathManager.getPath("circularPath");
+		const path =
+			this.schematicRenderer.cameraManager.cameraPathManager.getPath(
+				"circularPath"
+			);
 		if (!path) throw new Error("Path not found");
 		const { position, target } = path.getPoint(0);
 		camera.position.copy(position);
@@ -185,7 +192,7 @@ export class RecordingManager {
 		camera.updateProjectionMatrix();
 	}
 
-    // @ts-ignore
+	// @ts-ignore
 	private async cleanupFrames(frameCount: number) {
 		if (!this.ffmpeg) return;
 		for (let i = 0; i < frameCount; i++) {
@@ -209,7 +216,7 @@ export class RecordingManager {
 		}
 		if (this.isRecording) throw new Error("Recording already in progress");
 		console.log("Starting recording...");
-	
+
 		const {
 			width = 3840,
 			height = 2160,
@@ -219,26 +226,26 @@ export class RecordingManager {
 			onFfmpegProgress,
 			onComplete,
 		} = options;
-	
+
 		try {
 			console.log("Setting up recording...");
 			await this.setupRecording(width, height);
 			console.log("Recording setup complete");
 			this.frameCount = 0;
 			this.isRecording = true;
-	
+
 			if (onStart) onStart();
-	
+
 			const totalFrames = duration * frameRate;
 			console.log(`Recording ${totalFrames} frames at ${frameRate} FPS...`);
-			
+
 			this.schematicRenderer.cameraManager.animateCameraAlongPath({
 				targetFps: frameRate,
 				totalFrames,
 				lookAtTarget: true,
 				onUpdate: async () => {
 					if (!this.isRecording) return;
-	
+
 					const frame = await this.captureFrame();
 					const filename = `frame${this.frameCount
 						.toString()
@@ -249,7 +256,7 @@ export class RecordingManager {
 					}
 					await this.ffmpeg.writeFile(filename, frame);
 					this.frameCount++;
-	
+
 					if (onProgress) onProgress(this.frameCount / totalFrames);
 				},
 				onComplete: async () => {
@@ -261,16 +268,16 @@ export class RecordingManager {
 							console.error("FFmpeg not found");
 							return;
 						}
-	
+
 						// Register progress callback
 						if (onFfmpegProgress) {
 							const progressCallback = ({ ratio = 0, time = 0 }) => {
 								onFfmpegProgress(ratio * 100, time);
 							};
 							// @ts-ignore - FFmpeg types might not be up to date
-							this.ffmpeg.on('progress', progressCallback);
+							this.ffmpeg.on("progress", progressCallback);
 						}
-	
+
 						await this.ffmpeg.exec([
 							"-framerate",
 							frameRate.toString(),
@@ -292,14 +299,14 @@ export class RecordingManager {
 							"yuv420p",
 							"output.mp4",
 						]);
-	
+
 						// Get the video data
 						const data = await this.ffmpeg.readFile("output.mp4");
-						
+
 						let blobData: BlobPart;
 						if (data instanceof Uint8Array) {
 							blobData = data;
-						} else if (typeof data === 'string') {
+						} else if (typeof data === "string") {
 							// Convert base64 string to Uint8Array if needed
 							const binaryString = atob(data);
 							const bytes = new Uint8Array(binaryString.length);
@@ -308,18 +315,18 @@ export class RecordingManager {
 							}
 							blobData = bytes;
 						} else {
-							throw new Error('Unexpected data type from FFmpeg');
+							throw new Error("Unexpected data type from FFmpeg");
 						}
-	
+
 						const blob = new Blob([blobData], { type: "video/mp4" });
-	
+
 						// Cleanup everything
 						await this.cleanupFrames(this.frameCount);
 						await this.ffmpeg.deleteFile("output.mp4");
-	
+
 						// Wait a small delay before restoring WebGL context
 						await new Promise((resolve) => setTimeout(resolve, 100));
-	
+
 						if (onComplete) onComplete(blob);
 					} catch (error) {
 						console.error("FFmpeg encoding failed:", error);
@@ -339,22 +346,22 @@ export class RecordingManager {
 		if (this.originalSettings) {
 			const renderer = this.schematicRenderer.renderManager?.renderer;
 			if (!renderer) throw new Error("Renderer not found");
-            const camera = this.schematicRenderer.cameraManager.activeCamera
+			const camera = this.schematicRenderer.cameraManager.activeCamera
 				.camera as THREE.PerspectiveCamera;
 			renderer.setSize(
 				this.originalSettings.width,
 				this.originalSettings.height,
 				false
-            );
+			);
 			renderer.setPixelRatio(this.originalSettings.pixelRatio);
-            camera.aspect = this.originalSettings.aspect;
+			camera.aspect = this.originalSettings.aspect;
 			camera.updateProjectionMatrix();
 			this.originalSettings = null;
 		}
 	}
 
-    public stopRecording(): void {
-        console.log('Recording complete');
+	public stopRecording(): void {
+		console.log("Recording complete");
 		this.isRecording = false;
 		this.cleanup();
 	}

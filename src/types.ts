@@ -56,6 +56,13 @@ export interface BlockData {
 	properties?: Record<string, string>; // Optional, used for request info
 }
 
+export interface ChunkData {
+	chunk_x: number;
+	chunk_y: number;
+	chunk_z: number;
+	blocks: BlockData[];
+}
+
 export interface BakedBlockDef {
 	faces: BakedFace[]; // 6 for cubes, more for stairs/rails/…
 	bbox: [number, number, number, number, number, number]; // from/to

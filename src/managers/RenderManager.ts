@@ -95,7 +95,6 @@ export class RenderManager {
 
 		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 		this.renderer.setPixelRatio(window.devicePixelRatio);
-		this.renderer.setClearColor(0x000000);
 	}
 
 	private initComposer(): void {
@@ -257,7 +256,7 @@ export class RenderManager {
 			// Configure N8AO settings for Minecraft-style scenes
 			n8aoPass.configuration.aoRadius = 1.0; // Good for block-based scenes
 			n8aoPass.configuration.distanceFalloff = 0.4; // Prevents haloing
-			n8aoPass.configuration.intensity = 3.0; // Noticeable but not overwhelming
+			n8aoPass.configuration.intensity = 5.0; // Noticeable but not overwhelming
 			n8aoPass.configuration.gammaCorrection = false; // We handle gamma separately
 			n8aoPass.setQualityMode("Medium"); // Good balance of performance/quality
 
@@ -316,7 +315,8 @@ export class RenderManager {
 			// Update N8AO pass size if it exists
 			const ssaoPass = this.passes.get("ssao");
 			if (ssaoPass && ssaoPass.setSize) {
-				ssaoPass.setSize(width, height);
+				const dpr = this.renderer.getPixelRatio();
+				ssaoPass.setSize(width * dpr, height * dpr);
 			}
 		}
 	}

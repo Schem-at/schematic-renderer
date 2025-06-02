@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { SchematicObject } from "./SchematicObject";
-import { SchematicWrapper } from "../wasm/minecraft_schematic_utils"; // Adjust the import path
+import { SchematicWrapper } from "nucleation"; // Adjust the import path
 import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import path
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
@@ -163,7 +163,6 @@ export class SchematicManager {
 			if (schematicDataMap.hasOwnProperty(key)) {
 				console.log("Loading schematic", key);
 				console.log(schematicDataMap);
-				console.log("sfd");
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
 				await this.loadSchematic(key, arrayBuffer, properties).then(() => {
