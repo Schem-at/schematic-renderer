@@ -109,9 +109,9 @@ export class SchematicObject extends EventEmitter {
 		const schematicDimensions = this.getDimensions();
 		console.log("Schematic dimensions:", schematicDimensions);
 		this.position = new THREE.Vector3(
-			-schematicDimensions[0] / 2,
+			-schematicDimensions[0] / 2 + 0.5, // Center the schematic
 			0,
-			-schematicDimensions[2] / 2
+			-schematicDimensions[2] / 2 + 0.5 // Center the schematic
 		);
 
 		if (properties?.meshBoundingBox) {
