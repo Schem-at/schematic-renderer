@@ -13,6 +13,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CreativeControls } from "three-creative-controls";
 export interface CameraManagerOptions {
 	position?: [number, number, number];
+	defaultCameraPreset?: "perspective" | "isometric" | "perspective_fpv";
 	showCameraPathVisualization?: boolean;
 }
 
@@ -132,6 +133,14 @@ export class CameraManager extends EventEmitter {
 		// Initialize RecordingManager
 		this.recordingManager = new RecordingManager(schematicRenderer);
 
+		this.activeCameraKey = "perspective";
+		this.activeControlKey = "perspective-orbit";
+		if (options.defaultCameraPreset) {
+			console.log(
+				`Switching to default camera preset: ${options.defaultCameraPreset}`
+			);
+			this.switchCameraPreset(options.defaultCameraPreset);
+		}
 		// Initialize cameras with presets
 		Object.entries(CameraManager.CAMERA_PRESETS).forEach(([name, preset]) => {
 			const cameraParams: any = {
@@ -164,9 +173,6 @@ export class CameraManager extends EventEmitter {
 				this.setupControlEvents(controls);
 			}
 		});
-
-		this.activeCameraKey = "perspective";
-		this.activeControlKey = "perspective-orbit";
 
 		this.controls.forEach((control, key) => {
 			control.enabled = key === this.activeControlKey;
@@ -541,14 +547,13 @@ export class CameraManager extends EventEmitter {
 		return this.cameras.get(this.activeCameraKey)!;
 	}
 
-	// Update aspect ratio on resize
 	updateAspectRatio(aspect: number) {
 		this.cameras.forEach((cameraWrapper) => {
 			if (cameraWrapper.camera instanceof THREE.PerspectiveCamera) {
 				cameraWrapper.camera.aspect = aspect;
 				cameraWrapper.camera.updateProjectionMatrix();
 			} else if (cameraWrapper.camera instanceof THREE.OrthographicCamera) {
-				const frustumSize = 10;
+				const frustumSize = 50; // Increased from 10
 				cameraWrapper.camera.left = (frustumSize * aspect) / -2;
 				cameraWrapper.camera.right = (frustumSize * aspect) / 2;
 				cameraWrapper.camera.top = frustumSize / 2;

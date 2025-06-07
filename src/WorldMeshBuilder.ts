@@ -596,7 +596,7 @@ export class WorldMeshBuilder {
 			if (!(mat instanceof THREE.Material)) return;
 			switch (category) {
 				case "water":
-					mesh.renderOrder = 1;
+					mesh.renderOrder = 3;
 					mat.transparent = true;
 					if ("opacity" in mat) (mat as any).opacity = 0.8;
 					break;
@@ -605,7 +605,7 @@ export class WorldMeshBuilder {
 					mat.transparent = true;
 					break;
 				case "emissive":
-					mesh.renderOrder = 3;
+					mesh.renderOrder = 1;
 					break;
 				case "redstone":
 					mesh.userData.isDynamic = true;

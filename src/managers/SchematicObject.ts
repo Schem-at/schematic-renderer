@@ -9,6 +9,7 @@ import { castToEuler, castToVector3 } from "../utils/Casts";
 import { resetPerformanceMetrics } from "../monitoring";
 import { SchematicRenderer } from "../SchematicRenderer";
 import type { BlockData, ChunkData } from "../types";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 
 // Define chunk data interface to fix TypeScript errors
 
@@ -364,42 +365,217 @@ export class SchematicObject extends EventEmitter {
 		});
 	}
 
-	// Optimized method to apply properties to objects
 	private applyPropertiesToObjects(objects: THREE.Object3D[]) {
-		// Cache material settings
-		const needsTransparency = this.opacity < 1.0;
+		// Determine if the SCHEMATIC ITSELF needs to be faded
+		const schematicWantsFade = this.opacity < 1.0;
 
 		objects.forEach((obj) => {
-			// Set visibility on root object first
 			obj.visible = this.visible;
 
-			// Traverse only if we need to update meshes
 			if (this.visible) {
 				obj.traverse((child) => {
 					if (child instanceof THREE.Mesh) {
-						// Apply visibility
-						child.visible = true; // Already handled by parent
-
-						// Apply shadow settings
 						child.castShadow = true;
 						child.receiveShadow = true;
 						child.frustumCulled = true;
 
-						// Apply material properties
 						const materials = Array.isArray(child.material)
 							? child.material
 							: [child.material];
 
 						materials.forEach((mat) => {
 							if (mat) {
-								mat.opacity = this.opacity;
-								mat.transparent = needsTransparency;
+								// If the schematic is being faded, apply its opacity.
+								// Otherwise, let the material keep its original opacity.
+								if (schematicWantsFade) {
+									mat.opacity = this.opacity;
+								}
+
+								// CRITICAL FIX: Only set transparent = true if the schematic
+								// is being faded. NEVER set it to false, because that would
+								// override materials that are inherently transparent (like glass).
+								if (schematicWantsFade) {
+									mat.transparent = true;
+								}
 							}
 						});
 					}
 				});
 			}
 		});
+	}
+
+	/**
+	 * Exports the schematic as a GLTF file
+	 * @param options Export options
+	 * @returns Promise that resolves when export is complete
+	 */
+	public async exportAsGLTF(
+		options: {
+			filename?: string;
+			binary?: boolean;
+			includeCustomExtensions?: boolean;
+			maxTextureSize?: number;
+			embedImages?: boolean;
+			animations?: THREE.AnimationClip[];
+		} = {}
+	): Promise<void> {
+		try {
+			// Default options
+			const exportOptions = {
+				filename: options.filename || `${this.name}_schematic.gltf`,
+				binary: options.binary ?? false,
+				includeCustomExtensions: options.includeCustomExtensions ?? false,
+				maxTextureSize: options.maxTextureSize ?? 1024,
+				embedImages: options.embedImages ?? true,
+				animations: options.animations || [],
+			};
+
+			// Wait for meshes to be ready
+			await this.meshesReady;
+
+			// Show progress if available
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.showProgressBar(
+					`Exporting ${this.name}`
+				);
+				this.schematicRenderer.uiManager.updateProgress(
+					0.1,
+					"Preparing export..."
+				);
+			}
+
+			// Create exporter
+			const exporter = new GLTFExporter();
+
+			// Clone the group to avoid modifying the original
+			const exportGroup = this.group.clone();
+
+			// Update progress
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.updateProgress(
+					0.3,
+					"Processing geometry..."
+				);
+			}
+
+			// Export to GLTF
+			const result = await new Promise<ArrayBuffer | object>(
+				(resolve, reject) => {
+					exporter.parse(
+						exportGroup,
+						(gltf) => resolve(gltf),
+						(error) => reject(error),
+						{
+							binary: exportOptions.binary,
+							includeCustomExtensions: exportOptions.includeCustomExtensions,
+							maxTextureSize: exportOptions.maxTextureSize,
+							embedImages: exportOptions.embedImages,
+							animations: exportOptions.animations,
+						}
+					);
+				}
+			);
+
+			// Update progress
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.updateProgress(
+					0.8,
+					"Creating download..."
+				);
+			}
+
+			// Download the file
+			await this.downloadGLTF(
+				result,
+				exportOptions.filename,
+				exportOptions.binary
+			);
+
+			// Complete progress
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.updateProgress(
+					1.0,
+					"Export complete!"
+				);
+				setTimeout(() => {
+					this.schematicRenderer.uiManager?.hideProgressBar();
+				}, 1000);
+			}
+
+			console.log(
+				`Successfully exported schematic "${this.name}" as ${exportOptions.filename}`
+			);
+		} catch (error) {
+			console.error("Error exporting GLTF:", error);
+
+			// Hide progress bar on error
+			if (
+				this.schematicRenderer.options.enableProgressBar &&
+				this.schematicRenderer.uiManager
+			) {
+				this.schematicRenderer.uiManager.hideProgressBar();
+			}
+
+			throw error;
+		}
+	}
+
+	/**
+	 * Downloads the GLTF data as a file
+	 */
+	private async downloadGLTF(
+		gltfData: ArrayBuffer | object,
+		filename: string,
+		isBinary: boolean
+	): Promise<void> {
+		let blob: Blob;
+		let actualFilename = filename;
+
+		if (isBinary) {
+			// Binary GLTF (.glb)
+			blob = new Blob([gltfData as ArrayBuffer], {
+				type: "application/octet-stream",
+			});
+			if (!actualFilename.endsWith(".glb")) {
+				actualFilename = actualFilename.replace(/\.[^/.]+$/, "") + ".glb";
+			}
+		} else {
+			// Text GLTF (.gltf)
+			const jsonString = JSON.stringify(gltfData, null, 2);
+			blob = new Blob([jsonString], {
+				type: "application/json",
+			});
+			if (!actualFilename.endsWith(".gltf")) {
+				actualFilename = actualFilename.replace(/\.[^/.]+$/, "") + ".gltf";
+			}
+		}
+
+		// Create download link
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = actualFilename;
+
+		// Trigger download
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+
+		// Clean up
+		URL.revokeObjectURL(url);
 	}
 
 	private async buildMeshes(): Promise<void> {

@@ -1,4 +1,5 @@
-// SchematicRenderer.ts
+import initializeNucleationWasm from 'nucleation';
+await initializeNucleationWasm();
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
 import { SceneManager } from "./managers/SceneManager";
@@ -80,10 +81,7 @@ export class SchematicRenderer {
 		this.uiManager = new UIManager(this);
 
 		// Initialize camera manager
-		this.cameraManager = new CameraManager(this, {
-			position: options.cameraOptions?.position || [5, 5, 5],
-			showCameraPathVisualization: this.options.showCameraPathVisualization,
-		});
+		this.cameraManager = new CameraManager(this, options.cameraOptions);
 
 		this.sceneManager.updateHelpers();
 		this.eventEmitter.emit("sceneReady");
@@ -646,6 +644,8 @@ export class SchematicRenderer {
 
 		this.materialMap.clear();
 	}
+
+
 
 	public dispose(): void {
 		if (!this.renderManager) {

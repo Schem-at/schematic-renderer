@@ -469,6 +469,7 @@ export class SchematicManager {
 			averagePosition.add(schematic.getSchematicCenter());
 		}
 		averagePosition.divideScalar(schematics.length);
+		averagePosition.subScalar(0.5);
 		return averagePosition;
 	}
 

@@ -58,7 +58,7 @@ const renderer = new SchematicRenderer(
 	},
 	{
 		vanillaPack: async () => {
-			const response = await fetch("http://localhost:3002/pack.zip");
+			const response = await fetch("/pack.zip");
 			const buffer = await response.arrayBuffer();
 			return new Blob([buffer], { type: "application/zip" });
 		},
@@ -66,6 +66,9 @@ const renderer = new SchematicRenderer(
 
 	{
 		ffmpeg: ffmpeg,
+		// cameraOptions: {
+		// 	defaultCameraPreset: "isometric",
+		// },
 		gamma: 0.45,
 		showCameraPathVisualization: false,
 		enableInteraction: false,
@@ -78,10 +81,10 @@ const renderer = new SchematicRenderer(
 		dragAndDropOptions: {
 			acceptedFileTypes: ["schematic", "nbt", "schem", "litematic"],
 		},
-		// hdri: "/minecraft_day.hdr",
+		hdri: "/minecraft_day.hdr",
 
 		showAxes: false,
-		showGrid: true,
+		showGrid: false,
 		gizmoOptions: {
 			enableRotation: true,
 			enableScaling: true,
@@ -92,7 +95,13 @@ const renderer = new SchematicRenderer(
 				console.log("Schematic dropped successfully:", file);
 			},
 			onRendererInitialized: async (renderer: SchematicRenderer) => {
-				console.log("Renderer initialized");
+				// renderer.uiManager?.hideEmptyState();
+				// renderer.schematicManager?.createEmptySchematic(
+				// 	"testSchematic");
+				// renderer.schematicManager?.getSchematic("testSchematic")?.setBlock(
+				// 	[0, 0, 0],
+				// 	"minecraft:red_stained_glass",
+				// );
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);
