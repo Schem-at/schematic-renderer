@@ -630,6 +630,7 @@ export class CameraManager extends EventEmitter {
 			if (controls) controls.enabled = true;
 			return;
 		}
+		// @ts-ignore
 
 		const { center, size, boundingBox } = bounds;
 		const maxDimension = Math.max(size.x, size.y, size.z);
@@ -1315,6 +1316,7 @@ export class CameraManager extends EventEmitter {
 	private calculateIsometricFraming(
 		center: THREE.Vector3,
 		size: THREE.Vector3,
+		// @ts-ignore
 		aspect: number,
 		padding: number
 	): { position: THREE.Vector3; rotation: THREE.Euler } {
@@ -1356,6 +1358,7 @@ export class CameraManager extends EventEmitter {
 	): Promise<void> {
 		const {
 			duration = 2.0,
+			// @ts-ignore
 			padding = 0.15,
 			startFromCurrentPosition = true,
 			startOrbitAfterZoom = false,
@@ -1480,6 +1483,7 @@ export class CameraManager extends EventEmitter {
 			const elapsedTime = (performance.now() - this.autoOrbitStartTime) / 1000;
 			const t = (elapsedTime % this.autoOrbitDuration) / this.autoOrbitDuration;
 
+			// @ts-ignore
 			const { position, rotation, target } = defaultPath.path.getPoint(t);
 
 			(this.activeCamera.position as THREE.Vector3).copy(position);

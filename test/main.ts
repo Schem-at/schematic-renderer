@@ -71,7 +71,7 @@ const renderer = new SchematicRenderer(
 			// enableZoomInOnLoad: true,
 			// autoOrbitAfterZoom: true,
 		},
-		enableAutoOrbit: true,
+		// enableAutoOrbit: true,
 		gamma: 0.45,
 		showCameraPathVisualization: false,
 		enableInteraction: false,

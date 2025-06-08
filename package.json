@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.28",
+	"version": "1.0.29",
 	"license": "AGPL-3.0-only",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",

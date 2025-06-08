@@ -4,6 +4,7 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { CameraFrame } from "../managers/CameraManager";
 
 interface CircularPathParams {
+	center?: THREE.Vector3 | number[];
 	height: number;
 	radius: number;
 	target: THREE.Vector3 | number[];
