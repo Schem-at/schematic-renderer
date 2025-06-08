@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { EffectComposer, RenderPass, EffectPass } from "postprocessing";
 import { SMAAEffect } from "postprocessing";
 // @ts-ignore
-import { N8AOPostPass } from "n8ao"; // Modern SSAO solution
+import { N8AOPostPass } from "n8ao";
 import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
@@ -26,19 +26,22 @@ export class RenderManager {
 	private resizeTimeout: number | null = null;
 	private renderRequested: boolean = false;
 
+	// HDRI backup for camera switching
+	private originalBackground: THREE.Texture | THREE.Color | null = null;
+	private isometricBackground: THREE.Color;
+
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 		this.eventEmitter = this.schematicRenderer.eventEmitter;
 
-		// Ensure we have proper initial size before initialization
-		this.setInitialSize();
+		// Create a pleasant background color for isometric view
+		this.isometricBackground = new THREE.Color(0x87ceeb); // Sky blue
 
+		this.setInitialSize();
 		this.initRenderer();
 		this.initComposer();
 		this.initDefaultPasses(this.schematicRenderer.options);
 		this.setupEventListeners();
-
-		// Set the size again after everything is initialized
 		this.updateCanvasSize();
 
 		if (
@@ -47,6 +50,11 @@ export class RenderManager {
 		) {
 			this.setupHDRIBackground(this.schematicRenderer.options.hdri);
 		}
+
+		// Listen for camera changes to handle HDRI switching
+		this.schematicRenderer.cameraManager.on("cameraChanged", (event) => {
+			this.handleCameraChange(event.newCamera);
+		});
 	}
 
 	private setInitialSize(): void {
@@ -58,16 +66,12 @@ export class RenderManager {
 			return;
 		}
 
-		// Get the parent's dimensions
 		const rect = parent.getBoundingClientRect();
 		const width = rect.width;
 		const height = rect.height;
 
-		// Set canvas style dimensions
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${height}px`;
-
-		// Set canvas buffer dimensions
 		canvas.width = width * window.devicePixelRatio;
 		canvas.height = height * window.devicePixelRatio;
 
@@ -83,7 +87,6 @@ export class RenderManager {
 			preserveDrawingBuffer: true,
 		});
 
-		// Only set size if we have initial dimensions
 		if (this.initialSizeSet) {
 			const parent = this.schematicRenderer.canvas.parentElement;
 			if (parent) {
@@ -105,6 +108,39 @@ export class RenderManager {
 		);
 		this.composer.addPass(renderPass);
 		this.passes.set("renderPass", renderPass);
+	}
+
+	/**
+	 * Handle camera type changes to manage HDRI background appropriately
+	 */
+	private handleCameraChange(cameraType: string): void {
+		const scene = this.schematicRenderer.sceneManager.scene;
+
+		if (cameraType === "isometric") {
+			// Store the current background if it's HDRI
+			if (scene.background && scene.background instanceof THREE.Texture) {
+				this.originalBackground = scene.background;
+			}
+			// Switch to solid color background for isometric view
+			scene.background = this.isometricBackground;
+
+			console.log("Switched to isometric background");
+		} else {
+			// Restore HDRI background for perspective cameras
+			if (this.originalBackground) {
+				scene.background = this.originalBackground;
+				console.log("Restored HDRI background");
+			}
+		}
+	}
+
+	/**
+	 * Check if current camera is orthographic (isometric)
+	 */
+	private isOrthographicCamera(): boolean {
+		const activeCamera =
+			this.schematicRenderer.cameraManager.activeCamera.camera;
+		return activeCamera instanceof THREE.OrthographicCamera;
 	}
 
 	public setupHDRIBackground(
@@ -160,15 +196,33 @@ export class RenderManager {
 					const backgroundTexture = new THREE.WebGLCubeRenderTarget(
 						1024
 					).fromEquirectangularTexture(this.renderer, texture);
-					this.schematicRenderer.sceneManager.scene.background =
-						backgroundTexture.texture;
+
+					// Only set HDRI background if not in isometric mode
+					if (!this.isOrthographicCamera()) {
+						this.schematicRenderer.sceneManager.scene.background =
+							backgroundTexture.texture;
+						// Store as original background for camera switching
+						this.originalBackground = backgroundTexture.texture;
+					} else {
+						// Store for later use when switching back to perspective
+						this.originalBackground = backgroundTexture.texture;
+						// Keep isometric background
+						this.schematicRenderer.sceneManager.scene.background =
+							this.isometricBackground;
+					}
 				} else {
 					this.schematicRenderer.sceneManager.scene.environment = envMap;
-					this.schematicRenderer.sceneManager.scene.background = envMap;
+					if (!this.isOrthographicCamera()) {
+						this.schematicRenderer.sceneManager.scene.background = envMap;
+						this.originalBackground = envMap;
+					} else {
+						this.originalBackground = envMap;
+						this.schematicRenderer.sceneManager.scene.background =
+							this.isometricBackground;
+					}
 				}
 
 				this.pmremGenerator.dispose();
-
 				this.eventEmitter.emit("hdriLoaded", { path: hdriPath });
 			},
 			(progress) => {
@@ -184,6 +238,26 @@ export class RenderManager {
 		);
 	}
 
+	/**
+	 * Set the background color for isometric view
+	 */
+	public setIsometricBackgroundColor(color: THREE.ColorRepresentation): void {
+		this.isometricBackground.set(color);
+
+		// If currently in isometric mode, update the scene background immediately
+		if (this.isOrthographicCamera()) {
+			this.schematicRenderer.sceneManager.scene.background =
+				this.isometricBackground;
+		}
+	}
+
+	/**
+	 * Get the current isometric background color
+	 */
+	public getIsometricBackgroundColor(): THREE.Color {
+		return this.isometricBackground.clone();
+	}
+
 	private handleContextLost = (event: Event): void => {
 		event.preventDefault();
 		this.contextLost = true;
@@ -196,20 +270,15 @@ export class RenderManager {
 		console.log("WebGL context restored. Reinitializing renderer...");
 
 		try {
-			// Wait a bit before reinitializing
 			await new Promise((resolve) => setTimeout(resolve, 300));
 
 			this.contextLost = false;
 
-			// Reinitialize renderer
 			this.initRenderer();
 			this.initComposer();
 			this.initDefaultPasses(this.schematicRenderer.options);
-
-			// Update sizes
 			this.updateCanvasSize();
 
-			// Reload HDRI if it was previously set
 			if (this.hdriPath) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 				this.loadHDRI(this.hdriPath, this.hdriBackgroundOnly);
@@ -217,7 +286,6 @@ export class RenderManager {
 
 			this.eventEmitter.emit("webglContextRestored");
 
-			// Force a new render after everything is reinitialized
 			requestAnimationFrame(() => {
 				if (!this.contextLost) {
 					this.render();
@@ -230,17 +298,14 @@ export class RenderManager {
 	};
 
 	private initDefaultPasses(options: any): void {
-		// Gamma Correction Effect
 		const gammaCorrectionEffect = new GammaCorrectionEffect(
 			options.gamma ?? 0.5
 		);
 		this.passes.set("gammaCorrection", gammaCorrectionEffect);
 
-		// SMAA Effect
 		const smaaEffect = new SMAAEffect();
 		this.passes.set("smaa", smaaEffect);
 
-		// N8AO SSAO Effect - Modern and compatible
 		try {
 			const parent = this.schematicRenderer.canvas.parentElement;
 			const width = parent ? parent.clientWidth : window.innerWidth;
@@ -253,12 +318,11 @@ export class RenderManager {
 				height
 			) as any;
 
-			// Configure N8AO settings for Minecraft-style scenes
-			n8aoPass.configuration.aoRadius = 1.0; // Good for block-based scenes
-			n8aoPass.configuration.distanceFalloff = 0.4; // Prevents haloing
-			n8aoPass.configuration.intensity = 5.0; // Noticeable but not overwhelming
-			n8aoPass.configuration.gammaCorrection = false; // We handle gamma separately
-			n8aoPass.setQualityMode("Medium"); // Good balance of performance/quality
+			n8aoPass.configuration.aoRadius = 1.0;
+			n8aoPass.configuration.distanceFalloff = 0.4;
+			n8aoPass.configuration.intensity = 5.0;
+			n8aoPass.configuration.gammaCorrection = false;
+			n8aoPass.setQualityMode("Medium");
 
 			this.passes.set("ssao", n8aoPass);
 			this.composer.addPass(n8aoPass);
@@ -268,7 +332,6 @@ export class RenderManager {
 			console.warn("Failed to initialize N8AO SSAO:", error);
 		}
 
-		// Create an EffectPass with available effects
 		const effectPass = new EffectPass(
 			this.schematicRenderer.cameraManager.activeCamera.camera,
 			gammaCorrectionEffect,
@@ -302,7 +365,6 @@ export class RenderManager {
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${height}px`;
 
-		// Only update renderer and composer if context isn't lost
 		if (!this.contextLost) {
 			this.renderer.setSize(width, height, false);
 			this.composer.setSize(width, height);
@@ -312,7 +374,6 @@ export class RenderManager {
 			camera.aspect = width / height;
 			camera.updateProjectionMatrix();
 
-			// Update N8AO pass size if it exists
 			const ssaoPass = this.passes.get("ssao");
 			if (ssaoPass && ssaoPass.setSize) {
 				const dpr = this.renderer.getPixelRatio();
@@ -350,7 +411,6 @@ export class RenderManager {
 	}): void {
 		const ssaoEffect = this.passes.get("ssao");
 		if (ssaoEffect && ssaoEffect.configuration) {
-			// N8AO configuration
 			if (params.aoRadius !== undefined) {
 				ssaoEffect.configuration.aoRadius = params.aoRadius;
 			}
@@ -377,10 +437,9 @@ export class RenderManager {
 			return { renderTimeMs: 0, rendererInfo: null };
 		}
 
-		// Ensure renderer and scene/camera are valid before attempting to render
 		const scene = this.schematicRenderer.sceneManager.scene;
 		const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
-		const renderer = this.renderer; // Ensure this.renderer is valid
+		const renderer = this.renderer;
 
 		if (!renderer || !scene || !camera) {
 			console.error(
@@ -394,19 +453,14 @@ export class RenderManager {
 			console.warn(
 				"[RenderManager] Attempted to render with lost WebGL context for stats."
 			);
-			this.contextLost = true; // Update contextLost state
+			this.contextLost = true;
 			return { renderTimeMs: 0, rendererInfo: renderer.info };
 		}
 
-		// Temporarily disable auto-clearing of info if you want to see cumulative stats
-		// or ensure it's reset if you want per-frame stats.
-		// For per-frame, it's usually fine as composer.render() implies a new frame.
-		// renderer.info.autoReset = true; // Ensure it resets for each render call by the composer
-
 		const renderStartTime = performance.now();
 		try {
-			this.isRendering = true; // Prevent re-entrancy for this synchronous call
-			this.composer.render(); // This is the synchronous render call
+			this.isRendering = true;
+			this.composer.render();
 		} catch (error) {
 			console.error(
 				"[RenderManager] Error during renderSingleFrameAndGetStats:",
@@ -422,13 +476,10 @@ export class RenderManager {
 		}
 		const renderTimeMs = performance.now() - renderStartTime;
 
-		// renderer.info should now be updated by the composer.render() call
 		return { renderTimeMs, rendererInfo: renderer.info };
 	}
 
-	// Your existing render method for the main loop
 	public render(): void {
-		// This is the one typically called by your main animation loop or requestRender
 		if (this.isRendering || this.contextLost || this.disposed) return;
 
 		try {
@@ -455,7 +506,7 @@ export class RenderManager {
 			this.renderRequested = true;
 			requestAnimationFrame(() => {
 				if (!this.contextLost && !this.disposed) {
-					this.render(); // Calls the main render method
+					this.render();
 				}
 				this.renderRequested = false;
 			});
@@ -473,7 +524,6 @@ export class RenderManager {
 		camera.aspect = width / height;
 		camera.updateProjectionMatrix();
 
-		// Update N8AO pass size
 		const ssaoPass = this.passes.get("ssao");
 		if (ssaoPass && ssaoPass.setSize) {
 			ssaoPass.setSize(width, height);
@@ -509,7 +559,6 @@ export class RenderManager {
 		this.disposed = true;
 		this.contextLost = true;
 
-		// Clear resize timeout if it exists
 		if (this.resizeTimeout !== null) {
 			window.cancelAnimationFrame(this.resizeTimeout);
 			this.resizeTimeout = null;

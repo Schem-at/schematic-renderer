@@ -171,4 +171,57 @@ export class CircularCameraPath extends CameraPath {
 
 		return group;
 	}
+
+	/**
+	 * Get the center point of the circular path
+	 */
+	public getCenter(): THREE.Vector3 {
+		return this.centerOffsetVec.clone();
+	}
+
+	/**
+	 * Get the radius of the circular path
+	 */
+	public getRadius(): number {
+		return this.params.radius;
+	}
+
+	/**
+	 * Get the height of the circular path
+	 */
+	public getHeight(): number {
+		return this.params.height;
+	}
+
+	/**
+	 * Set the starting angle for the orbit
+	 */
+	public setStartAngle(angle: number): void {
+		this.startAngle = angle;
+		this.endAngle = angle + Math.PI * 2; // Full circle from new start position
+		this.updatePathFunction();
+	}
+
+	/**
+	 * Get the current angle at parameter t
+	 */
+	public getCurrentAngle(t: number): number {
+		return this.startAngle + (this.endAngle - this.startAngle) * t;
+	}
+
+	/**
+	 * Get the target position the path is looking at
+	 */
+	public getTargetPosition(): THREE.Vector3 {
+		return this.targetVec.clone();
+	}
+
+	/**
+	 * Update the target that the camera looks at during orbit
+	 */
+	public setTarget(target: THREE.Vector3 | number[]): void {
+		this.targetVec = this.vectorFromInput(target);
+		this.params.target = target;
+		this.updatePathFunction();
+	}
 }

@@ -66,9 +66,12 @@ const renderer = new SchematicRenderer(
 
 	{
 		ffmpeg: ffmpeg,
-		// cameraOptions: {
-		// 	defaultCameraPreset: "isometric",
-		// },
+		cameraOptions: {
+			// defaultCameraPreset: "isometric",
+			// enableZoomInOnLoad: true,
+			// autoOrbitAfterZoom: true,
+		},
+		enableAutoOrbit: true,
 		gamma: 0.45,
 		showCameraPathVisualization: false,
 		enableInteraction: false,
