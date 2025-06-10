@@ -65,6 +65,10 @@ export interface CameraAnimationWithRecordingOptions {
 type CameraType = "perspective" | "orthographic";
 type ControlType = "orbit" | "creative" | "none";
 
+// Define constants for minimums to avoid magic numbers and allow easier tuning
+const ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT = 5; // Minimum world units for orthographic camera's visible height
+const ABSOLUTE_MIN_PERSPECTIVE_DISTANCE = 5; // Minimum world units for perspective camera's distance from target
+
 export class CameraManager extends EventEmitter {
 	private schematicRenderer: SchematicRenderer;
 	private cameras: Map<string, CameraWrapper> = new Map();
@@ -144,19 +148,28 @@ export class CameraManager extends EventEmitter {
 		// Initialize RecordingManager
 		this.recordingManager = new RecordingManager(schematicRenderer);
 
-		this.activeCameraKey = "perspective";
-		this.activeControlKey = "perspective-orbit";
+		this.activeCameraKey = "perspective"; // Default active camera key
+		// Set default active control key based on default camera preset if available
+		const defaultPresetName = options.defaultCameraPreset || "perspective";
+		const defaultPreset =
+			CameraManager.CAMERA_PRESETS[
+				defaultPresetName as keyof typeof CameraManager.CAMERA_PRESETS
+			] || CameraManager.CAMERA_PRESETS.perspective;
+		this.activeControlKey = `${defaultPresetName}-${defaultPreset.controlType}`;
+
 		if (options.defaultCameraPreset) {
 			console.log(
 				`Switching to default camera preset: ${options.defaultCameraPreset}`
 			);
+			this.activeCameraKey = options.defaultCameraPreset; // Set active camera before switch
 			this.switchCameraPreset(options.defaultCameraPreset);
 		}
 		// Initialize cameras with presets
 		Object.entries(CameraManager.CAMERA_PRESETS).forEach(([name, preset]) => {
 			const cameraParams: any = {
 				position: options.position || preset.position,
-				size: preset.type === "orthographic" ? 20 : undefined,
+				size: preset.type === "orthographic" ? 20 : undefined, // Default ortho size
+				fov: preset.fov, // Pass FOV if defined
 			};
 
 			// Only add rotation if it exists in the preset
@@ -185,6 +198,16 @@ export class CameraManager extends EventEmitter {
 			}
 		});
 
+		// Ensure the initial active camera and controls are correctly set up
+		if (!this.cameras.has(this.activeCameraKey)) {
+			this.activeCameraKey = "perspective"; // Fallback if default was invalid
+		}
+		const initialPreset =
+			CameraManager.CAMERA_PRESETS[
+				this.activeCameraKey as keyof typeof CameraManager.CAMERA_PRESETS
+			];
+		this.activeControlKey = `${this.activeCameraKey}-${initialPreset.controlType}`;
+
 		this.controls.forEach((control, key) => {
 			control.enabled = key === this.activeControlKey;
 		});
@@ -203,11 +226,11 @@ export class CameraManager extends EventEmitter {
 				// Handle schematic loading with optional zoom
 				await this.handleSchematicLoaded(this.cameraOptions.enableZoomInOnLoad);
 
-				// Update camera path
-				const defaultPath = this.cameraPathManager.getFirstPath();
-				if (defaultPath) {
-					this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
-				}
+				// Update camera path - This might be redundant if handleSchematicLoaded already does it
+				// const defaultPath = this.cameraPathManager.getFirstPath();
+				// if (defaultPath) {
+				// 	this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
+				// }
 			});
 		}
 
@@ -216,7 +239,15 @@ export class CameraManager extends EventEmitter {
 			this.schematicRenderer.options.enableAutoOrbit &&
 			!this.cameraOptions.enableZoomInOnLoad
 		) {
-			this.startAutoOrbit();
+			// Delay startAutoOrbit until after initial focus if schematics are present
+			if (
+				this.schematicRenderer.schematicManager &&
+				!this.schematicRenderer.schematicManager.isEmpty()
+			) {
+				// focusOnSchematics will handle orbit start if needed
+			} else {
+				this.startAutoOrbit();
+			}
 		}
 	}
 
@@ -429,7 +460,9 @@ export class CameraManager extends EventEmitter {
 		const activeControl = this.controls.get(this.activeControlKey);
 		if (activeControl) {
 			// Update the control's camera reference
-			activeControl.object = this.activeCamera.camera;
+			if (this.activeCamera) {
+				activeControl.object = this.activeCamera.camera;
+			}
 
 			// Only call update on orbit controls
 			if (preset.controlType === "orbit" && activeControl.update) {
@@ -444,9 +477,11 @@ export class CameraManager extends EventEmitter {
 
 		// Update renderer camera if RenderManager exists
 		if (this.schematicRenderer.renderManager) {
-			this.schematicRenderer.renderManager.updateCamera(
-				this.activeCamera.camera
-			);
+			if (this.activeCamera) {
+				this.schematicRenderer.renderManager.updateCamera(
+					this.activeCamera.camera
+				);
+			}
 		}
 
 		// Emit change event
@@ -497,8 +532,8 @@ export class CameraManager extends EventEmitter {
 		// Create new controls
 		const camera = this.activeCamera;
 		const newControls = this.createControls(type, camera);
-		this.controls.set(type, newControls);
-		this.activeControlKey = type;
+		this.controls.set(type, newControls); // Should key be `${this.activeCameraKey}-${type}`?
+		this.activeControlKey = type; // This seems problematic, should be a full key
 
 		// Listen to control events
 		if (newControls) {
@@ -524,7 +559,7 @@ export class CameraManager extends EventEmitter {
 		// Configure orbit controls specifically for isometric view
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.05;
-		controls.minDistance = 10;
+		controls.minDistance = 10; // These are OrbitControls' own distance checks, not camera framing
 		controls.maxDistance = 100;
 		controls.enableZoom = true;
 		controls.enableRotate = true;
@@ -562,14 +597,25 @@ export class CameraManager extends EventEmitter {
 				cameraWrapper.camera.aspect = aspect;
 				cameraWrapper.camera.updateProjectionMatrix();
 			} else if (cameraWrapper.camera instanceof THREE.OrthographicCamera) {
-				const frustumSize = 50; // Increased from 10
-				cameraWrapper.camera.left = (frustumSize * aspect) / -2;
-				cameraWrapper.camera.right = (frustumSize * aspect) / 2;
-				cameraWrapper.camera.top = frustumSize / 2;
-				cameraWrapper.camera.bottom = frustumSize / -2;
+				// When aspect ratio changes, orthographic cameras need their frustum recalculated
+				// to maintain proper framing if focusOnSchematics was called.
+				// For now, just update using a fixed frustum size, but ideally, it should re-focus.
+				const frustumHeight =
+					cameraWrapper.camera.top - cameraWrapper.camera.bottom; // Preserve current height
+				cameraWrapper.camera.left = (-frustumHeight * aspect) / 2;
+				cameraWrapper.camera.right = (frustumHeight * aspect) / 2;
+				// cameraWrapper.camera.top = frustumHeight / 2; // Already set
+				// cameraWrapper.camera.bottom = -frustumHeight / 2; // Already set
 				cameraWrapper.camera.updateProjectionMatrix();
 			}
 		});
+		// Re-focus if schematics are present to adjust for new aspect ratio
+		if (
+			this.schematicRenderer.schematicManager &&
+			!this.schematicRenderer.schematicManager.isEmpty()
+		) {
+			this.focusOnSchematics({ animationDuration: 0 });
+		}
 	}
 
 	// Look at a target
@@ -614,7 +660,7 @@ export class CameraManager extends EventEmitter {
 			padding = 0.15, // 15% padding by default
 			animationDuration = 0,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t), // smooth step
-			skipPathFitting = false, // New option
+			skipPathFitting = false,
 		} = options;
 
 		// Temporarily disable controls
@@ -623,23 +669,18 @@ export class CameraManager extends EventEmitter {
 			controls.enabled = false;
 		}
 
-		// Get comprehensive schematic bounds
 		const bounds = this.calculateSchematicBounds();
 		if (!bounds) {
 			console.warn("No valid schematic bounds found");
 			if (controls) controls.enabled = true;
 			return;
 		}
-		// @ts-ignore
 
-		const { center, size, boundingBox } = bounds;
-		const maxDimension = Math.max(size.x, size.y, size.z);
+		const { center, size } = bounds; // size is a Vector3 with x, y, z dimensions
 
-		// Get viewport dimensions
 		const canvas = this.schematicRenderer.canvas;
 		const aspect = canvas.width / canvas.height;
 
-		// Store current camera state for animation
 		const startPosition = new THREE.Vector3().copy(
 			this.activeCamera.position as THREE.Vector3
 		);
@@ -650,32 +691,32 @@ export class CameraManager extends EventEmitter {
 		let targetPosition: THREE.Vector3;
 		let targetRotation: THREE.Euler | null = null;
 
-		if (this.activeCameraKey === "isometric") {
-			// Enhanced isometric framing
+		if (this.activeCamera.camera.type === "OrthographicCamera") {
+			// Check camera type directly
 			const result = this.calculateIsometricFraming(
+				// Name is a bit misleading, it's for general ortho position
 				center,
 				size,
-				aspect,
+				aspect, // aspect is used by calculateOrthographicSize via this call
 				padding
 			);
 			targetPosition = result.position;
 			targetRotation = result.rotation;
 
-			// Update orthographic camera size for optimal framing
 			const orthoCamera = this.activeCamera.camera as THREE.OrthographicCamera;
-			const requiredSize = this.calculateOrthographicSize(
+			const requiredFrustumHeight = this.calculateOrthographicSize(
 				size,
 				aspect,
 				padding
 			);
 
-			orthoCamera.left = (-requiredSize * aspect) / 2;
-			orthoCamera.right = (requiredSize * aspect) / 2;
-			orthoCamera.top = requiredSize / 2;
-			orthoCamera.bottom = -requiredSize / 2;
+			orthoCamera.left = (-requiredFrustumHeight * aspect) / 2;
+			orthoCamera.right = (requiredFrustumHeight * aspect) / 2;
+			orthoCamera.top = requiredFrustumHeight / 2;
+			orthoCamera.bottom = -requiredFrustumHeight / 2;
 			orthoCamera.updateProjectionMatrix();
 		} else {
-			// Enhanced perspective framing
+			// PerspectiveCamera
 			targetPosition = this.calculatePerspectiveFraming(
 				center,
 				size,
@@ -684,86 +725,101 @@ export class CameraManager extends EventEmitter {
 			);
 		}
 
-		// Animate to target position if duration > 0
 		if (animationDuration > 0) {
 			await this.animateToPosition(
 				startPosition,
 				startRotation,
 				targetPosition,
-				targetRotation,
-				center,
+				targetRotation, // Will be null for perspective, handled by lookAt
+				center, // Always look at center
 				animationDuration,
 				easing
 			);
 		} else {
-			// Immediate positioning
 			this.activeCamera.setPosition([
 				targetPosition.x,
 				targetPosition.y,
 				targetPosition.z,
 			]);
 			if (targetRotation) {
+				// For orthographic/isometric with fixed rotation
 				this.activeCamera.rotation = [
 					targetRotation.x,
 					targetRotation.y,
 					targetRotation.z,
 				];
+			} else {
+				// For perspective, ensure it looks at the center
+				this.activeCamera.lookAt(center);
 			}
 		}
 
-		// Update controls target
 		if (controls && "target" in controls) {
 			controls.target.copy(center);
 			controls.update();
 		}
-
-		// Re-enable controls
 		if (controls) {
 			controls.enabled = true;
 		}
 
-		// Only update the circular camera path if not skipping
 		if (!skipPathFitting) {
+			const maxSchematicDim = Math.max(size.x, size.y, size.z);
 			this.cameraPathManager.fitCircularPathToSchematics("circularPath", {
 				padding,
-				minRadius: maxDimension * 0.8,
-				maxRadius: maxDimension * 2.5,
+				minRadius: maxSchematicDim * 0.8,
+				maxRadius: maxSchematicDim * 2.5,
 			});
 		}
 
-		// Handle auto-orbit restart
 		const wasAutoOrbitActive = this.autoOrbitEnabled;
 		if (wasAutoOrbitActive) {
 			this.stopAutoOrbit();
-			this.startAutoOrbit();
+		}
+		// Start orbit only if it was active OR if autoOrbitAfterZoom is specifically enabled for this scenario
+		if (
+			wasAutoOrbitActive ||
+			(this.cameraOptions.autoOrbitAfterZoom && animationDuration > 0)
+		) {
+			// If there was an animation, give it a moment before starting orbit
+			const orbitDelay = animationDuration > 0 ? 100 : 0;
+			setTimeout(() => this.startAutoOrbitFromOptimalPosition(), orbitDelay);
+		} else if (
+			this.schematicRenderer.options.enableAutoOrbit &&
+			animationDuration === 0 &&
+			!this.cameraOptions.enableZoomInOnLoad
+		) {
+			// If it's an initial load without zoom, and auto-orbit is generally enabled
+			setTimeout(() => this.startAutoOrbitFromOptimalPosition(), 100);
 		}
 	}
 
 	/**
-	 * Calculate optimal orthographic camera size
+	 * Calculate optimal orthographic camera size (height of the frustum).
 	 */
 	private calculateOrthographicSize(
-		objectSize: THREE.Vector3,
+		objectSize: THREE.Vector3, // Full object dimensions (x, y, z)
 		aspect: number,
 		padding: number
 	): number {
-		// For orthographic cameras, we need to set the frustum size
-		// to properly frame the object
+		const paddingFactor = 1 + padding * 2; // e.g., 1.3 for 15% padding on each side
 
-		const paddingFactor = 1 + padding * 2;
+		// Calculate the effective width and height of the object including padding
+		const paddedObjectWidth = objectSize.x * paddingFactor;
+		const paddedObjectHeight = objectSize.y * paddingFactor;
 
-		// Calculate size needed for both width and height
-		const requiredWidth = objectSize.x * paddingFactor;
-		const requiredHeight = objectSize.y * paddingFactor;
+		// Determine the orthographic camera's required frustum height.
+		// This depends on whether the object's padded width (scaled by aspect) or padded height is larger.
+		let requiredFrustumHeight;
+		if (paddedObjectWidth / aspect > paddedObjectHeight) {
+			// Width is the constraining dimension relative to viewport proportions
+			requiredFrustumHeight = paddedObjectWidth / aspect;
+		} else {
+			// Height is the constraining dimension
+			requiredFrustumHeight = paddedObjectHeight;
+		}
 
-		// Use the larger requirement considering aspect ratio
-		const effectiveWidth = requiredWidth / aspect;
-		const size = Math.max(effectiveWidth, requiredHeight);
-
-		// Ensure minimum size for very small objects
-		const minSize = Math.max(objectSize.x, objectSize.y, objectSize.z) * 2;
-
-		return Math.max(size, minSize);
+		// Ensure a minimum visible height to prevent extreme zoom on very small objects.
+		return Math.max(requiredFrustumHeight, ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT);
 	}
 
 	/**
@@ -773,8 +829,8 @@ export class CameraManager extends EventEmitter {
 		options: {
 			zoomIn?: boolean;
 			zoomDuration?: number;
-			orbitDelay?: number; // Delay before starting orbit after zoom
-			orbitTransitionDuration?: number; // Duration for smooth transition to orbit
+			orbitDelay?: number;
+			orbitTransitionDuration?: number;
 		} = {}
 	): Promise<void> {
 		const {
@@ -786,25 +842,26 @@ export class CameraManager extends EventEmitter {
 
 		if (zoomIn && !this.schematicRenderer?.schematicManager?.isEmpty()) {
 			console.log("Starting cinematic zoom-in followed by auto-orbit");
-
-			// First, zoom in cinematically
 			await this.zoomInToSchematics({
 				duration: zoomDuration,
-				padding: 0.15,
+				padding: 0.15, // Default padding for zoom
+				skipPathFitting: true, // Path will be fitted before orbit starts
 			});
 
-			// Brief pause
 			if (orbitDelay > 0) {
 				await new Promise((resolve) => setTimeout(resolve, orbitDelay * 1000));
 			}
-
-			// Then start auto-orbit with smooth transition
+			// Ensure path is fitted before starting smooth orbit
+			const defaultPath = this.cameraPathManager.getFirstPath();
+			if (defaultPath) {
+				this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
+			}
 			this.startAutoOrbitSmooth({
 				transitionDuration: orbitTransitionDuration,
 				startFromCurrentPosition: true,
+				skipPathFitting: true, // Already fitted
 			});
 		} else {
-			// Just start auto-orbit with smooth transition
 			this.startAutoOrbitSmooth({
 				transitionDuration: orbitTransitionDuration,
 				startFromCurrentPosition: true,
@@ -850,40 +907,28 @@ export class CameraManager extends EventEmitter {
 	public async handleSchematicLoaded(
 		enableZoomIn: boolean = false
 	): Promise<void> {
+		const defaultPath = this.cameraPathManager.getFirstPath();
+
 		if (enableZoomIn) {
-			// Pre-calculate the final orbit path ONCE at the beginning
-			const defaultPath = this.cameraPathManager.getFirstPath();
 			if (defaultPath) {
+				// Fit path once before zoom starts
 				this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
 			}
-
-			// Use cinematic zoom that goes directly to the orbit position
 			await this.zoomToOrbitPosition({
+				// zoomToOrbitPosition handles its own logic
 				duration: this.cameraOptions.zoomInDuration || 2.0,
 				padding: 0.15,
-				startFromCurrentPosition: true,
+				startFromCurrentPosition: true, // Typically zoom from current view
 				startOrbitAfterZoom: this.cameraOptions.autoOrbitAfterZoom || false,
 			});
 		} else {
-			// Immediate positioning (current behavior)
 			await this.focusOnSchematics({
-				animationDuration: 0, // No animation
+				// This will fit the path
+				animationDuration: 0,
 				padding: 0.15,
+				skipPathFitting: false, // Ensure path is fitted
 			});
-
-			// Update camera path after immediate positioning
-			const defaultPath = this.cameraPathManager.getFirstPath();
-			if (defaultPath) {
-				this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
-			}
-
-			// ✅ FIXED: Now start auto-orbit AFTER positioning and path fitting
-			if (this.schematicRenderer.options.enableAutoOrbit) {
-				setTimeout(() => {
-					console.log("🔄 Starting auto-orbit from optimal position");
-					this.startAutoOrbitFromOptimalPosition();
-				}, 100);
-			}
+			// focusOnSchematics now handles starting orbit if it was previously enabled or if options dictate it
 		}
 	}
 
@@ -892,21 +937,22 @@ export class CameraManager extends EventEmitter {
 	 */
 	private startAutoOrbitFromOptimalPosition(): void {
 		if (this.autoOrbitEnabled) {
-			return; // Already running
+			// If already orbiting and this is called (e.g. after focus),
+			// briefly stop and restart to ensure it uses the latest path parameters.
+			this.stopAutoOrbit();
 		}
 
-		// Get the fitted camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
 			console.warn(
-				"Cannot start auto-orbit: No circular camera path available"
+				"Cannot start auto-orbit: No circular camera path available or not circular."
 			);
 			return;
 		}
 
 		const circularPath = defaultPath.path as CircularCameraPath;
-
-		// Find a good starting point on the orbit (current camera position projected onto orbit)
+		// If the path was just fitted, it should be optimal.
+		// Find the closest point on the *current* orbit to the *current* camera position.
 		const currentPosition = new THREE.Vector3().copy(
 			this.activeCamera.position as THREE.Vector3
 		);
@@ -915,28 +961,25 @@ export class CameraManager extends EventEmitter {
 			currentPosition
 		);
 
-		// Set the orbit to start from this point
-		circularPath.setStartAngle(optimalOrbitPoint.angle);
+		circularPath.setStartAngle(optimalOrbitPoint.angle); // Adjust path start to current view
 
-		// Position camera at the optimal orbit start point
+		// Gently move camera to this exact orbit point if not already there (e.g. if called after manual move)
+		// However, if focusOnSchematics just ran, it should be close. For simplicity, let's assume it's close enough
+		// or rely on startAutoOrbit to use the path as is.
+		// For now, we directly position it to ensure smooth start.
 		this.activeCamera.setPosition([
 			optimalOrbitPoint.position.x,
 			optimalOrbitPoint.position.y,
 			optimalOrbitPoint.position.z,
 		]);
-
-		// Look at the target
 		this.activeCamera.lookAt(circularPath.getTargetPosition());
 
-		// Update controls target
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls && "target" in controls) {
 			controls.target.copy(circularPath.getTargetPosition());
-			controls.update();
+			if (controls.update) controls.update();
 		}
-
-		// Now start the orbit (camera is already in perfect position)
-		this.startAutoOrbit();
+		this.startAutoOrbit(); // This will use the (potentially adjusted) path
 	}
 
 	/**
@@ -947,11 +990,11 @@ export class CameraManager extends EventEmitter {
 			transitionDuration?: number;
 			startFromCurrentPosition?: boolean;
 			easing?: (t: number) => number;
-			skipPathFitting?: boolean; // New option to skip redundant path fitting
+			skipPathFitting?: boolean;
 		} = {}
 	): void {
 		if (this.autoOrbitEnabled) {
-			return; // Already running
+			return;
 		}
 
 		const {
@@ -961,22 +1004,16 @@ export class CameraManager extends EventEmitter {
 			skipPathFitting = false,
 		} = options;
 
-		// Stop any current animations
-		this.stopAnimation();
+		this.stopAnimation(); // Stop other animations
 
-		// Get the default camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
-		if (!defaultPath) {
-			console.warn("Cannot start auto-orbit: No camera path available");
+		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
+			console.warn(
+				"Cannot start auto-orbit: No (circular) camera path available."
+			);
 			return;
 		}
 
-		if (!(defaultPath.path instanceof CircularCameraPath)) {
-			console.warn("Auto-orbit only supports CircularCameraPath");
-			return;
-		}
-
-		// Only fit path if not already done
 		if (
 			!skipPathFitting &&
 			this.schematicRenderer?.schematicManager &&
@@ -988,10 +1025,21 @@ export class CameraManager extends EventEmitter {
 		const circularPath = defaultPath.path as CircularCameraPath;
 
 		if (startFromCurrentPosition && transitionDuration > 0) {
-			// Smoothly transition to orbit
 			this.transitionToOrbit(circularPath, transitionDuration, easing);
 		} else {
-			// Start orbit immediately
+			// If no transition, position camera to start of path and orbit
+			const startOrbitPoint = circularPath.getPoint(0);
+			this.activeCamera.setPosition([
+				startOrbitPoint.position.x,
+				startOrbitPoint.position.y,
+				startOrbitPoint.position.z,
+			]);
+			this.activeCamera.lookAt(startOrbitPoint.target);
+			const controls = this.controls.get(this.activeControlKey);
+			if (controls && "target" in controls) {
+				controls.target.copy(startOrbitPoint.target);
+				if (controls.update) controls.update();
+			}
 			this.startAutoOrbit();
 		}
 	}
@@ -1004,9 +1052,9 @@ export class CameraManager extends EventEmitter {
 			padding?: number;
 			duration?: number;
 			easing?: (t: number) => number;
-			startDistance?: number;
+			startDistance?: number; // Multiplier for how far out the zoom starts
 			startFromCurrentPosition?: boolean;
-			skipPathFitting?: boolean; // New option
+			skipPathFitting?: boolean;
 		} = {}
 	): Promise<void> {
 		const {
@@ -1015,86 +1063,112 @@ export class CameraManager extends EventEmitter {
 			easing = (t: number) => t * t * (3.0 - 2.0 * t),
 			startDistance = 3.0,
 			startFromCurrentPosition = false,
-			skipPathFitting = false, // Don't update path during zoom sequence
+			skipPathFitting = false,
 		} = options;
 
-		if (!this.schematicRenderer?.schematicManager?.isEmpty()) {
-			console.log("Starting cinematic zoom-in to schematics");
+		if (this.schematicRenderer?.schematicManager?.isEmpty()) return;
 
-			// Get the optimal target position first (without animation)
-			const bounds = this.calculateSchematicBounds();
-			if (!bounds) return;
+		console.log("Starting cinematic zoom-in to schematics");
 
-			const { center, size } = bounds;
-			const canvas = this.schematicRenderer.canvas;
-			const aspect = canvas.width / canvas.height;
+		const bounds = this.calculateSchematicBounds();
+		if (!bounds) return;
 
-			// Calculate the final target position
-			let finalPosition: THREE.Vector3;
-			let finalRotation: THREE.Euler | null = null;
+		const { center, size } = bounds;
+		const canvas = this.schematicRenderer.canvas;
+		const aspect = canvas.width / canvas.height;
 
-			if (this.activeCameraKey === "isometric") {
-				const result = this.calculateIsometricFraming(
-					center,
-					size,
-					aspect,
-					padding
-				);
-				finalPosition = result.position;
-				finalRotation = result.rotation;
-			} else {
-				finalPosition = this.calculatePerspectiveFraming(
-					center,
-					size,
-					aspect,
-					padding
-				);
-			}
+		let finalTargetPosition: THREE.Vector3;
+		let finalTargetRotation: THREE.Euler | null = null;
 
-			// Calculate starting position
-			let startPosition: THREE.Vector3;
-			if (startFromCurrentPosition) {
-				startPosition = new THREE.Vector3().copy(
-					this.activeCamera.position as THREE.Vector3
-				);
-			} else {
-				const direction = finalPosition.clone().sub(center).normalize();
-				startPosition = center
-					.clone()
-					.add(
-						direction.multiplyScalar(
-							finalPosition.distanceTo(center) * startDistance
-						)
-					);
-			}
-
-			// Animate to the final position
-			const controls = this.controls.get(this.activeControlKey);
-			if (controls) controls.enabled = false;
-
-			await this.animateToPosition(
-				startPosition,
-				this.activeCamera.rotation as THREE.Euler,
-				finalPosition,
-				finalRotation,
+		if (this.activeCamera.camera.type === "OrthographicCamera") {
+			const result = this.calculateIsometricFraming(
 				center,
-				duration,
-				easing
+				size,
+				aspect,
+				padding
 			);
+			finalTargetPosition = result.position;
+			finalTargetRotation = result.rotation;
+			// Also update ortho camera projection for the final state
+			const orthoCamera = this.activeCamera.camera as THREE.OrthographicCamera;
+			const requiredFrustumHeight = this.calculateOrthographicSize(
+				size,
+				aspect,
+				padding
+			);
+			orthoCamera.left = (-requiredFrustumHeight * aspect) / 2;
+			orthoCamera.right = (requiredFrustumHeight * aspect) / 2;
+			orthoCamera.top = requiredFrustumHeight / 2;
+			orthoCamera.bottom = -requiredFrustumHeight / 2;
+			// Note: We are animating position/rotation. The projection matrix will "snap" at the end.
+			// For smooth ortho zoom, one would animate orthoCamera.zoom or its frustum properties.
+			// This implementation animates position, which for ortho primarily affects clipping & perspective if any.
+			// For a true ortho zoom, the animateToPosition would need to handle ortho frustum interpolation.
+			// Current method is simpler: set final ortho projection then animate camera body.
+		} else {
+			finalTargetPosition = this.calculatePerspectiveFraming(
+				center,
+				size,
+				aspect,
+				padding
+			);
+		}
 
-			// Update controls
-			if (controls && "target" in controls) {
-				controls.target.copy(center);
-				controls.update();
-			}
-			if (controls) controls.enabled = true;
+		let zoomStartPosition: THREE.Vector3;
+		const currentCamRotation = this.activeCamera.rotation
+			? (this.activeCamera.rotation as THREE.Euler).clone()
+			: new THREE.Euler();
 
-			// Only update camera path if not skipping
-			if (!skipPathFitting) {
-				this.cameraPathManager.fitCircularPathToSchematics("circularPath", {
-					padding,
-				});
+		if (startFromCurrentPosition) {
+			zoomStartPosition = (this.activeCamera.position as THREE.Vector3).clone();
+		} else {
+			// Start further away along the vector from center to final position
+			const direction = finalTargetPosition.clone().sub(center).normalize();
+			if (direction.lengthSq() === 0) {
+				// Avoid issues if center and finalTargetPosition are same
+				direction.set(0, 0, 1);
 			}
+			zoomStartPosition = center
+				.clone()
+				.add(
+					direction.multiplyScalar(
+						finalTargetPosition.distanceTo(center) * startDistance
+					)
+				);
+		}
+
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls) controls.enabled = false;
+
+		await this.animateToPosition(
+			zoomStartPosition,
+			currentCamRotation, // Current rotation
+			finalTargetPosition,
+			finalTargetRotation, // Target rotation (for ortho)
+			center, // LookAt target
+			duration,
+			easing
+		);
+		// After animation, ensure final projection for ortho is applied if it wasn't interpolated
+		if (this.activeCamera.camera.type === "OrthographicCamera") {
+			(
+				this.activeCamera.camera as THREE.OrthographicCamera
+			).updateProjectionMatrix();
+		}
+
+		if (controls && "target" in controls) {
+			controls.target.copy(center);
+			if (controls.update) controls.update();
+		}
+		if (controls) controls.enabled = true;
+
+		if (!skipPathFitting) {
+			const maxSchematicDim = Math.max(size.x, size.y, size.z);
+			this.cameraPathManager.fitCircularPathToSchematics("circularPath", {
+				padding,
+				minRadius: maxSchematicDim * 0.8,
+				maxRadius: maxSchematicDim * 2.5,
+			});
 		}
 	}
 
@@ -1106,41 +1180,32 @@ export class CameraManager extends EventEmitter {
 		duration: number,
 		easing: (t: number) => number
 	): Promise<void> {
-		// Get current camera state
-		const startPosition = new THREE.Vector3().copy(
-			this.activeCamera.position as THREE.Vector3
-		);
-		const currentTarget = circularPath.getTargetPosition();
+		const startPosition = (this.activeCamera.position as THREE.Vector3).clone();
+		const startRotation = (this.activeCamera.rotation as THREE.Euler).clone();
+		const orbitTarget = circularPath.getTargetPosition(); // Center of orbit
 
-		// Find the closest point on the orbit path to current camera position
-		const closestPoint = this.findClosestOrbitPoint(
+		const closestPointOnOrbit = this.findClosestOrbitPoint(
 			circularPath,
 			startPosition
 		);
-		const targetPosition = closestPoint.position;
+		const targetPositionOnOrbit = closestPointOnOrbit.position;
 
-		// Update the circular path to start from this closest point
-		circularPath.setStartAngle(closestPoint.angle);
+		circularPath.setStartAngle(closestPointOnOrbit.angle); // Ensure orbit starts from here
 
-		// Disable controls during transition
 		const controls = this.controls.get(this.activeControlKey);
-		if (controls) {
-			controls.enabled = false;
-		}
+		if (controls) controls.enabled = false; // Disable during transition
 
-		// Animate from current position to orbit start position
 		await this.animateToPosition(
 			startPosition,
-			this.activeCamera.rotation as THREE.Euler,
-			targetPosition,
-			null, // Let it look at target naturally
-			currentTarget,
+			startRotation, // Current rotation
+			targetPositionOnOrbit,
+			null, // Rotation will be handled by lookAt for perspective, ortho maintains its rotation
+			orbitTarget, // Look at the orbit center
 			duration,
 			easing
 		);
-
-		// Now start the auto-orbit from this position
-		this.startAutoOrbit();
+		// Controls re-enabled by startAutoOrbit or if animation is stopped.
+		this.startAutoOrbit(); // Start orbit from the new position
 	}
 
 	/**
@@ -1150,33 +1215,46 @@ export class CameraManager extends EventEmitter {
 		circularPath: CircularCameraPath,
 		position: THREE.Vector3
 	): { position: THREE.Vector3; angle: number } {
-		const center = circularPath.getCenter();
+		const pathCenter = circularPath.getCenter();
 		const radius = circularPath.getRadius();
-		const height = circularPath.getHeight();
+		const height = circularPath.getHeight(); // Y-offset from pathCenter
 
-		// Project the current position onto the XZ plane at orbit height
+		// Project the query position onto the plane of the circular path
 		const projectedPosition = new THREE.Vector3(
 			position.x,
-			center.y + height,
+			pathCenter.y + height,
 			position.z
 		);
 
-		// Calculate the angle from center to this projected position
-		const deltaX = projectedPosition.x - center.x;
-		const deltaZ = projectedPosition.z - center.z;
-		const angle = Math.atan2(deltaZ, deltaX);
+		// Vector from path center to the projected query position
+		const dirToProjected = projectedPosition.clone().sub(pathCenter);
+		if (dirToProjected.lengthSq() === 0) {
+			// Query position is directly above/below path center
+			// Default to angle 0 or some predefined start angle for the path
+			const angle =
+				circularPath.getStartAngle() !== undefined
+					? circularPath.getStartAngle()
+					: 0;
+			return {
+				position: new THREE.Vector3(
+					pathCenter.x + radius * Math.cos(angle),
+					pathCenter.y + height,
+					pathCenter.z + radius * Math.sin(angle)
+				),
+				angle: angle,
+			};
+		}
+		dirToProjected.normalize();
 
-		// Calculate the actual orbit position at this angle
+		const angle = Math.atan2(dirToProjected.z, dirToProjected.x);
+
 		const orbitPosition = new THREE.Vector3(
-			center.x + radius * Math.cos(angle),
-			center.y + height,
-			center.z + radius * Math.sin(angle)
+			pathCenter.x + radius * Math.cos(angle),
+			pathCenter.y + height,
+			pathCenter.z + radius * Math.sin(angle)
 		);
 
-		return {
-			position: orbitPosition,
-			angle: angle,
-		};
+		return { position: orbitPosition, angle };
 	}
 
 	/**
@@ -1184,21 +1262,26 @@ export class CameraManager extends EventEmitter {
 	 */
 	private async animateToPosition(
 		startPos: THREE.Vector3,
-		startRot: THREE.Euler,
+		startRotEuler: THREE.Euler,
 		targetPos: THREE.Vector3,
-		targetRot: THREE.Euler | null,
-		lookAtTarget: THREE.Vector3,
+		targetRotEuler: THREE.Euler | null, // Target Euler for ortho, null for perspective (uses lookAt)
+		lookAtTarget: THREE.Vector3, // Point to look at, primarily for perspective
 		duration: number,
 		easing: (t: number) => number
 	): Promise<void> {
 		return new Promise((resolve) => {
 			const startTime = performance.now();
+			const startRotQuat = new THREE.Quaternion().setFromEuler(startRotEuler);
+			let targetRotQuat: THREE.Quaternion | null = null;
+			if (targetRotEuler) {
+				targetRotQuat = new THREE.Quaternion().setFromEuler(targetRotEuler);
+			}
+
 			const animate = () => {
 				const elapsed = (performance.now() - startTime) / 1000;
 				let t = Math.min(elapsed / duration, 1);
 				t = easing(t);
 
-				// Interpolate position
 				const currentPos = startPos.clone().lerp(targetPos, t);
 				this.activeCamera.setPosition([
 					currentPos.x,
@@ -1206,26 +1289,44 @@ export class CameraManager extends EventEmitter {
 					currentPos.z,
 				]);
 
-				// Handle rotation or look-at
-				if (targetRot) {
-					// Interpolate rotation for isometric
-					const currentRot = startRot.clone();
-					currentRot.x = THREE.MathUtils.lerp(startRot.x, targetRot.x, t);
-					currentRot.y = THREE.MathUtils.lerp(startRot.y, targetRot.y, t);
-					currentRot.z = THREE.MathUtils.lerp(startRot.z, targetRot.z, t);
-					this.activeCamera.rotation = [
-						currentRot.x,
-						currentRot.y,
-						currentRot.z,
-					];
+				if (
+					this.activeCamera.camera.type === "OrthographicCamera" &&
+					targetRotQuat
+				) {
+					// For Ortho, interpolate rotation if a target rotation is provided
+					const currentRot = new THREE.Quaternion();
+					THREE.Quaternion.slerp(startRotQuat, targetRotQuat, currentRot, t);
+					const eulerRot = new THREE.Euler().setFromQuaternion(
+						currentRot,
+						this.activeCamera.camera.rotation.order
+					);
+					this.activeCamera.rotation = [eulerRot.x, eulerRot.y, eulerRot.z];
 				} else {
-					// Look at target for perspective cameras
+					// For Perspective, or Ortho without targetRot, use lookAt
 					this.activeCamera.lookAt(lookAtTarget);
 				}
 
 				if (t < 1) {
 					requestAnimationFrame(animate);
 				} else {
+					// Ensure final state is set precisely
+					this.activeCamera.setPosition([
+						targetPos.x,
+						targetPos.y,
+						targetPos.z,
+					]);
+					if (
+						this.activeCamera.camera.type === "OrthographicCamera" &&
+						targetRotEuler
+					) {
+						this.activeCamera.rotation = [
+							targetRotEuler.x,
+							targetRotEuler.y,
+							targetRotEuler.z,
+						];
+					} else {
+						this.activeCamera.lookAt(lookAtTarget);
+					}
 					resolve();
 				}
 			};
@@ -1235,7 +1336,7 @@ export class CameraManager extends EventEmitter {
 
 	private calculateSchematicBounds(): {
 		center: THREE.Vector3;
-		size: THREE.Vector3;
+		size: THREE.Vector3; // Represents dimensions (width, height, depth)
 		boundingBox: THREE.Box3;
 	} | null {
 		if (
@@ -1245,29 +1346,18 @@ export class CameraManager extends EventEmitter {
 			return null;
 		}
 
-		// Use existing SchematicManager methods to get bounds
 		const center =
 			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
-		const maxDimensions =
+		const dimensions = // This should be a Vector3 representing width, height, depth
 			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
 
-		// Create bounding box from center and dimensions
-		const halfSize = new THREE.Vector3(
-			maxDimensions.x / 2,
-			maxDimensions.y / 2,
-			maxDimensions.z / 2
-		);
-
+		const halfSize = dimensions.clone().multiplyScalar(0.5);
 		const boundingBox = new THREE.Box3(
 			center.clone().sub(halfSize),
 			center.clone().add(halfSize)
 		);
 
-		return {
-			center,
-			size: maxDimensions,
-			boundingBox,
-		};
+		return { center, size: dimensions, boundingBox };
 	}
 
 	/**
@@ -1275,71 +1365,86 @@ export class CameraManager extends EventEmitter {
 	 */
 	private calculatePerspectiveFraming(
 		center: THREE.Vector3,
-		size: THREE.Vector3,
+		objectSize: THREE.Vector3, // Full object dimensions (x, y, z)
 		aspect: number,
 		padding: number
 	): THREE.Vector3 {
 		const camera = this.activeCamera.camera as THREE.PerspectiveCamera;
-		const fov = THREE.MathUtils.degToRad(camera.fov);
+		const fov = THREE.MathUtils.degToRad(camera.fov); // Vertical FoV in radians
 
-		// Calculate the distance needed to fit the object
-		const maxDimension = Math.max(size.x, size.y, size.z);
+		// Add padding to the object's dimensions
+		const paddedWidth = objectSize.x * (1 + padding * 2);
+		const paddedHeight = objectSize.y * (1 + padding * 2);
 
-		// Account for aspect ratio - use the larger dimension relative to viewport
-		const effectiveSize =
-			aspect < 1
-				? Math.max(size.x / aspect, size.y) // Portrait viewport
-				: Math.max(size.x, size.y * aspect); // Landscape viewport
+		// Calculate distance needed to fit height
+		const distanceForHeight = paddedHeight / (2 * Math.tan(fov / 2));
+		// Calculate distance needed to fit width (fov is vertical, so account for aspect)
+		const distanceForWidth = paddedWidth / (2 * Math.tan(fov / 2) * aspect);
 
-		// Calculate distance using field of view
-		// Add padding by increasing the effective size
-		const paddedSize = effectiveSize * (1 + padding * 2);
-		const distance = paddedSize / 2 / Math.tan(fov / 2);
+		// The actual distance is the larger of the two, to ensure the whole object fits
+		const calculatedDistance = Math.max(distanceForHeight, distanceForWidth);
 
-		// Ensure minimum distance for very small objects
-		const minDistance = maxDimension * 2;
-		const finalDistance = Math.max(distance, minDistance);
-
-		// Position camera at an optimal viewing angle (slightly elevated and offset)
-		const offset = new THREE.Vector3(
-			finalDistance * 0.7071, // 45-degree angle
-			finalDistance * 0.5, // Slightly elevated
-			finalDistance * 0.7071
+		// Define a minimum distance floor
+		const relevantXYDimension = Math.max(objectSize.x, objectSize.y);
+		// Ensure camera is at least 0.75x the largest XY dimension from the center, or an absolute minimum.
+		const minDistanceFloor = Math.max(
+			ABSOLUTE_MIN_PERSPECTIVE_DISTANCE,
+			relevantXYDimension * 0.75
 		);
 
-		return center.clone().add(offset);
+		const finalDistance = Math.max(calculatedDistance, minDistanceFloor);
+
+		// Position camera at a common viewing angle (e.g., 45 degrees offset in XZ, 30 degrees up)
+		const offsetAngleXY = Math.PI / 4; // 45 degrees
+		const elevationAngle = Math.PI / 6; // 30 degrees
+
+		const camOffset = new THREE.Vector3(
+			Math.cos(elevationAngle) * Math.sin(offsetAngleXY), // X component
+			Math.sin(elevationAngle), // Y component
+			Math.cos(elevationAngle) * Math.cos(offsetAngleXY) // Z component
+		);
+		camOffset.normalize().multiplyScalar(finalDistance);
+
+		return center.clone().add(camOffset);
 	}
 
 	/**
-	 * Calculate optimal position and rotation for isometric camera
+	 * Calculate optimal position and rotation for isometric/orthographic camera.
+	 * For orthographic, position primarily affects clipping and what's "in front".
+	 * Size is determined by calculateOrthographicSize.
 	 */
 	private calculateIsometricFraming(
 		center: THREE.Vector3,
-		size: THREE.Vector3,
-		// @ts-ignore
+		objectSize: THREE.Vector3,
+		// @ts-ignore aspect is used by calculateOrthographicSize called from focusOnSchematics
 		aspect: number,
 		padding: number
 	): { position: THREE.Vector3; rotation: THREE.Euler } {
-		const preset = CameraManager.CAMERA_PRESETS.isometric;
+		const presetName = this.activeCameraKey; // Assume current active camera is isometric or similar ortho
+		const preset =
+			CameraManager.CAMERA_PRESETS[
+				presetName as keyof typeof CameraManager.CAMERA_PRESETS
+			] || CameraManager.CAMERA_PRESETS.isometric;
 
-		// Use preset rotation
-		const rotation = new THREE.Euler(...preset.rotation!);
+		// Use preset rotation if available, otherwise a default isometric-like rotation
+		const rotationArray =
+			preset.rotation || CameraManager.CAMERA_PRESETS.isometric.rotation;
+		const rotation = new THREE.Euler(...rotationArray);
 
-		// Calculate distance based on the largest dimension and padding
-		const maxDimension = Math.max(size.x, size.y, size.z);
-		const paddedDimension = maxDimension * (1 + padding * 2);
+		// Position the camera far enough along its viewing vector.
+		// Distance is based on the object's largest dimension to ensure it's outside the object.
+		const maxObjectDim = Math.max(objectSize.x, objectSize.y, objectSize.z);
+		// Safety factor to ensure camera is well outside the object.
+		// Padding is already accounted for in ortho frustum size.
+		const distanceFactor =
+			maxObjectDim * 1.5 + ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT * 2;
 
-		// Distance factor for isometric view (adjusted for optimal viewing)
-		const distanceFactor = paddedDimension * 1.2;
+		// Create a vector pointing away from the object along the camera's negative Z-axis (local)
+		const offsetDirection = new THREE.Vector3(0, 0, 1); // Camera looks along -Z, so position along +Z from target
+		offsetDirection.applyEuler(rotation); // Rotate this direction by the camera's rotation
+		offsetDirection.multiplyScalar(distanceFactor);
 
-		// Apply isometric positioning offset
-		const offset = new THREE.Vector3(
-			distanceFactor * 0.7071, // X offset for isometric angle
-			distanceFactor * 0.7071, // Y offset for elevation
-			distanceFactor * 0.7071 // Z offset for depth
-		);
-
-		const position = center.clone().add(offset);
+		const position = center.clone().add(offsetDirection);
 
 		return { position, rotation };
 	}
@@ -1350,7 +1455,7 @@ export class CameraManager extends EventEmitter {
 	public async zoomToOrbitPosition(
 		options: {
 			duration?: number;
-			padding?: number;
+			padding?: number; // Padding for path fitting
 			startFromCurrentPosition?: boolean;
 			startOrbitAfterZoom?: boolean;
 			easing?: (t: number) => number;
@@ -1358,7 +1463,6 @@ export class CameraManager extends EventEmitter {
 	): Promise<void> {
 		const {
 			duration = 2.0,
-			// @ts-ignore
 			padding = 0.15,
 			startFromCurrentPosition = true,
 			startOrbitAfterZoom = false,
@@ -1368,76 +1472,77 @@ export class CameraManager extends EventEmitter {
 		if (this.schematicRenderer?.schematicManager?.isEmpty()) {
 			return;
 		}
-
 		console.log("Starting zoom directly to orbit position");
 
-		// Get the orbit path (should already be fitted)
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
 			console.warn("No circular camera path available for zoom to orbit");
+			if (startOrbitAfterZoom) this.startAutoOrbitFromOptimalPosition(); // Fallback to just orbit
 			return;
 		}
-
 		const circularPath = defaultPath.path as CircularCameraPath;
-		const bounds = this.calculateSchematicBounds();
-		if (!bounds) return;
 
-		// Calculate starting position
-		let startPosition: THREE.Vector3;
-		if (startFromCurrentPosition) {
-			startPosition = new THREE.Vector3().copy(
-				this.activeCamera.position as THREE.Vector3
-			);
-		} else {
-			// Calculate a dramatic starting position (much further away)
-			const { center } = bounds;
-			const orbitCenter = circularPath.getCenter();
-			const orbitRadius = circularPath.getRadius();
-			const direction = orbitCenter.clone().sub(center).normalize();
-			startPosition = center
-				.clone()
-				.add(direction.multiplyScalar(orbitRadius * 3));
-		}
+		// Ensure path is fitted using the provided padding
+		// This is crucial because the target orbit position depends on the fitted path
+		this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name, {
+			padding,
+		});
 
-		// Find the optimal point on the orbit to zoom to
-		const targetOrbitPoint = this.findClosestOrbitPoint(
+		let zoomStartPosition: THREE.Vector3;
+		const currentCamRotation = (
+			this.activeCamera.rotation as THREE.Euler
+		).clone();
+
+		// Determine the target point on the (now fitted) orbit
+		// A good target is the point on the orbit closest to the current camera's XZ projection,
+		// or a default starting angle (e.g., 0) if not starting from current.
+		const idealOrbitPoint = this.findClosestOrbitPoint(
 			circularPath,
-			startPosition
+			startFromCurrentPosition
+				? (this.activeCamera.position as THREE.Vector3).clone()
+				: circularPath.getPoint(0).position
 		);
 
-		// Update the circular path to start from this point (for later orbit)
-		circularPath.setStartAngle(targetOrbitPoint.angle);
+		if (startFromCurrentPosition) {
+			zoomStartPosition = (this.activeCamera.position as THREE.Vector3).clone();
+		} else {
+			// Start far away, "behind" the idealOrbitPoint along its view direction towards center
+			const viewDirection = circularPath
+				.getTargetPosition()
+				.clone()
+				.sub(idealOrbitPoint.position)
+				.normalize();
+			const farDistance = circularPath.getRadius() * 2; // Example: 2x radius away
+			zoomStartPosition = idealOrbitPoint.position
+				.clone()
+				.add(viewDirection.multiplyScalar(farDistance));
+		}
 
-		// Disable controls during animation
+		circularPath.setStartAngle(idealOrbitPoint.angle); // For subsequent orbit
+
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) controls.enabled = false;
 
-		// Animate directly to the orbit position
 		await this.animateToPosition(
-			startPosition,
-			this.activeCamera.rotation as THREE.Euler,
-			targetOrbitPoint.position,
-			null,
-			circularPath.getTargetPosition(),
+			zoomStartPosition,
+			currentCamRotation,
+			idealOrbitPoint.position, // Target position on orbit
+			null, // Let lookAt handle rotation for perspective
+			circularPath.getTargetPosition(), // Look at orbit center
 			duration,
 			easing
 		);
 
-		// Update controls target
 		if (controls && "target" in controls) {
 			controls.target.copy(circularPath.getTargetPosition());
-			controls.update();
+			if (controls.update) controls.update();
 		}
-
-		// Re-enable controls
 		if (controls) controls.enabled = true;
 
-		// Start orbit immediately if requested (no additional transition needed)
 		if (startOrbitAfterZoom) {
-			// Brief pause, then start orbit from current position (no transition needed)
 			setTimeout(() => {
-				this.startAutoOrbit(); // Camera is already in position
-			}, 500);
+				this.startAutoOrbitFromOptimalPosition(); // This will use the already positioned camera
+			}, 100); // Brief pause
 		}
 	}
 
@@ -1446,45 +1551,42 @@ export class CameraManager extends EventEmitter {
 	 */
 	public startAutoOrbit(): void {
 		if (this.autoOrbitEnabled) {
-			return; // Already running
+			return;
 		}
+		this.stopAnimation(); // Ensure no other animations are running
 
-		// Stop any current animations
-		this.stopAnimation();
-
-		// Get the default camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
-		if (!defaultPath) {
-			console.warn("Cannot start auto-orbit: No camera path available");
+		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
+			console.warn(
+				"Cannot start auto-orbit: No circular camera path or path not found."
+			);
 			return;
 		}
+		const circularPath = defaultPath.path as CircularCameraPath;
+		console.log("🎬 Starting auto-orbit animation.");
 
-		// Make sure we have a circular path
-		if (!(defaultPath.path instanceof CircularCameraPath)) {
-			console.warn("Auto-orbit only supports CircularCameraPath");
-			return;
-		}
-
-		console.log("🎬 Starting auto-orbit animation from current position");
-
-		// Disable controls during auto-orbit
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) {
 			controls.enabled = false;
 		}
 
 		this.autoOrbitEnabled = true;
-		this.autoOrbitStartTime = performance.now();
+		this.autoOrbitStartTime =
+			performance.now() - circularPath.getCurrentTimeOffset() * 1000; // Adjust start time based on current path progress
 
-		// Start animation loop (same as before)
 		const animateOrbit = () => {
 			if (!this.autoOrbitEnabled) return;
 
-			const elapsedTime = (performance.now() - this.autoOrbitStartTime) / 1000;
-			const t = (elapsedTime % this.autoOrbitDuration) / this.autoOrbitDuration;
+			const elapsedTimeTotal =
+				(performance.now() - this.autoOrbitStartTime) / 1000;
+			// 't' is progress through one full orbit cycle (0 to 1)
+			const t =
+				(elapsedTimeTotal % this.autoOrbitDuration) / this.autoOrbitDuration;
+			circularPath.setCurrentTimeOffset(
+				elapsedTimeTotal % this.autoOrbitDuration
+			);
 
-			// @ts-ignore
-			const { position, rotation, target } = defaultPath.path.getPoint(t);
+			const { position, target } = circularPath.getPoint(t); // getPoint expects progress 0-1
 
 			(this.activeCamera.position as THREE.Vector3).copy(position);
 			this.activeCamera.lookAt(target);
@@ -1506,18 +1608,25 @@ export class CameraManager extends EventEmitter {
 	 */
 	public stopAutoOrbit(): void {
 		if (!this.autoOrbitEnabled) {
-			return; // Not running
+			return;
 		}
-
+		console.log("⏹️ Stopping auto-orbit animation.");
 		this.autoOrbitEnabled = false;
 
-		// Cancel animation
 		if (this.autoOrbitAnimationId !== null) {
 			cancelAnimationFrame(this.autoOrbitAnimationId);
 			this.autoOrbitAnimationId = null;
 		}
+		// Persist the current position on the path if needed
+		const defaultPath = this.cameraPathManager.getFirstPath();
+		if (defaultPath && defaultPath.path instanceof CircularCameraPath) {
+			const elapsedTimeTotal =
+				(performance.now() - this.autoOrbitStartTime) / 1000;
+			defaultPath.path.setCurrentTimeOffset(
+				elapsedTimeTotal % this.autoOrbitDuration
+			);
+		}
 
-		// Re-enable controls
 		const controls = this.controls.get(this.activeControlKey);
 		if (controls) {
 			controls.enabled = true;
@@ -1533,7 +1642,16 @@ export class CameraManager extends EventEmitter {
 			this.stopAutoOrbit();
 			return false;
 		} else {
-			this.startAutoOrbit();
+			// When toggling on, ensure path is fitted and start from optimal pos.
+			const defaultPath = this.cameraPathManager.getFirstPath();
+			if (
+				defaultPath &&
+				this.schematicRenderer.schematicManager &&
+				!this.schematicRenderer.schematicManager.isEmpty()
+			) {
+				this.cameraPathManager.fitCircularPathToSchematics(defaultPath.name);
+			}
+			this.startAutoOrbitFromOptimalPosition();
 			return true;
 		}
 	}
@@ -1543,7 +1661,12 @@ export class CameraManager extends EventEmitter {
 	 * @param duration Duration in seconds for a full rotation
 	 */
 	public setAutoOrbitDuration(duration: number): void {
-		this.autoOrbitDuration = duration;
+		this.autoOrbitDuration = Math.max(1, duration); // Ensure duration is positive
+		if (this.autoOrbitEnabled) {
+			// If orbiting, restart to apply new duration
+			this.stopAutoOrbit();
+			this.startAutoOrbitFromOptimalPosition();
+		}
 	}
 
 	/**
@@ -1559,15 +1682,14 @@ export class CameraManager extends EventEmitter {
 		this.stopAnimation();
 		this.stopAutoOrbit();
 
-		// Dispose of all controls
 		this.controls.forEach((control) => {
 			if (control.dispose) {
 				control.dispose();
 			}
 		});
 
-		// Clear all maps
 		this.controls.clear();
 		this.cameras.clear();
+		this.removeAllListeners(); // Clear event listeners from EventEmitter
 	}
 }

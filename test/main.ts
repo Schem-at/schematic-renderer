@@ -51,10 +51,11 @@ const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new SchematicRenderer(
 	canvas,
 	{
-		// "pistonTest": () => Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
-		// "schematicBase64": () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
+		// pistonTest: () =>
+		// 	Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
+		// schematicBase64: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
 		xor: () => Promise.resolve(base64ToArrayBuffer(xor)),
-		// "diagonalCCA": () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
+		// diagonalCCA: () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
 	},
 	{
 		vanillaPack: async () => {
@@ -99,12 +100,15 @@ const renderer = new SchematicRenderer(
 			},
 			onRendererInitialized: async (renderer: SchematicRenderer) => {
 				// renderer.uiManager?.hideEmptyState();
-				// renderer.schematicManager?.createEmptySchematic(
-				// 	"testSchematic");
-				// renderer.schematicManager?.getSchematic("testSchematic")?.setBlock(
-				// 	[0, 0, 0],
-				// 	"minecraft:red_stained_glass",
-				// );
+				// createDirtHouseSchematic(renderer, "dirtHouse");
+				// // renderer.schematicManager?.createEmptySchematic(
+				// // 	"testSchematic");
+				// // renderer.schematicManager?.getSchematic("testSchematic")?.setBlock(
+				// // 	[0, 0, 0],
+				// // 	"minecraft:red_stained_glass",
+				// // );
+				// // createFlowingWaterSchematic(renderer, "flowingWater");
+				// renderer.cameraManager.focusOnSchematics();
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);
@@ -118,6 +122,59 @@ const renderer = new SchematicRenderer(
 		},
 	}
 );
+
+function createFlowingWaterSchematic(
+	renderer: SchematicRenderer,
+	name: string
+): void {
+	const schematic = renderer.schematicManager?.createEmptySchematic(name);
+	if (!schematic) return;
+	schematic.setBlock([0, 1, 0], "minecraft:chest[type=left]");
+
+	for (let i = 8; i >= 1; i--) {
+		schematic.setBlock(
+			[i, 1, 0],
+			"minecraft:water[level=" + i + ", flowing=true]"
+		);
+		schematic.setBlock([i, 0, 0], "minecraft:sand");
+	}
+}
+
+function createDirtHouseSchematic(
+	renderer: SchematicRenderer,
+	name: string
+): void {
+	const schematic = renderer.schematicManager?.createEmptySchematic(name);
+	if (!schematic) return;
+
+	// Create ground from grass blocks
+	for (let x = -16; x <= 16; x++) {
+		for (let z = -16; z <= 16; z++) {
+			schematic.setBlockNoRebuild([x, 0, z], "minecraft:grass_block");
+		}
+	}
+	// Create walls from cobblestone
+	for (let x = -8; x <= 8; x++) {
+		for (let y = 1; y <= 5; y++) {
+			schematic.setBlockNoRebuild([x, y, -8], "minecraft:cobblestone");
+			schematic.setBlockNoRebuild([x, y, 8], "minecraft:cobblestone");
+		}
+	}
+	for (let z = -8; z <= 8; z++) {
+		for (let y = 1; y <= 5; y++) {
+			schematic.setBlockNoRebuild([-8, y, z], "minecraft:cobblestone");
+			schematic.setBlockNoRebuild([8, y, z], "minecraft:cobblestone");
+		}
+	}
+	// Create roof from wood planks
+	for (let x = -7; x <= 7; x++) {
+		for (let z = -7; z <= 7; z++) {
+			schematic.setBlockNoRebuild([x, 6, z], "minecraft:oak_planks");
+		}
+	}
+
+	schematic.rebuildMesh();
+}
 
 // setTimeout(() => {
 // 	renderer.updateSchematic("diagonalCCA", () =>
