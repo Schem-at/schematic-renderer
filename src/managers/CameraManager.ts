@@ -97,6 +97,7 @@ export class CameraManager extends EventEmitter {
 			position: [0, 0, 20] as const, // Initial position
 			rotation: [(-36 * Math.PI) / 180, (135 * Math.PI) / 180, 0] as const, // Their default angles: 36° slant, 135° rotation
 			controlType: "orbit" as const,
+			fov: 45, // FOV for orthographic camera
 			controlSettings: {
 				enableDamping: false,
 				minDistance: 10,
@@ -111,7 +112,9 @@ export class CameraManager extends EventEmitter {
 		perspective: {
 			type: "perspective" as const,
 			position: [0, 20, 20] as const,
+			rotation: [(-20 * Math.PI) / 180, 0, 0] as const, // 20° down tilt
 			controlType: "orbit" as const,
+			fov: 60, // Default FOV for perspective camera
 			controlSettings: {
 				enableDamping: false,
 				enableZoom: true,
@@ -122,6 +125,7 @@ export class CameraManager extends EventEmitter {
 		perspective_fpv: {
 			type: "perspective" as const,
 			position: [0, 2, 0] as const,
+			rotation: [0, 0, 0] as const, // Looking straight ahead
 			fov: 90,
 			controlType: "creative" as const,
 			controlSettings: {
@@ -909,8 +913,6 @@ export class CameraManager extends EventEmitter {
 	public async handleSchematicLoaded(
 		enableZoomIn: boolean = false
 	): Promise<void> {
-		const defaultPath = this.cameraPathManager.getFirstPath();
-
 		if (enableZoomIn) {
 			// Pre-calculate the final orbit path ONCE at the beginning
 			const defaultPath = this.cameraPathManager.getFirstPath();
@@ -1428,6 +1430,7 @@ export class CameraManager extends EventEmitter {
 		objectSize: THREE.Vector3,
 		// @ts-ignore aspect is used by calculateOrthographicSize called from focusOnSchematics
 		aspect: number,
+		// @ts-ignore padding is used by calculateOrthographicSize called from focusOnSchematics
 		padding: number
 	): { position: THREE.Vector3; rotation: THREE.Euler } {
 		const presetName = this.activeCameraKey; // Assume current active camera is isometric or similar ortho
@@ -1582,7 +1585,6 @@ export class CameraManager extends EventEmitter {
 			);
 			return;
 		}
-		const circularPath = defaultPath.path as CircularCameraPath;
 		console.log("🎬 Starting auto-orbit animation.");
 
 		// Disable controls during auto-orbit

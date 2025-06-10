@@ -204,6 +204,13 @@ export class CircularCameraPath extends CameraPath {
 	}
 
 	/**
+	 * Get the starting angle of the orbit
+	 */
+	public getStartAngle(): number {
+		return this.startAngle;
+	}
+
+	/**
 	 * Get the current angle at parameter t
 	 */
 	public getCurrentAngle(t: number): number {
