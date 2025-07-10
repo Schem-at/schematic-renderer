@@ -1,3 +1,5 @@
+import {Mesh, BufferGeometry, Material, Vector3} from "three"
+
 export interface BlockStateModelHolder {
 	model: string;
 	x?: number;
@@ -147,4 +149,46 @@ export interface BlockModelData {
 export interface BlockModelOption {
 	name: string;
 	holders: BlockStateModelHolder[];
+}
+
+export interface ChunkMeshes {
+	solid: Mesh | null;
+	water: Mesh | null;
+	redstone: Mesh | null;
+	transparent: Mesh | null;
+	emissive: Mesh | null;
+}
+
+export interface ProcessedBlockGeometry {
+	geometry: BufferGeometry; 
+	material: Material;
+}
+
+export interface PaletteBlockGeometry {
+	geometries: ProcessedBlockGeometry[];
+	blockName: string; 
+}
+
+export interface PaletteGeometryCache {
+	geometries: PaletteBlockGeometry[];
+	isReady: boolean;
+}
+
+export interface PaletteMaterialGroup {
+    material: Material;
+    baseGeometry: BufferGeometry;
+    positions: Vector3[]; // Populated during chunk meshing
+    materialIndex: number; // Pre-assigned material index for final mesh
+}
+
+export interface PaletteBlockData {
+    blockName: string;
+    materialGroups: PaletteMaterialGroup[]; // All material groups for this block type
+    category: keyof ChunkMeshes; // Pre-computed category
+}
+
+export interface PaletteCache {
+    blockData: PaletteBlockData[]; // Direct array access by palette index
+    globalMaterials: Material[]; // All unique materials across palette
+    isReady: boolean;
 }
