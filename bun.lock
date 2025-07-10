@@ -17,7 +17,7 @@
         "jszip": "^3.10.1",
         "lil-gui": "^0.19.2",
         "n8ao": "^1.10.0",
-        "nucleation": "^0.1.68",
+        "nucleation": "^0.1.69",
         "pako": "^2.1.0",
         "postprocessing": "^6.35.4",
         "stats-js": "^1.0.1",
@@ -651,7 +651,7 @@
 
     "normalize-path": ["normalize-path@3.0.0", "", {}, "sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA=="],
 
-    "nucleation": ["nucleation@0.1.68", "", {}, "sha512-dt7vkE77Df+QDekKY1UAd+amgJ0CbGHv7SbPX+MykW4p8iHD7Puv+C7xwtnoQDdZI+QPuyFRe6lXYCV+H/iFOA=="],
+    "nucleation": ["nucleation@0.1.69", "", {}, "sha512-eaTuCljjTQZb3fAN4UmXpSdS3NaNrzGj6Xn70YGRsgfbvgWyX+naXO9VOD9jibXo5A2aNFHRh/0KA/lcPLA45A=="],
 
     "oauth-sign": ["oauth-sign@0.9.0", "", {}, "sha512-fexhUFFPTGV8ybAtSIGbV6gOkSv8UtRbDBnAyLQw4QPKkgNlsH2ByPGtMUqdWkos6YCRmAqViwgZrJc/mRDzZQ=="],
 

@@ -309,7 +309,6 @@ export class WorldMeshBuilder {
 		};
 	}
 
-	// OPTIMIZED VERSION with geometry buffer reuse and material registry
 	private async createCategoryMesh(
 		blocks: BlockData[],
 		category: string,
@@ -317,10 +316,14 @@ export class WorldMeshBuilder {
 	): Promise<THREE.Mesh | null> {
 		if (blocks.length === 0) return null;
 
-		const materialToGeometries = new Map<
+		const materialToBlocks = new Map<
 			THREE.Material,
-			THREE.BufferGeometry[]
+			{
+				baseGeometry: THREE.BufferGeometry;
+				positions: THREE.Vector3[];
+			}[]
 		>();
+
 		const biome = "plains";
 
 		for (const block of blocks) {
@@ -345,43 +348,50 @@ export class WorldMeshBuilder {
 			for (const { geometry: baseGeo, material } of cachedExtractedDatas) {
 				if (baseGeo.attributes.position.count === 0) continue;
 
-				// Get the shared material from the registry
 				const sharedMaterial = MaterialRegistry.getMaterial(material);
 
-				// Create positioned geometry without cloning
-				const positionedGeometry = this.createPositionedGeometry(
-					baseGeo,
-					blockPosition
-				);
-
-				if (!materialToGeometries.has(sharedMaterial)) {
-					materialToGeometries.set(sharedMaterial, []);
+				if (!materialToBlocks.has(sharedMaterial)) {
+					materialToBlocks.set(sharedMaterial, []);
 				}
-				materialToGeometries.get(sharedMaterial)!.push(positionedGeometry);
+
+				let geometryGroup = materialToBlocks
+					.get(sharedMaterial)!
+					.find((group) => group.baseGeometry === baseGeo);
+
+				if (!geometryGroup) {
+					geometryGroup = {
+						baseGeometry: baseGeo,
+						positions: [],
+					};
+					materialToBlocks.get(sharedMaterial)!.push(geometryGroup);
+				}
+
+				geometryGroup.positions.push(blockPosition);
 			}
 		}
 
-		if (materialToGeometries.size === 0) return null;
+		if (materialToBlocks.size === 0) return null;
 
-		// Build the final mesh using the optimized merge
 		const materials: THREE.Material[] = [];
-		const allGeometries: THREE.BufferGeometry[] = [];
+		const allMergedGeometries: THREE.BufferGeometry[] = [];
 
-		materialToGeometries.forEach((geometries, material) => {
+		materialToBlocks.forEach((geometryGroups, material) => {
 			const materialIndex = materials.length;
 			materials.push(material);
 
-			geometries.forEach((geo) => {
-				// Tag each geometry with its material index for merging
-				(geo as any).__materialIndex = materialIndex;
-				allGeometries.push(geo);
+			geometryGroups.forEach(({ baseGeometry, positions }) => {
+				const mergedGeometry = this.mergeGeometryAtPositions(
+					baseGeometry,
+					positions
+				);
+				(mergedGeometry as any).__materialIndex = materialIndex;
+				allMergedGeometries.push(mergedGeometry);
 			});
 		});
 
-		// Merge geometries
-		let mergedGeometry: THREE.BufferGeometry | null = null;
+		let finalGeometry: THREE.BufferGeometry | null = null;
 		try {
-			mergedGeometry = this.mergeGeometriesOptimized(allGeometries);
+			finalGeometry = this.mergeGeometriesOptimized(allMergedGeometries);
 		} catch (error) {
 			console.error(
 				`[WMB] Error merging geometries for ${meshPrefix}-${category}:`,
@@ -390,83 +400,116 @@ export class WorldMeshBuilder {
 		}
 
 		// Clean up temporary geometries
-		allGeometries.forEach((geo) => geo.dispose());
+		allMergedGeometries.forEach((geo) => geo.dispose());
 
-		if (!mergedGeometry || mergedGeometry.attributes.position.count === 0) {
-			mergedGeometry?.dispose();
+		if (!finalGeometry || finalGeometry.attributes.position.count === 0) {
+			finalGeometry?.dispose();
 			return null;
 		}
 
 		try {
-			const mergedMesh = new THREE.Mesh(mergedGeometry, materials);
+			const mergedMesh = new THREE.Mesh(finalGeometry, materials);
 			mergedMesh.name = `${meshPrefix}-${category}-${blocks.length}b-${materials.length}m`;
 			this.configureMeshForCategory(mergedMesh, category as keyof ChunkMeshes);
-
-			// Track mesh for cleanup
 			mergedMesh.userData.materialRegistry = true;
-
 			return mergedMesh;
 		} catch (error) {
 			console.error(
 				`[WMB] Failed to create final mesh for ${meshPrefix}-${category}:`,
 				error
 			);
-			mergedGeometry?.dispose();
+			finalGeometry?.dispose();
 			return null;
 		}
 	}
 
-	// Helper to create positioned geometry without cloning
-	private createPositionedGeometry(
+	private mergeGeometryAtPositions(
 		baseGeometry: THREE.BufferGeometry,
-		position: THREE.Vector3
+		positions: THREE.Vector3[]
 	): THREE.BufferGeometry {
-		const positionAttribute = baseGeometry.attributes.position;
-		const normalAttribute = baseGeometry.attributes.normal;
-		const uvAttribute = baseGeometry.attributes.uv;
-		const indexAttribute = baseGeometry.index;
-
-
-		// TODO: Check if expensive operation
-		// Create new geometry with same structure
-		const newGeometry = new THREE.BufferGeometry();
-
-		// Copy and translate positions
-		const positions = new Float32Array(positionAttribute.array.length);
-		for (let i = 0; i < positionAttribute.array.length; i += 3) {
-			positions[i] = positionAttribute.array[i] + position.x;
-			positions[i + 1] = positionAttribute.array[i + 1] + position.y;
-			positions[i + 2] = positionAttribute.array[i + 2] + position.z;
+		if (positions.length === 0) return new THREE.BufferGeometry();
+		if (positions.length === 1) {
+			const cloned = baseGeometry.clone();
+			const matrix = new THREE.Matrix4().setPosition(positions[0]);
+			cloned.applyMatrix4(matrix);
+			return cloned;
 		}
-		newGeometry.setAttribute(
+
+		const basePositions = baseGeometry.attributes.position;
+		const baseNormals = baseGeometry.attributes.normal;
+		const baseUVs = baseGeometry.attributes.uv;
+		const baseIndex = baseGeometry.index;
+
+		const vertexCount = basePositions.count;
+		const totalVertices = vertexCount * positions.length;
+
+		const mergedPositions = new Float32Array(totalVertices * 3);
+		const mergedNormals = baseNormals
+			? new Float32Array(totalVertices * 3)
+			: null;
+		const mergedUVs = baseUVs ? new Float32Array(totalVertices * 2) : null;
+
+		let mergedIndices: Uint32Array | null = null;
+		if (baseIndex) {
+			mergedIndices = new Uint32Array(baseIndex.count * positions.length);
+		}
+
+		positions.forEach((pos, instanceIndex) => {
+			const posOffset = instanceIndex * vertexCount * 3;
+			const uvOffset = instanceIndex * vertexCount * 2;
+			const vertexOffset = instanceIndex * vertexCount;
+
+			// Copy and translate positions
+			for (let i = 0; i < basePositions.count; i++) {
+				const i3 = i * 3;
+				mergedPositions[posOffset + i3] = basePositions.array[i3] + pos.x;
+				mergedPositions[posOffset + i3 + 1] =
+					basePositions.array[i3 + 1] + pos.y;
+				mergedPositions[posOffset + i3 + 2] =
+					basePositions.array[i3 + 2] + pos.z;
+			}
+
+			if (baseNormals && mergedNormals) {
+				mergedNormals.set(baseNormals.array, posOffset);
+			}
+
+			if (baseUVs && mergedUVs) {
+				mergedUVs.set(baseUVs.array, uvOffset);
+			}
+
+			if (baseIndex && mergedIndices) {
+				const indexOffset = instanceIndex * baseIndex.count;
+				for (let i = 0; i < baseIndex.count; i++) {
+					mergedIndices[indexOffset + i] = baseIndex.array[i] + vertexOffset;
+				}
+			}
+		});
+
+		const mergedGeometry = new THREE.BufferGeometry();
+		mergedGeometry.setAttribute(
 			"position",
-			new THREE.BufferAttribute(positions, 3)
+			new THREE.BufferAttribute(mergedPositions, 3)
 		);
 
-		// Copy normals directly (they don't change with translation)
-		if (normalAttribute) {
-			newGeometry.setAttribute(
+		if (mergedNormals) {
+			mergedGeometry.setAttribute(
 				"normal",
-				new THREE.BufferAttribute(new Float32Array(normalAttribute.array), 3)
+				new THREE.BufferAttribute(mergedNormals, 3)
 			);
 		}
 
-		// Copy UVs directly
-		if (uvAttribute) {
-			newGeometry.setAttribute(
+		if (mergedUVs) {
+			mergedGeometry.setAttribute(
 				"uv",
-				new THREE.BufferAttribute(new Float32Array(uvAttribute.array), 2)
+				new THREE.BufferAttribute(mergedUVs, 2)
 			);
 		}
 
-		// Copy index
-		if (indexAttribute) {
-			newGeometry.setIndex(
-				new THREE.BufferAttribute(new Uint16Array(indexAttribute.array), 1)
-			);
+		if (mergedIndices) {
+			mergedGeometry.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
 		}
 
-		return newGeometry;
+		return mergedGeometry;
 	}
 
 	// Custom merge that preserves material groups
