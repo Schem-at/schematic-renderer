@@ -426,6 +426,8 @@ export class WorldMeshBuilder {
 		const uvAttribute = baseGeometry.attributes.uv;
 		const indexAttribute = baseGeometry.index;
 
+
+		// TODO: Check if expensive operation
 		// Create new geometry with same structure
 		const newGeometry = new THREE.BufferGeometry();
 

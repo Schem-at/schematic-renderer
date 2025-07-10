@@ -668,6 +668,8 @@ export class SchematicObject extends EventEmitter {
 		const renderer = this.schematicRenderer.renderManager?.renderer;
 
 		const schematic = schematicObject.schematicWrapper;
+		console.log("PALETTE");
+		console.log(schematic.get_palette());
 
 		// Get all logical chunks upfront - properly typed
 		const allLogicalChunks = Array.from(
@@ -1174,7 +1176,7 @@ export class SchematicObject extends EventEmitter {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
 
-		this.schematicWrapper.set_block_from_string(
+		this.schematicWrapper.set_block(
 			position.x,
 			position.y,
 			position.z,

@@ -10,20 +10,30 @@ interface LoadingProgress {
 	progress: number; // 0-100
 	message: string;
 }
+
+export interface SchematicManagerOptions {
+	singleSchematicMode?: boolean;
+	callbacks?: {
+		onSchematicFileLoaded?: (file: File) => void | Promise<void>;
+		onSchematicFileLoadFailure?: (file: File) => void | Promise<void>;
+	};
+}
 export class SchematicManager {
 	public schematics: Map<string, SchematicObject> = new Map();
 	public schematicRenderer: SchematicRenderer;
 	public eventEmitter: EventEmitter;
 	//@ts-ignore
 	private worldMeshBuilder: WorldMeshBuilder;
+	private options: SchematicManagerOptions;
 	private sceneManager: SceneManager;
 	private singleSchematicMode: boolean;
 
 	constructor(
 		schematicRenderer: SchematicRenderer,
-		options: { singleSchematicMode?: boolean } = {}
+		options: SchematicManagerOptions = {}
 	) {
 		this.schematicRenderer = schematicRenderer;
+		this.options = options;
 		if (!this.schematicRenderer) {
 			throw new Error("SchematicRenderer is required.");
 		}
@@ -58,9 +68,25 @@ export class SchematicManager {
 		});
 	}
 
+	private isSchematicWrapper(obj: any): obj is SchematicWrapper {
+		// Duck typing: check for SchematicWrapper-specific methods/properties
+		return (
+			obj &&
+			typeof obj === "object" &&
+			(typeof obj.to_schematic === "function" ||
+				typeof obj.from_data === "function" ||
+				typeof obj.get_block === "function" ||
+				typeof obj.set_block === "function" ||
+				(typeof obj.__wbg_ptr === "number" && obj.__wbg_ptr > 0) ||
+				(obj.constructor &&
+					obj.constructor.name &&
+					obj.constructor.name.includes("SchematicWrapper")))
+		);
+	}
+
 	public async loadSchematic(
 		name: string,
-		schematicData: ArrayBuffer,
+		schematicData: ArrayBuffer | SchematicWrapper,
 		properties?: Partial<{
 			position: THREE.Vector3 | number[];
 			rotation: THREE.Euler | number[];
@@ -83,9 +109,19 @@ export class SchematicManager {
 			progress: 0,
 			message: "Parsing schematic data...",
 		});
-
-		const schematicWrapper = new SchematicWrapper();
-		schematicWrapper.from_data(new Uint8Array(schematicData));
+		let schematicWrapper: SchematicWrapper;
+		if (schematicData instanceof ArrayBuffer) {
+			schematicWrapper = new SchematicWrapper();
+			schematicWrapper.from_data(new Uint8Array(schematicData));
+		} else if (this.isSchematicWrapper(schematicData)) {
+			schematicWrapper = schematicData as SchematicWrapper;
+		} else {
+			throw new Error(
+				`Invalid schematic data type. Expected ArrayBuffer or SchematicWrapper. Found: ${typeof schematicData}. Object: ${JSON.stringify(
+					Object.getOwnPropertyNames(schematicData)
+				)}`
+			);
+		}
 
 		options?.onProgress?.({
 			stage: "parsing",
@@ -243,6 +279,8 @@ export class SchematicManager {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 
+			await this.options.callbacks?.onSchematicFileLoaded?.(file);
+
 			// Emit completion event
 			this.eventEmitter.emit("schematicLoaded", { id });
 		} catch (error) {
@@ -253,6 +291,7 @@ export class SchematicManager {
 			) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
+			await this.options.callbacks?.onSchematicFileLoadFailure?.(file);
 
 			this.eventEmitter.emit("schematicLoadError", { error });
 			throw error;

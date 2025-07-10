@@ -101,6 +101,10 @@ export interface Callbacks {
 	onSchematicDropSuccess?: (file: File) => void | Promise<void>;
 	onSchematicDropFailed?: (file: File, error: Error) => void | Promise<void>;
 
+	//Schematic Manager callbacks
+	onSchematicFileLoaded?: (file: File) => void | Promise<void>;
+	onSchematicFileLoadFailure?: (file: File) => void | Promise<void>;
+
 	// Resource pack callbacks
 	onResourcePackLoaded?: (packName: string) => void | Promise<void>;
 	onResourcePackDropped?: (file: File) => void | Promise<void>;

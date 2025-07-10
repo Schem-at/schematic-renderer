@@ -1,4 +1,4 @@
-import initializeNucleationWasm from 'nucleation';
+import initializeNucleationWasm from "nucleation";
 await initializeNucleationWasm();
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
@@ -13,7 +13,10 @@ import {
 	InteractionManagerOptions,
 } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
-import { SchematicManager } from "./managers/SchematicManager";
+import {
+	SchematicManager,
+	SchematicManagerOptions,
+} from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { EventEmitter } from "events";
 import {
@@ -167,9 +170,18 @@ export class SchematicRenderer {
 			// Step 4: Initialize builders and managers
 			showProgress("Setting up renderer components...", 0.6);
 			this.worldMeshBuilder = new WorldMeshBuilder(this, this.cubane);
-			this.schematicManager = new SchematicManager(this, {
+			const schematicManagerOptions: SchematicManagerOptions = {
 				singleSchematicMode: this.options.singleSchematicMode,
-			});
+				callbacks: {
+					onSchematicFileLoaded: this.options?.callbacks?.onSchematicFileLoaded,
+					onSchematicFileLoadFailure:
+						this.options?.callbacks?.onSchematicFileLoadFailure,
+				},
+			};
+			this.schematicManager = new SchematicManager(
+				this,
+				schematicManagerOptions
+			);
 			this.renderManager = new RenderManager(this);
 			this.highlightManager = new HighlightManager(this);
 
@@ -644,8 +656,6 @@ export class SchematicRenderer {
 
 		this.materialMap.clear();
 	}
-
-
 
 	public dispose(): void {
 		if (!this.renderManager) {
