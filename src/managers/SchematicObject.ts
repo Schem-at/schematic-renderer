@@ -111,7 +111,7 @@ export class SchematicObject extends EventEmitter {
 		console.log("Schematic dimensions:", schematicDimensions);
 		this.position = new THREE.Vector3(
 			-schematicDimensions[0] / 2 + 0.5, // Center the schematic
-			0,
+			0.5,
 			-schematicDimensions[2] / 2 + 0.5 // Center the schematic
 		);
 
@@ -236,6 +236,15 @@ export class SchematicObject extends EventEmitter {
 						self.renderingBounds.min,
 						self.renderingBounds.max
 					);
+				},
+
+				set enabled(value: boolean) {
+					self.renderingBounds.enabled = value;
+					self.setRenderingBounds(
+						self.renderingBounds.min,
+						self.renderingBounds.max
+					);
+					self.showRenderingBoundsHelper(value);
 				},
 
 				// Reset to full dimensions
@@ -670,9 +679,7 @@ export class SchematicObject extends EventEmitter {
 					chunkDimensions
 				);
 			case "instanced":
-				return this.buildSchematicMeshesInstanced(
-					schematicObject,
-				);
+				return this.buildSchematicMeshesInstanced(schematicObject);
 			default:
 				throw new Error(
 					`Invalid build mode: ${buildMode}. Use 'imediate' or 'incremental'.`
@@ -738,7 +745,6 @@ export class SchematicObject extends EventEmitter {
 			`[SchematicObject:${schematicObject.id}] Processing ${totalChunks} chunks with TRUE lazy loading.`
 		);
 
-		// CRITICAL: No mesh accumulator! Process and add directly to scene
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		const renderingBounds = schematicObject.renderingBounds?.enabled
 			? schematicObject.renderingBounds
@@ -766,7 +772,7 @@ export class SchematicObject extends EventEmitter {
 			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 
 			// Bounds culling
-			if (renderingBounds) {
+			if (renderingBounds?.enabled) {
 				const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
 				const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
 				const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
@@ -775,12 +781,12 @@ export class SchematicObject extends EventEmitter {
 				const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
 
 				if (
-					chunkMaxX <= renderingBounds.min.x ||
-					chunkMinX >= renderingBounds.max.x ||
-					chunkMaxY <= renderingBounds.min.y ||
-					chunkMinY >= renderingBounds.max.y ||
-					chunkMaxZ <= renderingBounds.min.z ||
-					chunkMinZ >= renderingBounds.max.z
+					chunkMaxX < renderingBounds.min.x ||
+					chunkMinX > renderingBounds.max.x ||
+					chunkMaxY < renderingBounds.min.y ||
+					chunkMinY > renderingBounds.max.y ||
+					chunkMaxZ < renderingBounds.min.z ||
+					chunkMinZ > renderingBounds.max.z
 				) {
 					processedChunkCount++;
 					if (processedChunkCount % progressUpdateInterval === 0) {
@@ -1028,7 +1034,7 @@ export class SchematicObject extends EventEmitter {
 						const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 
 						// Bounds culling
-						if (renderingBounds) {
+						if (renderingBounds?.enabled) {
 							const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
 							const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
 							const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
@@ -1037,12 +1043,12 @@ export class SchematicObject extends EventEmitter {
 							const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
 
 							if (
-								chunkMaxX <= renderingBounds.min.x ||
-								chunkMinX >= renderingBounds.max.x ||
-								chunkMaxY <= renderingBounds.min.y ||
-								chunkMinY >= renderingBounds.max.y ||
-								chunkMaxZ <= renderingBounds.min.z ||
-								chunkMinZ >= renderingBounds.max.z
+								chunkMaxX < renderingBounds.min.x ||
+								chunkMinX > renderingBounds.max.x ||
+								chunkMaxY < renderingBounds.min.y ||
+								chunkMinY > renderingBounds.max.y ||
+								chunkMaxZ < renderingBounds.min.z ||
+								chunkMinZ > renderingBounds.max.z
 							) {
 								processedChunkCount++;
 								this.reportBuildProgress(
@@ -1214,46 +1220,55 @@ export class SchematicObject extends EventEmitter {
 		});
 	}
 
-	 public async buildSchematicMeshesInstanced(
-        schematicObject: SchematicObject,
-    ): Promise<{ meshes: THREE.Object3D[]; chunkMap: Map<string, THREE.Object3D[]> }> {
-        console.log(`[SchematicObject:${schematicObject.id}] Starting INSTANCED build.`);
-        const overallStartTime = performance.now();
+	public async buildSchematicMeshesInstanced(
+		schematicObject: SchematicObject
+	): Promise<{
+		meshes: THREE.Object3D[];
+		chunkMap: Map<string, THREE.Object3D[]>;
+	}> {
+		console.log(
+			`[SchematicObject:${schematicObject.id}] Starting INSTANCED build.`
+		);
+		const overallStartTime = performance.now();
 
-        // Initialize instanced rendering
-        await this.worldMeshBuilder.precomputePaletteGeometries(
-            this.schematicWrapper.get_all_palettes().default
-        );
-        
-        this.worldMeshBuilder.enableInstancedRendering(this.group, true);
+		// Initialize instanced rendering
+		await this.worldMeshBuilder.precomputePaletteGeometries(
+			this.schematicWrapper.get_all_palettes().default
+		);
 
-        // Render entire schematic using instanced rendering
-        await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
+		this.worldMeshBuilder.enableInstancedRendering(this.group, true);
 
-        const totalTime = performance.now() - overallStartTime;
-        console.log(`[SchematicObject:${schematicObject.id}] INSTANCED build completed in ${totalTime.toFixed(2)}ms`);
+		// Render entire schematic using instanced rendering
+		await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
 
-        // Return instanced meshes from scene graph
-        const instancedMeshes = Array.from(this.group.children);
-        
-        // Dispatch completion event
-        if (typeof window !== "undefined") {
-            window.dispatchEvent(
-                new CustomEvent("schematicRenderComplete", {
-                    detail: {
-                        schematicId: this.id,
-                        schematicName: this.name,
-                        buildTimeMs: totalTime,
-                        meshCount: instancedMeshes.length,
-                        optimized: true,
-                        instanced: true, // Flag for instanced rendering
-                    },
-                })
-            );
-        }
+		const totalTime = performance.now() - overallStartTime;
+		console.log(
+			`[SchematicObject:${
+				schematicObject.id
+			}] INSTANCED build completed in ${totalTime.toFixed(2)}ms`
+		);
 
-        return { meshes: instancedMeshes, chunkMap: new Map() };
-    }
+		// Return instanced meshes from scene graph
+		const instancedMeshes = Array.from(this.group.children);
+
+		// Dispatch completion event
+		if (typeof window !== "undefined") {
+			window.dispatchEvent(
+				new CustomEvent("schematicRenderComplete", {
+					detail: {
+						schematicId: this.id,
+						schematicName: this.name,
+						buildTimeMs: totalTime,
+						meshCount: instancedMeshes.length,
+						optimized: true,
+						instanced: true, // Flag for instanced rendering
+					},
+				})
+			);
+		}
+
+		return { meshes: instancedMeshes, chunkMap: new Map() };
+	}
 
 	/**
 	 * Creates or updates the rendering bounds helper visualization
@@ -1264,11 +1279,15 @@ export class SchematicObject extends EventEmitter {
 			this.group.remove(this.renderingBounds.helper);
 		}
 
-		if (visible) {
+		if (visible && this.renderingBounds.enabled) {
 			// Create a box to represent the rendering bounds
 			const box = new THREE.Box3(
-				this.renderingBounds.min.clone(),
-				this.renderingBounds.max.clone()
+				this.renderingBounds.min
+					.clone()
+					.add(new THREE.Vector3(-0.5, -0.5, -0.5)),
+				this.renderingBounds.max
+					.clone()
+					.add(new THREE.Vector3(-0.5, -0.5, -0.5))
 			);
 
 			// Create a box helper to visualize the bounds
@@ -1826,10 +1845,13 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public getBoundingBox(): [number[], number[]] {
-		const boundingBox = this.getDimensions();
-		const positionArray = this.position.toArray();
-		const min = positionArray;
-		const max = positionArray.map((v, i) => v + boundingBox[i]);
+		// Get the actual world-space bounds after centering
+		this.group.updateMatrixWorld();
+		const box = new THREE.Box3().setFromObject(this.group);
+
+		const min = [box.min.x, box.min.y, box.min.z];
+		const max = [box.max.x, box.max.y, box.max.z];
+
 		return [min, max];
 	}
 

@@ -190,11 +190,11 @@ export class WorldMeshBuilder {
 			if (renderingBounds?.enabled) {
 				if (
 					x < renderingBounds.min.x ||
-					x > renderingBounds.max.x ||
+					x >= renderingBounds.max.x ||
 					y < renderingBounds.min.y ||
-					y > renderingBounds.max.y ||
+					y >= renderingBounds.max.y ||
 					z < renderingBounds.min.z ||
-					z > renderingBounds.max.z
+					z >= renderingBounds.max.z
 				) {
 					continue;
 				}
