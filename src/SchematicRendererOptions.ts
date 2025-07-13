@@ -23,6 +23,8 @@ export interface SchematicRendererOptions {
 	resourcePackBlobs?: any;
 	ffmpeg?: any;
 	gamma?: number;
+	chunkSideLength?: number; // Length of each chunk side in blocks
+	meshBuildingMode?: "immediate" | "incremental" | "instanced"; // How meshes are built
 	// Global toggles for enabling/disabling functionalities
 	enableInteraction?: boolean;
 	enableDragAndDrop?: boolean;
@@ -54,6 +56,8 @@ export interface SchematicRendererOptions {
 export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	hdri: "",
 	gamma: 0.5,
+	chunkSideLength: 16, // Default chunk side length in blocks
+	meshBuildingMode: "incremental", // Default mesh building mode
 	showCameraPathVisualization: false,
 	enableAutoOrbit: false,
 	autoOrbitDuration: 10,

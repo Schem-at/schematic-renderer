@@ -106,6 +106,13 @@ export class SchematicObject extends EventEmitter {
 
 		// Set initial properties if provided
 		Object.assign(this, properties);
+		if (this.schematicRenderer.options.chunkSideLength) {
+			this.chunkDimensions = {
+				chunkWidth: this.schematicRenderer.options.chunkSideLength,
+				chunkHeight: this.schematicRenderer.options.chunkSideLength,
+				chunkLength: this.schematicRenderer.options.chunkSideLength,
+			};
+		}
 
 		const schematicDimensions = this.getDimensions();
 		console.log("Schematic dimensions:", schematicDimensions);
@@ -661,15 +668,15 @@ export class SchematicObject extends EventEmitter {
 	public async buildSchematicMeshes(
 		schematicObject: SchematicObject,
 		chunkDimensions: any = {
-			chunkWidth: 64,
-			chunkHeight: 64,
-			chunkLength: 64,
+			chunkWidth: 16,
+			chunkHeight: 16,
+			chunkLength: 16,
 		},
-		buildMode: "imediate" | "incremental" | "instanced" = "incremental"
+		buildMode: "immediate" | "incremental" | "instanced" = this.schematicRenderer.options.meshBuildingMode || "incremental"
 	) {
 		switch (buildMode) {
-			case "imediate":
-				return this.buildSchematicMeshesImediate(
+			case "immediate":
+				return this.buildSchematicMeshesImmediate(
 					schematicObject,
 					chunkDimensions
 				);
@@ -689,7 +696,7 @@ export class SchematicObject extends EventEmitter {
 
 	// TRUE lazy loading - minimal memory footprint
 
-	public async buildSchematicMeshesImediate(
+	public async buildSchematicMeshesImmediate(
 		schematicObject: SchematicObject,
 		chunkDimensions: any = {
 			chunkWidth: 16,
