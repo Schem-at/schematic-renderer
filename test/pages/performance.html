@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schematic Renderer - Performance Test</title>
+
+    <!-- Include your main JavaScript file -->
+    <script type="module" src="./scripts/performance.ts"></script>
+
+    <!-- DaisyUI -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+        rel="stylesheet"
+        type="text/css"
+    />
+
+    <!-- Alpine.js -->
+    <script
+        defer
+        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+
+    <!-- Tailwind CSS with DaisyUI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#6b7280", // Modern gray-500
+                        secondary: "#4b5563", // Modern gray-600
+                        accent: "#10b981", // Emerald-500 for success states
+                    },
+                },
+            },
+            daisyui: {
+                themes: ["dark", "light"],
+            },
+        };
+    </script>
+
+    <!-- Include Material Icons -->
+    <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+    />
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-mono" x-data="performanceTest()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="bg-gray-900 border-b border-gray-700 shadow-lg backdrop-blur-sm">
+        <div class="container mx-auto px-5 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="bg-gray-800 text-gray-100 border border-gray-700 px-3 py-2 rounded-md text-sm hover:bg-gray-700 hover:border-gray-600 transition-colors flex items-center gap-2">
+                        <span class="material-icons text-sm">arrow_back</span>
+                        Back to Test Suite
+                    </a>
+                    <h1 class="text-xl font-bold text-gray-100">Performance Test</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button @click="runPerformanceTest" class="bg-emerald-600 text-white border-none px-4 py-2 rounded-md text-sm cursor-pointer hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm" :disabled="isRunning">
+                        <span class="material-icons text-sm">speed</span>
+                        Run Test
+                    </button>
+                    <button @click="clearResults" class="bg-gray-700 text-gray-100 border border-gray-600 px-4 py-2 rounded-md text-sm cursor-pointer hover:bg-gray-600 hover:border-gray-500 transition-colors flex items-center gap-2">
+                        <span class="material-icons text-sm">clear</span>
+                        Clear Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Include D3.js for visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- Include Multi-Run Visualizer -->
+    <script src="./scripts/MultiRunVisualizer.js"></script>
+    
+    <!-- Include Memory Leak Analyzer -->
+    <script src="./scripts/memory-leak-analyzer.js"></script>
+    
+    <!-- Main Content -->
+    <div class="container mx-auto px-5 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <!-- Test Configuration -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-900/95 backdrop-blur-sm text-gray-100 font-mono p-6 rounded-xl shadow-xl border border-gray-700/50">
+                    <div class="flex items-center mb-6 pb-4 border-b border-gray-700/60">
+                        <span class="material-icons text-lg mr-3 text-gray-400">settings</span>
+                        <h2 class="m-0 text-gray-100 text-xl font-bold">Test Configuration</h2>
+                    </div>
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-2 font-medium">Schematic Size</label>
+                            <select x-model="config.schematicSize" class="bg-gray-800/90 text-gray-100 border border-gray-600/50 rounded-md px-3 py-2 text-sm cursor-pointer w-full hover:border-gray-500 focus:border-gray-400 focus:outline-none transition-colors">
+                                <option value="small">Small (16×16×16)</option>
+                                <option value="medium">Medium (32×32×32)</option>
+                                <option value="large">Large (64×64×64)</option>
+                                <option value="huge">Huge (128×128×128)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-2 font-medium">Block Density</label>
+                            <select x-model="config.blockDensity" class="bg-gray-800/90 text-gray-100 border border-gray-600/50 rounded-md px-3 py-2 text-sm cursor-pointer w-full hover:border-gray-500 focus:border-gray-400 focus:outline-none transition-colors">
+                                <option value="sparse">Sparse (25%)</option>
+                                <option value="medium">Medium (50%)</option>
+                                <option value="dense">Dense (75%)</option>
+                                <option value="solid">Solid (100%)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-2 font-medium">Mesh Building Mode</label>
+                            <select x-model="config.meshBuildingMode" class="bg-gray-800/90 text-gray-100 border border-gray-600/50 rounded-md px-3 py-2 text-sm cursor-pointer w-full hover:border-gray-500 focus:border-gray-400 focus:outline-none transition-colors">
+                                <option value="immediate">Immediate</option>
+                                <option value="incremental">Incremental</option>
+                                <option value="instanced">Instanced</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-2 font-medium">Number of Runs</label>
+                            <select x-model="config.numberOfRuns" class="bg-gray-800/90 text-gray-100 border border-gray-600/50 rounded-md px-3 py-2 text-sm cursor-pointer w-full hover:border-gray-500 focus:border-gray-400 focus:outline-none transition-colors">
+                                <option value="1">1 Run (Single)</option>
+                                <option value="3">3 Runs (Quick)</option>
+                                <option value="5">5 Runs (Standard)</option>
+                                <option value="10">10 Runs (Detailed)</option>
+                                <option value="20">20 Runs (Extensive)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Renderer Canvas -->
+            <div class="lg:col-span-2">
+                <div class="relative w-full h-[80vh] bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-700/50">
+                    <canvas id="canvas" class="w-full h-full block rounded-xl"></canvas>
+
+                    <!-- Test running overlay -->
+                    <div x-show="isRunning" class="absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                        <div class="text-center bg-gray-800/90 backdrop-blur-sm rounded-xl p-8 border border-gray-700/50 shadow-xl">
+                            <div class="inline-block animate-spin rounded-full h-10 w-10 border-2 border-gray-600 border-t-emerald-500"></div>
+                            <p class="mt-6 text-gray-200 font-mono text-sm font-medium" x-text="currentRun > 0 ? `Run ${currentRun} of ${totalRuns} - Building meshes...` : 'Initializing performance test...'"></p>
+                            <div x-show="totalRuns > 1" class="mt-4 w-full bg-gray-700 rounded-full h-2">
+                                <div class="bg-emerald-500 h-2 rounded-full transition-all duration-300" :style="`width: ${(currentRun / totalRuns) * 100}%`"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time FPS display -->
+                    <div class="absolute top-5 right-5 bg-gray-800/95 backdrop-blur-sm rounded-lg p-4 border border-gray-700/50 shadow-lg">
+                        <div class="text-sm text-gray-200 font-mono space-y-1">
+                            <div class="flex justify-between items-center gap-4">
+                                <span class="text-gray-400">Current FPS:</span>
+                                <span x-text="currentFps" class="text-emerald-400 font-bold tabular-nums">0</span>
+                            </div>
+                            <div class="flex justify-between items-center gap-4">
+                                <span class="text-gray-400">Blocks:</span>
+                                <span x-text="blocksRendered" class="text-blue-400 font-bold tabular-nums">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Monitor - Full Width Section -->
+    <div class="container mx-auto px-5 py-6">
+        <div id="performance-visualizer" class="w-full min-h-[400px]">
+            <!-- Performance charts will be rendered here -->
+        </div>
+    </div>
+
+
+    <!-- Alpine.js Script -->
+    <script>
+        function performanceTest() {
+            return {
+                renderer: null,
+                isRunning: false,
+                currentFps: 0,
+                blocksRendered: 0,
+                timeRemaining: 0,
+                config: {
+                    schematicSize: 'medium',
+                    blockDensity: 'medium',
+                    meshBuildingMode: 'incremental',
+                    numberOfRuns: 5
+                },
+                results: {
+                    totalBlocks: null,
+                    memoryUsage: null
+                },
+                multiRunResults: {
+                    runs: [],
+                    averages: {
+                        buildTime: null,
+                        memoryUsage: null,
+                        peakMemory: null
+                    },
+                    statistics: {
+                        buildTimeStdDev: null,
+                        memoryStdDev: null,
+                        minBuildTime: null,
+                        maxBuildTime: null,
+                        minMemory: null,
+                        maxMemory: null
+                    }
+                },
+                currentRun: 0,
+                totalRuns: 0,
+                fpsHistory: [],
+                testInterval: null,
+                multiRunVisualizer: null,
+                
+                init() {
+                    // Wait for the renderer to be initialized
+                    document.getElementById('canvas').addEventListener('rendererInitialized', () => {
+                        this.renderer = document.getElementById('canvas').schematicRenderer;
+                        
+                        // Verify schematicManager is available
+                        if (!this.renderer || !this.renderer.schematicManager) {
+                            console.error('Renderer or schematicManager not properly initialized');
+                            return;
+                        }
+                        
+                        // Start FPS monitoring
+                        this.startFpsMonitoring();
+                        
+                        // Initialize MultiRunVisualizer
+                        this.initializeVisualizer();
+                    });
+                },
+                
+                initializeVisualizer() {
+                    // Initialize the multi-run visualizer
+                    if (window.MultiRunVisualizer) {
+                        this.multiRunVisualizer = new window.MultiRunVisualizer('performance-visualizer');
+                        console.log('MultiRunVisualizer initialized');
+                    } else {
+                        console.warn('MultiRunVisualizer not available, retrying...');
+                        setTimeout(() => this.initializeVisualizer(), 1000);
+                    }
+                },
+                
+                startFpsMonitoring() {
+                    // Use the enhanced performance monitor for FPS tracking
+                    setInterval(() => {
+                        if (window.performanceMonitor) {
+                            const currentFPS = window.performanceMonitor.getCurrentFPS();
+                            if (currentFPS > 0) {
+                                this.currentFps = Math.round(currentFPS);
+                            }
+                        }
+                    }, 1000);
+                },
+                
+                async runPerformanceTest() {
+                    if (this.isRunning) return;
+                    
+                    // Validate renderer is ready
+                    if (!this.renderer || !this.renderer.schematicManager) {
+                        console.error('Renderer not initialized or schematicManager not available');
+                        alert('Renderer is not fully initialized. Please wait for initialization to complete.');
+                        return;
+                    }
+                    
+                    this.isRunning = true;
+                    this.currentRun = 0;
+                    this.totalRuns = parseInt(this.config.numberOfRuns);
+                    this.multiRunResults.runs = [];
+                    
+                    console.log(`🚀 Starting ${this.totalRuns}-run performance test`);
+                    
+                    try {
+                        // Run the test multiple times
+                        for (let run = 1; run <= this.totalRuns; run++) {
+                            this.currentRun = run;
+                            console.log(`📊 Starting run ${run} of ${this.totalRuns}`);
+                            
+                            // Clear previous schematic and memory
+                            await this.renderer.schematicManager.removeAllSchematics();
+                            if (window.gc) {
+                                window.gc(); // Force garbage collection if available
+                            }
+                            
+                            // Run single test iteration
+                            const runResult = await this.runSingleIteration(run);
+                            this.multiRunResults.runs.push(runResult);
+                            
+                            // Brief pause between runs for memory cleanup
+                            if (run < this.totalRuns) {
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                        }
+                        
+                        // Calculate aggregate statistics
+                        this.calculateMultiRunStatistics();
+                        
+                        // Update performance visualizer with all run data
+                        if (window.performanceVisualizer) {
+                            window.performanceVisualizer.updateCharts();
+                        }
+                        
+                        // Update MultiRunVisualizer with results
+                        if (this.multiRunVisualizer) {
+                            this.multiRunVisualizer.updateData(this.multiRunResults);
+                        }
+                        
+                        // Automatically run memory leak analysis
+                        if (window.memoryLeakAnalyzer && this.totalRuns > 1) {
+                            setTimeout(() => {
+                                console.log('🔍 Running automatic memory leak analysis...');
+                                const analysis = window.memoryLeakAnalyzer.logAnalysis(this.multiRunResults);
+                                
+                                if (analysis && analysis.severity !== 'normal') {
+                                    // Show warning notification for memory leaks
+                                    const leakMessage = `Memory leak detected: ${analysis.totalLeak.toFixed(1)}MB over ${this.totalRuns} runs (${analysis.leakRate.toFixed(1)}MB/run)`;
+                                    console.warn('🚨', leakMessage);
+                                    
+                                    // You could add a visual notification here if desired
+                                    // alert('Memory leak detected! Check console for details.');
+                                }
+                            }, 1000);
+                        }
+                        
+                        console.log('✅ Multi-run performance test completed');
+                        console.log('📈 Results:', this.multiRunResults.averages);
+                        
+                        // Provide console helper for manual analysis
+                        console.log('💡 Tip: Use analyzeMemoryLeaks() in console for detailed memory analysis');
+                        
+                    } catch (error) {
+                        console.error('❌ Multi-run performance test failed:', error);
+                        alert('Performance test failed: ' + error.message);
+                    } finally {
+                        this.isRunning = false;
+                        this.currentRun = 0;
+                    }
+                },
+                
+                async generateAndLoadTestSchematic() {
+                    const sizeMap = {
+                        small: { x: 16, y: 16, z: 16 },
+                        medium: { x: 32, y: 32, z: 32 },
+                        large: { x: 64, y: 64, z: 64 },
+                        huge: { x: 128, y: 128, z: 128 }
+                    };
+                    
+                    const densityMap = {
+                        sparse: 0.25,
+                        medium: 0.5,
+                        dense: 0.75,
+                        solid: 1.0
+                    };
+                    
+                    const size = sizeMap[this.config.schematicSize];
+                    const density = densityMap[this.config.blockDensity];
+                    
+                    const blockTypes = ['minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block', 'minecraft:oak_wood', 'minecraft:cobblestone'];
+                    
+                    // Clear any existing schematics
+                    await this.renderer.schematicManager.removeAllSchematics();
+                    
+                    // Create a new empty schematic
+                    const schematicName = `PerformanceTest_${this.config.schematicSize}_${this.config.blockDensity}`;
+                    const schematic = this.renderer.schematicManager.createEmptySchematic(schematicName);
+                    
+                    // Add blocks to the schematic
+                    let blockCount = 0;
+                    for (let x = 0; x < size.x; x++) {
+                        for (let y = 0; y < size.y; y++) {
+                            for (let z = 0; z < size.z; z++) {
+                                if (Math.random() < density) {
+                                    const blockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+                                    schematic.setBlockNoRebuild([x, y, z], blockType);
+                                    blockCount++;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Use the selected mesh building mode instead of default rebuildMesh()
+                    console.log(`Building meshes using ${this.config.meshBuildingMode} mode...`);
+                    const { meshes, chunkMap } = await schematic.buildSchematicMeshes(
+                        schematic,
+                        schematic.chunkDimensions,
+                        this.config.meshBuildingMode
+                    );
+                    
+                    // Apply the meshes to the schematic object (similar to what rebuildMesh does)
+                    schematic.chunkMeshes = chunkMap;
+                    
+                    // Apply properties to all objects and add to group
+                    schematic.applyPropertiesToObjects(meshes);
+                    meshes.forEach((obj) => {
+                        schematic.group.add(obj);
+                    });
+                    
+                    schematic.updateTransform();
+                    schematic.group.visible = schematic.visible;
+                    schematic.meshes = meshes;
+                    schematic.group.updateMatrixWorld(true);
+                    
+                    console.log(`Generated performance test schematic with ${blockCount} blocks using ${this.config.meshBuildingMode} mode`);
+                    this.blocksRendered = blockCount;
+                    
+                    return schematic;
+                },
+                
+                async generateTestSchematic() {
+                    const sizeMap = {
+                        small: { x: 16, y: 16, z: 16 },
+                        medium: { x: 32, y: 32, z: 32 },
+                        large: { x: 64, y: 64, z: 64 },
+                        huge: { x: 128, y: 128, z: 128 }
+                    };
+                    
+                    const densityMap = {
+                        sparse: 0.25,
+                        medium: 0.5,
+                        dense: 0.75,
+                        solid: 1.0
+                    };
+                    
+                    const size = sizeMap[this.config.schematicSize];
+                    const density = densityMap[this.config.blockDensity];
+                    
+                    const blockTypes = ['minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block', 'minecraft:oak_wood', 'minecraft:cobblestone'];
+                    
+                    // Create a new empty schematic
+                    const schematicName = `PerformanceTest_${this.config.schematicSize}_${this.config.blockDensity}`;
+                    const schematic = this.renderer.schematicManager.createEmptySchematic(schematicName);
+                    
+                    // Add blocks to the schematic
+                    let blockCount = 0;
+                    for (let x = 0; x < size.x; x++) {
+                        for (let y = 0; y < size.y; y++) {
+                            for (let z = 0; z < size.z; z++) {
+                                if (Math.random() < density) {
+                                    const blockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+                                    schematic.setBlockNoRebuild([x, y, z], blockType);
+                                    blockCount++;
+                                }
+                            }
+                        }
+                    }
+                    
+                    return { schematic, blockCount };
+                },
+                
+                startPerformanceMonitoring() {
+                    // Clear any existing interval
+                    if (this.testInterval) {
+                        clearInterval(this.testInterval);
+                    }
+                    
+                    // Continuously monitor FPS
+                    this.testInterval = setInterval(() => {
+                        if (this.currentFps > 0) {
+                            this.fpsHistory.push(this.currentFps);
+                            // Keep only the last 100 readings for performance
+                            if (this.fpsHistory.length > 100) {
+                                this.fpsHistory.shift();
+                            }
+                            // Update results in real-time
+                            this.calculateResults();
+                        }
+                    }, 100);
+                },
+                
+                calculateResults() {
+                    if (this.fpsHistory.length === 0) return;
+                    
+                    const sum = this.fpsHistory.reduce((a, b) => a + b, 0);
+                    const avg = sum / this.fpsHistory.length;
+                    const min = Math.min(...this.fpsHistory);
+                    const max = Math.max(...this.fpsHistory);
+                    
+                    this.results = {
+                        avgFps: Math.round(avg),
+                        minFps: Math.round(min),
+                        maxFps: Math.round(max),
+                        totalBlocks: this.blocksRendered,
+                        memoryUsage: this.getMemoryUsage()
+                    };
+                },
+                
+                getMemoryUsage() {
+                    if (performance.memory) {
+                        const mb = performance.memory.usedJSHeapSize / 1024 / 1024;
+                        return Math.round(mb) + ' MB';
+                    }
+                    return 'N/A';
+                },
+                
+                async runSingleIteration(runNumber) {
+                    console.log(`⚡ Run ${runNumber}: Starting mesh build test`);
+                    
+                    // Detailed timing breakdown
+                    const timings = {
+                        total: { start: performance.now(), end: 0, duration: 0 },
+                        setup: { start: 0, end: 0, duration: 0 },
+                        blockGeneration: { start: 0, end: 0, duration: 0 },
+                        meshBuilding: { start: 0, end: 0, duration: 0 },
+                        sceneUpdates: { start: 0, end: 0, duration: 0 }
+                    };
+                    
+                    // Memory tracking
+                    const baselineMemory = this.getMemoryUsageMB();
+                    let peakMemoryDuringRun = baselineMemory;
+                    const memorySnapshots = [];
+                    
+                    // Force garbage collection before starting if available
+                    if (window.gc) {
+                        window.gc();
+                        await new Promise(resolve => setTimeout(resolve, 100)); // Let GC settle
+                    }
+                    
+                    const cleanStartMemory = this.getMemoryUsageMB();
+                    
+                    // Start performance monitoring session
+                    let testSessionId = null;
+                    if (window.performanceMonitor) {
+                        testSessionId = window.performanceMonitor.startSession(
+                            `test_run_${runNumber}_${this.config.schematicSize}_${this.config.blockDensity}`, 
+                            this.config.meshBuildingMode
+                        );
+                    }
+                    
+                    try {
+                        // PHASE 1: Setup
+                        timings.setup.start = performance.now();
+                        await this.renderer.schematicManager.removeAllSchematics();
+                        timings.setup.end = performance.now();
+                        timings.setup.duration = timings.setup.end - timings.setup.start;
+                        
+                        // Memory snapshot after cleanup
+                        const memoryAfterCleanup = this.getMemoryUsageMB();
+                        memorySnapshots.push({ phase: 'cleanup', memory: memoryAfterCleanup });
+                        
+                        // PHASE 2: Block Generation
+                        timings.blockGeneration.start = performance.now();
+                        const { schematic, blockCount } = await this.generateTestSchematic();
+                        timings.blockGeneration.end = performance.now();
+                        timings.blockGeneration.duration = timings.blockGeneration.end - timings.blockGeneration.start;
+                        
+                        // Memory snapshot after block generation
+                        const memoryAfterBlocks = this.getMemoryUsageMB();
+                        memorySnapshots.push({ phase: 'blocks', memory: memoryAfterBlocks });
+                        peakMemoryDuringRun = Math.max(peakMemoryDuringRun, memoryAfterBlocks);
+                        
+                        // PHASE 3: Mesh Building (with detailed breakdown)
+                        timings.meshBuilding.start = performance.now();
+                        
+                        // Get session data to extract detailed mesh building timings
+                        const sessionStartTime = performance.now();
+                        
+                        const { meshes, chunkMap } = await schematic.buildSchematicMeshes(
+                            schematic,
+                            schematic.chunkDimensions,
+                            this.config.meshBuildingMode
+                        );
+                        
+                        timings.meshBuilding.end = performance.now();
+                        timings.meshBuilding.duration = timings.meshBuilding.end - timings.meshBuilding.start;
+                        
+                        // Get detailed breakdown from the actual session timing data
+                        let meshBuildingBreakdown = {
+                            palettePrecomputation: 0,
+                            blockCategorization: 0,
+                            materialGrouping: 0,
+                            geometryMerging: 0,
+                            meshCreation: 0
+                        };
+                        
+                        // Extract actual timing data from the performance monitor session
+                        if (window.performanceMonitor) {
+                            const currentSession = window.performanceMonitor.getCurrentSession();
+                            if (currentSession && currentSession.timingData) {
+                                // Find specific operation timings from our enhanced monitoring
+                                const timingMap = {};
+                                currentSession.timingData.forEach(timing => {
+                                    if (timing.duration !== undefined) {
+                                        if (!timingMap[timing.name]) {
+                                            timingMap[timing.name] = 0;
+                                        }
+                                        timingMap[timing.name] += timing.duration;
+                                    }
+                                });
+                                
+                                // Map the actual timing data to our breakdown categories
+                                meshBuildingBreakdown.palettePrecomputation = Math.round(timingMap['precomputePaletteGeometries'] || 0);
+                                meshBuildingBreakdown.blockCategorization = Math.round(timingMap['categorizeBlocks'] || 0);
+                                meshBuildingBreakdown.materialGrouping = Math.round(timingMap['collectMaterialGroups'] || 0);
+                                meshBuildingBreakdown.geometryMerging = Math.round(timingMap['mergeGeometries'] || 0);
+                                meshBuildingBreakdown.meshCreation = Math.round(timingMap['createMeshes'] || 0);
+                                
+                                console.log('📊 Actual timing breakdown:', {
+                                    available_operations: Object.keys(timingMap),
+                                    breakdown: meshBuildingBreakdown
+                                });
+                            } else {
+                                console.warn('⚠️ No timing data available, using fallback estimates');
+                                // Fallback estimation based on typical mesh building patterns
+                                meshBuildingBreakdown.palettePrecomputation = Math.round(timings.meshBuilding.duration * 0.15);
+                                meshBuildingBreakdown.blockCategorization = Math.round(timings.meshBuilding.duration * 0.20);
+                                meshBuildingBreakdown.materialGrouping = Math.round(timings.meshBuilding.duration * 0.25);
+                                meshBuildingBreakdown.geometryMerging = Math.round(timings.meshBuilding.duration * 0.25);
+                                meshBuildingBreakdown.meshCreation = Math.round(timings.meshBuilding.duration * 0.15);
+                            }
+                        } else {
+                            console.warn('⚠️ Performance monitor not available, using mode-based estimates');
+                            // Fallback estimation for different build modes
+                            if (this.config.meshBuildingMode === 'immediate') {
+                                meshBuildingBreakdown.palettePrecomputation = Math.round(timings.meshBuilding.duration * 0.2);
+                                meshBuildingBreakdown.blockCategorization = Math.round(timings.meshBuilding.duration * 0.15);
+                                meshBuildingBreakdown.materialGrouping = Math.round(timings.meshBuilding.duration * 0.20);
+                                meshBuildingBreakdown.geometryMerging = Math.round(timings.meshBuilding.duration * 0.25);
+                                meshBuildingBreakdown.meshCreation = Math.round(timings.meshBuilding.duration * 0.20);
+                            } else if (this.config.meshBuildingMode === 'incremental') {
+                                meshBuildingBreakdown.palettePrecomputation = Math.round(timings.meshBuilding.duration * 0.10);
+                                meshBuildingBreakdown.blockCategorization = Math.round(timings.meshBuilding.duration * 0.20);
+                                meshBuildingBreakdown.materialGrouping = Math.round(timings.meshBuilding.duration * 0.30);
+                                meshBuildingBreakdown.geometryMerging = Math.round(timings.meshBuilding.duration * 0.25);
+                                meshBuildingBreakdown.meshCreation = Math.round(timings.meshBuilding.duration * 0.15);
+                            } else { // instanced
+                                meshBuildingBreakdown.palettePrecomputation = Math.round(timings.meshBuilding.duration * 0.30);
+                                meshBuildingBreakdown.blockCategorization = Math.round(timings.meshBuilding.duration * 0.15);
+                                meshBuildingBreakdown.materialGrouping = Math.round(timings.meshBuilding.duration * 0.20);
+                                meshBuildingBreakdown.geometryMerging = Math.round(timings.meshBuilding.duration * 0.20);
+                                meshBuildingBreakdown.meshCreation = Math.round(timings.meshBuilding.duration * 0.15);
+                            }
+                        }
+                        
+                        timings.meshBuilding.breakdown = meshBuildingBreakdown;
+                        
+                        // Memory snapshot after mesh building
+                        const memoryAfterMeshes = this.getMemoryUsageMB();
+                        memorySnapshots.push({ phase: 'meshes', memory: memoryAfterMeshes });
+                        peakMemoryDuringRun = Math.max(peakMemoryDuringRun, memoryAfterMeshes);
+                        
+                        // PHASE 4: Scene Updates
+                        timings.sceneUpdates.start = performance.now();
+                        schematic.chunkMeshes = chunkMap;
+                        schematic.applyPropertiesToObjects(meshes);
+                        meshes.forEach((obj) => {
+                            schematic.group.add(obj);
+                        });
+                        schematic.updateTransform();
+                        schematic.group.visible = schematic.visible;
+                        schematic.meshes = meshes;
+                        schematic.group.updateMatrixWorld(true);
+                        timings.sceneUpdates.end = performance.now();
+                        timings.sceneUpdates.duration = timings.sceneUpdates.end - timings.sceneUpdates.start;
+                        
+                        // Memory snapshot after scene updates
+                        const memoryAfterScene = this.getMemoryUsageMB();
+                        memorySnapshots.push({ phase: 'scene', memory: memoryAfterScene });
+                        peakMemoryDuringRun = Math.max(peakMemoryDuringRun, memoryAfterScene);
+                        
+                        this.blocksRendered = blockCount;
+                        
+                        // Final memory check
+                        const currentMemory = this.getMemoryUsageMB();
+                        peakMemoryDuringRun = Math.max(peakMemoryDuringRun, currentMemory);
+                        
+                        // Final memory snapshot
+                        const finalMemory = this.getMemoryUsageMB();
+                        memorySnapshots.push({ phase: 'final', memory: finalMemory });
+                        peakMemoryDuringRun = Math.max(peakMemoryDuringRun, finalMemory);
+                        
+                        // Calculate total time
+                        timings.total.end = performance.now();
+                        timings.total.duration = timings.total.end - timings.total.start;
+                        
+                        // Get session data from PerformanceMonitor
+                        let sessionData = null;
+                        if (testSessionId && window.performanceMonitor) {
+                            sessionData = window.performanceMonitor.endSession(testSessionId);
+                        }
+                        
+                        // Calculate memory usage (use the increase from clean start to peak)
+                        const memoryUsedDuringRun = Math.max(0, peakMemoryDuringRun - cleanStartMemory);
+                        
+                        const runResult = {
+                            runNumber,
+                            buildTime: Math.round(timings.total.duration),
+                            timingBreakdown: {
+                                setup: Math.round(timings.setup.duration),
+                                blockGeneration: Math.round(timings.blockGeneration.duration),
+                                meshBuilding: Math.round(timings.meshBuilding.duration),
+                                sceneUpdates: Math.round(timings.sceneUpdates.duration)
+                            },
+                            meshBuildingBreakdown: meshBuildingBreakdown,
+                            memoryUsed: Math.round(memoryUsedDuringRun * 100) / 100,
+                            peakMemory: Math.round(peakMemoryDuringRun * 100) / 100,
+                            memorySnapshots: memorySnapshots,
+                            baselineMemory: Math.round(cleanStartMemory * 100) / 100,
+                            blockCount: blockCount,
+                            buildMode: this.config.meshBuildingMode,
+                            schematicSize: this.config.schematicSize,
+                            blockDensity: this.config.blockDensity,
+                            sessionData: sessionData
+                        };
+                        
+                        console.log(`✅ Run ${runNumber} completed:`, {
+                            buildTime: `${runResult.buildTime}ms`,
+                            timingBreakdown: runResult.timingBreakdown,
+                            memory: `${runResult.memoryUsed}MB (peak: ${runResult.peakMemory}MB)`,
+                            blocks: runResult.blockCount
+                        });
+                        
+                        return runResult;
+                        
+                    } catch (error) {
+                        console.error(`❌ Run ${runNumber} failed:`, error);
+                        if (testSessionId && window.performanceMonitor) {
+                            window.performanceMonitor.endSession(testSessionId);
+                        }
+                        throw error;
+                    }
+                },
+                
+                calculateMultiRunStatistics() {
+                    if (this.multiRunResults.runs.length === 0) return;
+                    
+                    const runs = this.multiRunResults.runs;
+                    const n = runs.length;
+                    
+                    // Calculate averages
+                    const avgBuildTime = runs.reduce((sum, run) => sum + run.buildTime, 0) / n;
+                    const avgMemoryUsed = runs.reduce((sum, run) => sum + run.memoryUsed, 0) / n;
+                    const avgPeakMemory = runs.reduce((sum, run) => sum + run.peakMemory, 0) / n;
+                    
+                    this.multiRunResults.averages = {
+                        buildTime: Math.round(avgBuildTime),
+                        memoryUsage: Math.round(avgMemoryUsed * 100) / 100,
+                        peakMemory: Math.round(avgPeakMemory * 100) / 100
+                    };
+                    
+                    // Calculate statistics
+                    const buildTimes = runs.map(r => r.buildTime);
+                    const memoryUsages = runs.map(r => r.memoryUsed);
+                    
+                    this.multiRunResults.statistics = {
+                        buildTimeStdDev: Math.round(this.calculateStdDev(buildTimes)),
+                        memoryStdDev: Math.round(this.calculateStdDev(memoryUsages) * 100) / 100,
+                        minBuildTime: Math.min(...buildTimes),
+                        maxBuildTime: Math.max(...buildTimes),
+                        minMemory: Math.round(Math.min(...memoryUsages) * 100) / 100,
+                        maxMemory: Math.round(Math.max(...memoryUsages) * 100) / 100
+                    };
+                    
+                    console.log('📊 Multi-run statistics calculated:', this.multiRunResults);
+                },
+                
+                calculateStdDev(values) {
+                    if (values.length <= 1) return 0;
+                    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+                    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+                    const avgSquaredDiff = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+                    return Math.sqrt(avgSquaredDiff);
+                },
+                
+                getMemoryUsageMB() {
+                    if (performance.memory) {
+                        return performance.memory.usedJSHeapSize / 1024 / 1024;
+                    }
+                    return 0;
+                },
+                
+                clearResults() {
+                    this.results = {
+                        avgFps: null,
+                        minFps: null,
+                        maxFps: null,
+                        totalBlocks: null,
+                        memoryUsage: null
+                    };
+                    this.multiRunResults = {
+                        runs: [],
+                        averages: {
+                            buildTime: null,
+                            memoryUsage: null,
+                            peakMemory: null
+                        },
+                        statistics: {
+                            buildTimeStdDev: null,
+                            memoryStdDev: null,
+                            minBuildTime: null,
+                            maxBuildTime: null,
+                            minMemory: null,
+                            maxMemory: null
+                        }
+                    };
+                    this.currentRun = 0;
+                    this.totalRuns = 0;
+                    this.fpsHistory = [];
+                    if (this.renderer && this.renderer.schematicManager) {
+                        this.renderer.schematicManager.removeAllSchematics();
+                    }
+                    // Clear performance monitor data
+                    if (window.performanceMonitor && window.performanceMonitor.clearSessions) {
+                        window.performanceMonitor.clearSessions();
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

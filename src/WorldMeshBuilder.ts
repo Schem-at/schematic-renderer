@@ -14,6 +14,10 @@ import type {
 import { Cubane } from "cubane"; 
 import { GeometryBufferPool } from "./GeometryBufferPool";
 import { InstancedBlockRenderer } from "./InstancedBlockRenderer"; // Adjust path
+import { performanceMonitor } from "./performance/PerformanceMonitor";
+const BUFFER_ANALYSIS_LOG_INTERVAL = 100;
+let bufferAnalysisCounter = 0;
+let maxVerticesUsed = 0;
 
 export const INVISIBLE_BLOCKS = new Set([
 	"minecraft:air",
@@ -37,7 +41,8 @@ export class WorldMeshBuilder {
 		this.schematicRenderer = schematicRenderer;
 	}
 
-	public async precomputePaletteGeometries(palette: any[]): Promise<void> {
+public async precomputePaletteGeometries(palette: any[]): Promise<void> {
+    performanceMonitor.startOperation('precomputePaletteGeometries');
 
 
 		const paletteBlockData: PaletteBlockData[] = new Array(palette.length);
@@ -139,29 +144,45 @@ export class WorldMeshBuilder {
 			}
 		}
 
-		this.paletteCache = {
-			blockData: paletteBlockData,
-			globalMaterials,
-			isReady: true,
-		};
+this.paletteCache = {
+    blockData: paletteBlockData,
+    globalMaterials,
+    isReady: true,
+};
+
+performanceMonitor.endOperation('precomputePaletteGeometries');
 
 	}
 
-	public async getChunkMesh(
-		chunkData: {
-			blocks: number[][];
-			chunk_x: number;
-			chunk_y: number;
-			chunk_z: number;
-		},
-		schematicObject: SchematicObject,
-		renderingBounds?: {
-			min: THREE.Vector3;
-			max: THREE.Vector3;
-			enabled?: boolean;
-		}
-	): Promise<THREE.Object3D[]> {
+public async getChunkMesh(
+    chunkData: {
+        blocks: Array<number[]>;
+        chunk_x: number;
+        chunk_y: number;
+        chunk_z: number;
+    },
+    schematicObject: SchematicObject,
+    renderingBounds?: {
+        min: THREE.Vector3;
+        max: THREE.Vector3;
+        enabled?: boolean;
+    }
+): Promise<THREE.Object3D[]> {
+		const initialChunkMemory = (performance as any).memory ? (performance as any).memory.usedJSHeapSize : 0;
+		
+		// Get call stack trace to identify caller
+		const callStack = new Error().stack?.split('\n') || [];
+		const caller = callStack[2]?.trim() || 'unknown';
+		const callerMethod = caller.includes('at ') ? caller.split('at ')[1]?.split(' ')[0] || 'unknown' : caller;
+		
+		
+		performanceMonitor.startOperation('getChunkMesh', {
+			chunkCoords: [chunkData.chunk_x, chunkData.chunk_y, chunkData.chunk_z],
+			caller: callerMethod,
+			blockCount: chunkData.blocks.length
+		});
 		if (!this.paletteCache?.isReady) {
+			
 			throw new Error(
 				"Palette cache not ready. Call precomputePaletteGeometries() first."
 			);
@@ -177,12 +198,14 @@ export class WorldMeshBuilder {
 			transparent: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
 			emissive: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
 		} = {
-			solid: [],
+		solid: [],
 			water: [],
 			redstone: [],
 			transparent: [],
 			emissive: [],
 		};
+
+		performanceMonitor.startOperation('categorizeBlocks');
 
 		for (const blockArray of chunkData.blocks) {
 			const [x, y, z, paletteIndex] = blockArray;
@@ -211,6 +234,7 @@ export class WorldMeshBuilder {
 				}
 			}
 		}
+		performanceMonitor.endOperation('categorizeBlocks');
 
 		// Create meshes for each category
 		const resultMeshes: THREE.Object3D[] = [];
@@ -221,6 +245,8 @@ export class WorldMeshBuilder {
 			"redstone",
 			"emissive",
 		] as const;
+
+		performanceMonitor.startOperation('createMeshes');
 
 		for (const category of meshOrder) {
 			const blocks = categorizedBlocks[category];
@@ -234,6 +260,48 @@ export class WorldMeshBuilder {
 			}
 		}
 
+		performanceMonitor.endOperation('createMeshes');
+
+performanceMonitor.recordChunkProcessing({
+    chunkId: `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`,
+    chunkCoords: [chunkData.chunk_x, chunkData.chunk_y, chunkData.chunk_z],
+    blockCount: chunkData.blocks.length,
+    processingTime: performanceMonitor.getCurrentSession()?.timingData.slice(-1)[0].duration || 0,
+    meshCount: resultMeshes.length,
+    totalVertices: resultMeshes.reduce((sum, mesh) => sum + ((mesh as THREE.Mesh).geometry?.attributes.position.count || 0), 0),
+    totalIndices: resultMeshes.reduce((sum, mesh) => sum + ((mesh as THREE.Mesh).geometry?.index?.count || 0), 0),
+    memoryUsed: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize,
+    materialGroups: resultMeshes.reduce((sum, mesh) => sum + ((mesh as THREE.Mesh).geometry?.groups?.length || 0), 0),
+    blockTypes: Array.from(new Set(chunkData.blocks.map(block => this.paletteCache?.blockData[block[3]]?.blockName).filter(Boolean))) as string[],
+    renderingPhases: [],
+    blockTypeTimings: new Map(),
+    geometryStats: {
+        facesCulled: 0,
+        facesGenerated: resultMeshes.reduce((sum, mesh) => sum + ((mesh as THREE.Mesh).geometry?.groups?.length || 0), 0),
+        cullingEfficiency: 0,
+        averageVerticesPerBlock: chunkData.blocks.length > 0 ? resultMeshes.reduce((sum, mesh) => sum + ((mesh as THREE.Mesh).geometry?.attributes.position.count || 0), 0) / chunkData.blocks.length : 0,
+        textureAtlasUsage: []
+    },
+    memoryBreakdown: {
+        vertexBuffers: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize * 0.4,
+        indexBuffers: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize * 0.3,
+        materials: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize * 0.1,
+        textures: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize * 0.1,
+        other: performanceMonitor.takeMemorySnapshot(`chunk_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`).usedJSHeapSize * 0.1
+    }
+});
+
+performanceMonitor.endOperation('getChunkMesh');
+
+		const finalChunkMemory = (performance as any).memory ? (performance as any).memory.usedJSHeapSize : 0;
+		const chunkMemoryUsed = finalChunkMemory - initialChunkMemory;
+
+
+		performanceMonitor.recordOperationDetails('getChunkMesh', {
+			chunkCoords: [chunkData.chunk_x, chunkData.chunk_y, chunkData.chunk_z],
+			memoryUsed: chunkMemoryUsed
+		});
+
 		return resultMeshes;
 	}
 
@@ -243,6 +311,19 @@ export class WorldMeshBuilder {
 		meshPrefix: string
 	): Promise<THREE.Mesh | null> {
 		if (blocks.length === 0) return null;
+
+		// Start detailed performance tracking
+		performanceMonitor.startOperation(`createCategoryMesh-${category}`, {
+			category,
+			meshPrefix,
+			blockCount: blocks.length
+		});
+
+		// Track initial memory state
+  const initialMemory = (performance as any).memory ? (performance as any).memory.usedJSHeapSize : 0;
+		const materialGroupingStart = performance.now();
+
+		performanceMonitor.startOperation('collectMaterialGroups');
 
 		// Clear positions from previous use and populate with current blocks
 		const activeMaterialGroups: PaletteMaterialGroup[] = [];
@@ -260,10 +341,14 @@ export class WorldMeshBuilder {
 			}
 		}
 
+		performanceMonitor.endOperation('collectMaterialGroups');
+
 		// Convert set to array for processing
 		activeMaterialGroups.push(...materialGroupSet);
 
 		if (activeMaterialGroups.length === 0) return null;
+
+		performanceMonitor.startOperation('mergeGeometries');
 
 		// Create merged geometries for each material group
 		const allMergedGeometries: THREE.BufferGeometry[] = [];
@@ -293,6 +378,8 @@ export class WorldMeshBuilder {
 			);
 		}
 
+		performanceMonitor.endOperation('mergeGeometries');
+
 		// Clean up temporary geometries
 		allMergedGeometries.forEach((geo) => geo.dispose());
 
@@ -300,6 +387,11 @@ export class WorldMeshBuilder {
 			finalGeometry?.dispose();
 			return null;
 		}
+
+		// Track geometry creation performance
+		const geometryMergeTime = performance.now() - materialGroupingStart;
+  const finalMemory = (performance as any).memory ? (performance as any).memory.usedJSHeapSize : 0;
+		const memoryDelta = finalMemory - initialMemory;
 
 		try {
 			const mergedMesh = new THREE.Mesh(
@@ -309,6 +401,18 @@ export class WorldMeshBuilder {
 			mergedMesh.name = `${meshPrefix}-${category}-${blocks.length}b`;
 			this.configureMeshForCategory(mergedMesh, category as keyof ChunkMeshes);
 			mergedMesh.userData.materialRegistry = true;
+
+			// Record detailed mesh creation metrics
+			performanceMonitor.recordBlockProcessing({
+				blockType: category,
+				processingTime: geometryMergeTime,
+				position: [0, 0, 0], // Category-level, not position-specific
+				chunkId: meshPrefix,
+				memoryUsed: memoryDelta,
+				geometryVertices: finalGeometry.attributes.position.count
+			});
+
+			performanceMonitor.endOperation(`createCategoryMesh-${category}`);
 			return mergedMesh;
 		} catch (error) {
 			console.error(
@@ -316,6 +420,7 @@ export class WorldMeshBuilder {
 				error
 			);
 			finalGeometry?.dispose();
+			performanceMonitor.endOperation(`createCategoryMesh-${category}`);
 			return null;
 		}
 	}
@@ -375,6 +480,12 @@ export class WorldMeshBuilder {
 		// Pre-calculate everything in one pass
 		let totalPositions = 0;
 		let totalIndices = 0;
+
+		if (++bufferAnalysisCounter % BUFFER_ANALYSIS_LOG_INTERVAL === 0) {
+			console.log(`Buffer analysis after ${BUFFER_ANALYSIS_LOG_INTERVAL} operations:`);
+			console.log(`  Max vertices used: ${maxVerticesUsed}`);
+		}
+		maxVerticesUsed = Math.max(maxVerticesUsed, totalPositions);
 		let hasNormals = false;
 		let hasUVs = false;
 
@@ -401,6 +512,11 @@ export class WorldMeshBuilder {
 		});
 
 		const positions = GeometryBufferPool.getPositionBuffer(totalPositions * 3);
+
+		if (positions.length < totalPositions * 3) {
+			console.warn(`Position buffer resized: ${positions.length / 3} vertices available, ${totalPositions} needed`);
+		}
+
 		const normals = hasNormals
 			? GeometryBufferPool.getPositionBuffer(totalPositions * 3)
 			: null;

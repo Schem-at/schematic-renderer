@@ -10,9 +10,9 @@ export default defineConfig({
     port: 4000,
     open: true,
   },
-  root: './test',
+  root: './test/pages',
   build: {
-    outDir: '../dist',
+    outDir: '../../dist',
     lib: {
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'SchematicRenderer',

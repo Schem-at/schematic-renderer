@@ -3,10 +3,10 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Schematic Renderer Pro</title>
+		<title>Schematic Renderer - Playground</title>
 
 		<!-- Include your main JavaScript file -->
-		<script type="module" src="./main.ts"></script>
+		<script type="module" src="./scripts/playground.ts"></script>
 
 		<!-- DaisyUI -->
 		<link
@@ -45,432 +45,152 @@
 			rel="stylesheet"
 		/>
 
-		<!-- Custom Styles -->
-		<style>
-			/* Custom Styles */
-			.canvas-container {
-				position: relative;
-				width: 100%;
-				max-width: 2400px;
-				height: 80vh;
-				margin: auto;
-				background-color: #1f2937; /* Tailwind's gray-800 */
-				border-radius: 0.5rem;
-				box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-			}
-			#canvas {
-				width: 100%;
-				height: 100%;
-				display: block;
-				border-radius: 0.5rem;
-			}
-			.overlay {
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				pointer-events: none;
-			}
-			.overlay > * {
-				pointer-events: auto;
-			}
-			/* Menu Bar */
-			.menu-bar {
-				background-color: rgba(
-					31,
-					41,
-					55,
-					0.9
-				); /* Tailwind's gray-800 with opacity */
-				backdrop-filter: blur(10px);
-				padding: 0.5rem 1rem;
-			}
-			/* Buttons */
-			.menu-btn,
-			.toolbar-btn {
-				@apply btn btn-sm btn-ghost text-white;
-			}
-			.menu-btn:hover,
-			.toolbar-btn:hover {
-				@apply bg-gray-700;
-			}
-			/* Dropdown */
-			.dropdown-content {
-				backdrop-filter: blur(5px);
-			}
-			/* Sidebar */
-			.sidebar {
-				background-color: rgba(31, 41, 55, 0.9);
-				backdrop-filter: blur(10px);
-				width: 250px;
-				max-width: 100%;
-				height: 100%;
-				position: absolute;
-				top: 0;
-				right: 0;
-				overflow-y: auto;
-				z-index: 10;
-				padding: 1rem;
-			}
-			.sidebar-header {
-				font-size: 1.25rem;
-				font-weight: bold;
-				margin-bottom: 1rem;
-				color: white;
-			}
-			.schematic-item {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				background-color: rgba(55, 65, 81, 0.9); /* Tailwind's gray-700 */
-				padding: 0.5rem;
-				border-radius: 0.25rem;
-				margin-bottom: 0.5rem;
-				color: white;
-			}
-			.schematic-item:hover {
-				background-color: rgba(75, 85, 99, 0.9); /* Tailwind's gray-600 */
-			}
-			.schematic-name {
-				flex-grow: 1;
-				margin-right: 0.5rem;
-			}
-			/* Modern Menu Style */
-			.menu-bar {
-				background: linear-gradient(90deg, #1f2937 0%, #374151 100%);
-				border-bottom: 1px solid #4b5563;
-			}
-			.menu-btn {
-				color: #d1d5db;
-			}
-			.menu-btn:hover {
-				color: #ffffff;
-			}
-			.dropdown-content {
-				background-color: #1f2937;
-				border: 1px solid #4b5563;
-			}
-			.dropdown-content a {
-				color: #d1d5db;
-			}
-			.dropdown-content a:hover {
-				background-color: #374151;
-				color: #ffffff;
-			}
-		</style>
 	</head>
-	<body
-		class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4"
-		x-data="rendererUI()"
-		x-init="init()"
-		:class="{ 'dark': isDarkMode, 'light': !isDarkMode }"
-	>
-		<div class="canvas-container relative">
-			<canvas id="canvas"></canvas>
-
-			<div class="overlay flex flex-col h-full">
-				<!-- Menu Bar -->
-				<div class="menu-bar flex items-center justify-between h-12 text-sm">
-					<div class="flex items-center space-x-4">
-						<!-- View Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<span class="material-icons">visibility</span>
-								<span>View</span>
-								<span class="material-icons">expand_more</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52"
-							>
-								<li><a @click="toggleGrid">Toggle Grid</a></li>
-								<li><a @click="toggleAxes">Toggle Axes</a></li>
-								<li><a @click="toggleWireframe">Toggle Wireframe Mode</a></li>
-								<li><a @click="resetScene">Reset Scene</a></li>
-							</ul>
-						</div>
-						<!-- Rendering Options Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<span class="material-icons">tune</span>
-								<span>Rendering</span>
-								<span class="material-icons">expand_more</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-60"
-							>
-								<li><a @click="toggleShadows">Toggle Shadows</a></li>
-								<li>
-									<a @click="openBackgroundColorPicker"
-										>Change Background Color</a
-									>
-								</li>
-							</ul>
-						</div>
-						<!-- Camera Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<span class="material-icons">camera_alt</span>
-								<span>Camera</span>
-								<span class="material-icons">expand_more</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52"
-							>
-								<li><a @click="resetCamera">Reset Camera</a></li>
-								<li><a @click="switchToPerspective">Perspective View</a></li>
-								<li><a @click="switchToOrthographic">Orthographic View</a></li>
-								<li>
-									<a @click="showCameraControls = !showCameraControls"
-										>Camera Path Controls</a
-									>
-								</li>
-							</ul>
-						</div>
-						<!-- Help Dropdown -->
-						<div class="dropdown dropdown-hover">
-							<label tabindex="0" class="menu-btn flex items-center space-x-1">
-								<span class="material-icons">help_outline</span>
-								<span>Help</span>
-								<span class="material-icons">expand_more</span>
-							</label>
-							<ul
-								tabindex="0"
-								class="dropdown-content menu p-2 shadow bg-gray-800 rounded-box w-52"
-							>
-								<li><a @click="showControlsInfo()">View Controls</a></li>
-								<li><a @click="showAbout()">About</a></li>
-							</ul>
-						</div>
-						<!-- Resource pack button -->
-						<button
-							class="menu-btn"
-							@click="addResourcePack"
-							title="Resource Packs"
-						>
-							<span class="material-icons">folder</span>
-						</button>
-					</div>
-					<!-- Right Side Buttons -->
-					<div class="flex items-center space-x-2">
-						<!-- Theme Toggle Button -->
-						<button
-							class="menu-btn"
-							@click="toggleDarkMode()"
-							title="Toggle Theme"
-						>
-							<span class="material-icons" x-show="isDarkMode">light_mode</span>
-							<span class="material-icons" x-show="!isDarkMode">dark_mode</span>
-						</button>
-						<!-- Fullscreen Button -->
-						<button
-							class="menu-btn"
-							@click="toggleFullScreen"
-							title="Toggle Fullscreen"
-						>
-							<span class="material-icons">fullscreen</span>
-						</button>
-						<!-- Screenshot Button -->
-						<button
-							class="menu-btn"
-							@click="takeScreenshot"
-							title="Take Screenshot"
-						>
-							<span class="material-icons">photo_camera</span>
-						</button>
-						<!-- Video Recording Button -->
-						<button
-							class="menu-btn"
-							@click="startVideoRecording"
-							:disabled="isRecording"
-							title="Record Animation"
-						>
-							<span class="material-icons">videocam</span>
-						</button>
-					</div>
+	<body class="bg-gray-900 text-white min-h-screen" x-data="rendererUI()" x-init="init()">
+		<!-- Navigation Bar -->
+		<nav class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+			<div class="flex items-center justify-between">
+				<div class="flex items-center space-x-4">
+					<a href="index.html" class="text-blue-400 hover:text-blue-300 flex items-center space-x-2">
+						<span class="material-icons">arrow_back</span>
+						<span>Back to Test Suite</span>
+					</a>
+					<h1 class="text-xl font-bold">Schematic Renderer - Playground</h1>
 				</div>
-
-				<!-- Camera Controls Panel -->
-				<div
-					class="absolute top-16 left-4 bg-gray-800 bg-opacity-80 p-4 rounded-md"
-					x-show="showCameraControls"
-					x-transition
-				>
-					<h2 class="text-white text-lg font-semibold mb-2">
-						Camera Path Controls
-					</h2>
-					<!-- Sliders for Height, Radius, Orbit Time -->
-					<div class="mb-4">
-						<label class="text-white"
-							>Height: <span x-text="cameraPathParams.height"></span
-						></label>
-						<input
-							type="range"
-							min="0"
-							max="50"
-							step="1"
-							x-model="cameraPathParams.height"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-					<div class="mb-4">
-						<label class="text-white"
-							>Radius: <span x-text="cameraPathParams.radius"></span
-						></label>
-						<input
-							type="range"
-							min="0"
-							max="100"
-							step="1"
-							x-model="cameraPathParams.radius"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-					<div class="mb-4">
-						<label class="text-white"
-							>Orbit Time:
-							<span x-text="cameraPathParams.orbitTime"></span>s</label
-						>
-						<input
-							type="range"
-							min="1"
-							max="60"
-							step="1"
-							x-model="cameraPathParams.orbitTime"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-					<!-- Sliders for Target Coordinates -->
-					<div class="mb-4">
-						<label class="text-white"
-							>Target X: <span x-text="cameraPathParams.targetX"></span
-						></label>
-						<input
-							type="range"
-							min="-50"
-							max="50"
-							step="1"
-							x-model="cameraPathParams.targetX"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-					<div class="mb-4">
-						<label class="text-white"
-							>Target Y: <span x-text="cameraPathParams.targetY"></span
-						></label>
-						<input
-							type="range"
-							min="-50"
-							max="50"
-							step="1"
-							x-model="cameraPathParams.targetY"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-					<div class="mb-4">
-						<label class="text-white"
-							>Target Z: <span x-text="cameraPathParams.targetZ"></span
-						></label>
-						<input
-							type="range"
-							min="-50"
-							max="50"
-							step="1"
-							x-model="cameraPathParams.targetZ"
-							@input="updateCameraPathParameters()"
-							class="w-full"
-						/>
-					</div>
-
-					<!-- Button to start/stop the camera animation -->
-					<button
-						class="btn btn-primary w-full"
-						@click="toggleCameraAnimation()"
-						x-text="isAnimating ? 'Stop Animation' : 'Start Animation'"
-					></button>
-				</div>
-
-				<!-- Status Cards -->
-				<div class="absolute bottom-4 left-4 flex space-x-4">
-					<div class="status-card flex flex-col text-white text-sm">
-						<span class="font-semibold">Coordinates</span>
-						<span id="coordinates">
-							X: <span x-text="cameraPosition.x">0.00</span>, Y:
-							<span x-text="cameraPosition.y">0.00</span>, Z:
-							<span x-text="cameraPosition.z">0.00</span>
-						</span>
-					</div>
-					<!-- Optional: Display Recording Progress -->
-					<div
-						x-show="isRecording"
-						class="status-card flex flex-col text-white text-sm"
+				<div class="flex items-center space-x-2">
+					<button 
+						class="btn btn-sm btn-primary" 
+						@click="addSchematic"
+						title="Add Schematic"
 					>
-						<span class="font-semibold">Recording</span>
-						<span><span x-text="recordingProgress"></span>%</span>
-					</div>
+						<span class="material-icons">add</span>
+						Add Schematic
+					</button>
+					<button 
+						class="btn btn-sm btn-ghost" 
+						@click="toggleDarkMode()"
+						title="Toggle Theme"
+					>
+						<span class="material-icons" x-show="isDarkMode">light_mode</span>
+						<span class="material-icons" x-show="!isDarkMode">dark_mode</span>
+					</button>
 				</div>
+			</div>
+		</nav>
 
-				<!-- Schematics Sidebar -->
-				<div class="sidebar" x-show="showSidebar" x-transition>
-					<div class="sidebar-header flex justify-between items-center">
-						<span>Schematics</span>
-						<button
-							class="btn btn-sm btn-primary"
-							@click="addSchematic"
-							title="Add Schematic"
-						>
-							<span class="material-icons">add</span>
-						</button>
-						<button
-							class="btn btn-sm btn-primary"
-							@click="showSidebar = !showSidebar"
-							title="Toggle Schematics Panel"
-						>
-							<span
-								class="material-icons"
-								x-text="showSidebar ? 'chevron_right' : 'chevron_left'"
-							></span>
-						</button>
+		<!-- Main Content Area -->
+		<div class="flex h-screen">
+			<!-- Left Sidebar -->
+			<div class="w-64 bg-gray-800 border-r border-gray-700 p-4" x-show="showSidebar" x-transition>
+				<div class="space-y-4">
+					<!-- View Controls -->
+					<div class="bg-gray-700 rounded-lg p-3">
+						<h3 class="text-sm font-semibold mb-2 text-blue-400">View Controls</h3>
+						<div class="space-y-2">
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleGrid">
+								<span class="material-icons text-sm">grid_on</span>
+								Toggle Grid
+							</button>
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleAxes">
+								<span class="material-icons text-sm">3d_rotation</span>
+								Toggle Axes
+							</button>
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleWireframe">
+								<span class="material-icons text-sm">filter_frames</span>
+								Wireframe
+							</button>
+						</div>
 					</div>
-					<div class="schematic-list">
-						<template x-for="schematic in schematics" :key="schematic.id">
-							<div class="schematic-item">
-								<span class="schematic-name" x-text="schematic.name"></span>
-								<button
-									class="btn btn-xs"
-									:class="schematic.visible ? 'btn-success' : 'btn-warning'"
-									@click="toggleSchematicVisibility(schematic)"
-									:title="schematic.visible ? 'Hide' : 'Show'"
-								>
-									<span
-										class="material-icons"
-										x-text="schematic.visible ? 'visibility' : 'visibility_off'"
-									></span>
-								</button>
+
+					<!-- Camera Controls -->
+					<div class="bg-gray-700 rounded-lg p-3">
+						<h3 class="text-sm font-semibold mb-2 text-blue-400">Camera</h3>
+						<div class="space-y-2">
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="resetCamera">
+								<span class="material-icons text-sm">center_focus_strong</span>
+								Reset Camera
+							</button>
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="switchToPerspective">
+								<span class="material-icons text-sm">camera_alt</span>
+								Perspective
+							</button>
+							<button class="w-full btn btn-xs btn-ghost justify-start" @click="switchToOrthographic">
+								<span class="material-icons text-sm">view_in_ar</span>
+								Orthographic
+							</button>
+						</div>
+					</div>
+
+					<!-- Schematics List -->
+					<div class="bg-gray-700 rounded-lg p-3">
+						<h3 class="text-sm font-semibold mb-2 text-blue-400">Schematics</h3>
+						<div class="space-y-2">
+							<template x-for="schematic in schematics" :key="schematic.id">
+								<div class="flex items-center justify-between p-2 bg-gray-600 rounded">
+									<span class="text-xs truncate" x-text="schematic.name"></span>
+									<button 
+										class="btn btn-xs"
+										:class="schematic.visible ? 'btn-success' : 'btn-warning'"
+										@click="toggleSchematicVisibility(schematic)"
+									>
+										<span class="material-icons text-xs" x-text="schematic.visible ? 'visibility' : 'visibility_off'"></span>
+									</button>
+								</div>
+							</template>
+							<div x-show="schematics.length === 0" class="text-xs text-gray-400 text-center py-4">
+								No schematics loaded
 							</div>
-						</template>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Main Canvas Area -->
+			<div class="flex-1 relative">
+				<!-- Canvas -->
+				<canvas id="canvas" class="w-full h-full bg-gray-900"></canvas>
+
+				<!-- Toolbar -->
+				<div class="absolute top-4 right-4 flex space-x-2">
+					<button 
+						class="btn btn-sm btn-ghost" 
+						@click="showSidebar = !showSidebar"
+						title="Toggle Sidebar"
+					>
+						<span class="material-icons">menu</span>
+					</button>
+					<button 
+						class="btn btn-sm btn-ghost" 
+						@click="takeScreenshot"
+						title="Take Screenshot"
+					>
+						<span class="material-icons">photo_camera</span>
+					</button>
+					<button 
+						class="btn btn-sm btn-ghost" 
+						@click="toggleFullScreen"
+						title="Toggle Fullscreen"
+					>
+						<span class="material-icons">fullscreen</span>
+					</button>
+				</div>
+
+				<!-- Status Bar -->
+				<div class="absolute bottom-4 left-4 bg-gray-800 bg-opacity-80 px-3 py-2 rounded">
+					<div class="text-xs text-gray-300">
+						Camera: X: <span x-text="cameraPosition.x">0.00</span>, 
+						Y: <span x-text="cameraPosition.y">0.00</span>, 
+						Z: <span x-text="cameraPosition.z">0.00</span>
 					</div>
 				</div>
 
-				<!-- Toggle Sidebar Button -->
-				<button
-					class="absolute top-16 right-4 btn btn-circle btn-sm btn-ghost"
-					@click="showSidebar = !showSidebar"
-					title="Toggle Schematics Panel"
-				>
-					<span
-						class="material-icons"
-						x-text="showSidebar ? 'chevron_right' : 'chevron_left'"
-					></span>
-				</button>
+				<!-- Recording Progress -->
+				<div x-show="isRecording" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-2 rounded-lg">
+					<div class="flex items-center space-x-2">
+						<span class="material-icons animate-pulse">fiber_manual_record</span>
+						<span>Recording... <span x-text="recordingProgress">0</span>%</span>
+					</div>
+				</div>
 			</div>
 		</div>
 
@@ -481,7 +201,7 @@
 					renderer: null,
 					cameraPosition: { x: 0.0, y: 0.0, z: 0.0 },
 					schematics: [],
-					showSidebar: false,
+					showSidebar: true,
 					showCameraControls: false,
 					isAnimating: false,
 					isRecording: false,

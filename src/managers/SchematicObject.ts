@@ -4,12 +4,12 @@ import { SchematicWrapper } from "nucleation";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
-import { createReactiveProxy, PropertyConfig } from "../utils/ReactiveProperty"; // Adjust the import path as needed
-import { castToEuler, castToVector3 } from "../utils/Casts";
+// Removed unused imports since we're no longer using reactive proxy
 import { resetPerformanceMetrics } from "../monitoring";
 import { SchematicRenderer } from "../SchematicRenderer";
 import type { BlockData } from "../types";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { performanceMonitor } from "../performance/PerformanceMonitor";
 
 // Define chunk data interface to fix TypeScript errors
 
@@ -24,9 +24,9 @@ export class SchematicObject extends EventEmitter {
 	private sceneManager: SceneManager;
 	private chunkMeshes: Map<string, THREE.Object3D[]> = new Map();
 	private chunkDimensions: any = {
-		chunkWidth: 64,
-		chunkHeight: 64,
-		chunkLength: 64,
+		chunkWidth: 16,
+		chunkHeight: 16,
+		chunkLength: 16,
 	};
 
 	public id: string;
@@ -104,8 +104,51 @@ export class SchematicObject extends EventEmitter {
 		this.opacity = 1.0;
 		this.visible = properties?.visible ?? true;
 
-		// Set initial properties if provided
-		Object.assign(this, properties);
+		// Set initial properties if provided, avoiding Three.js object conflicts
+		if (properties) {
+			// Handle Three.js objects carefully
+			if (properties.position) {
+				if (Array.isArray(properties.position)) {
+					this.position.set(
+						properties.position[0],
+						properties.position[1],
+						properties.position[2]
+					);
+				} else {
+					this.position.copy(properties.position);
+				}
+			}
+			if (properties.rotation) {
+				if (Array.isArray(properties.rotation)) {
+					this.rotation.set(
+						properties.rotation[0],
+						properties.rotation[1],
+						properties.rotation[2]
+					);
+				} else {
+					this.rotation.copy(properties.rotation);
+				}
+			}
+			if (properties.scale) {
+				if (Array.isArray(properties.scale)) {
+					this.scale.set(
+						properties.scale[0],
+						properties.scale[1],
+						properties.scale[2]
+					);
+				} else if (typeof properties.scale === "number") {
+					this.scale.setScalar(properties.scale);
+				} else {
+					this.scale.copy(properties.scale);
+				}
+			}
+			if (properties.opacity !== undefined) {
+				this.opacity = properties.opacity;
+			}
+			if (properties.visible !== undefined) {
+				this.visible = properties.visible;
+			}
+		}
 		if (this.schematicRenderer.options.chunkSideLength) {
 			this.chunkDimensions = {
 				chunkWidth: this.schematicRenderer.options.chunkSideLength,
@@ -175,113 +218,79 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		// Initialize the reactive bounds property
+		// Initialize the reactive bounds property with safe implementation
 		const self = this;
-		this.bounds = new Proxy(
-			{
-				get minX() {
-					return self.renderingBounds.min.x;
-				},
-				set minX(value: number) {
-					self.renderingBounds.min.x = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				get minY() {
-					return self.renderingBounds.min.y;
-				},
-				set minY(value: number) {
-					self.renderingBounds.min.y = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				get minZ() {
-					return self.renderingBounds.min.z;
-				},
-				set minZ(value: number) {
-					self.renderingBounds.min.z = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				get maxX() {
-					return self.renderingBounds.max.x;
-				},
-				set maxX(value: number) {
-					self.renderingBounds.max.x = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				get maxY() {
-					return self.renderingBounds.max.y;
-				},
-				set maxY(value: number) {
-					self.renderingBounds.max.y = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				get maxZ() {
-					return self.renderingBounds.max.z;
-				},
-				set maxZ(value: number) {
-					self.renderingBounds.max.z = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-				},
-
-				set enabled(value: boolean) {
-					self.renderingBounds.enabled = value;
-					self.setRenderingBounds(
-						self.renderingBounds.min,
-						self.renderingBounds.max
-					);
-					self.showRenderingBoundsHelper(value);
-				},
-
-				// Reset to full dimensions
-				reset() {
-					const dimensions = self.getDimensions();
-					self.setRenderingBounds(
-						new THREE.Vector3(0, 0, 0),
-						new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
-					);
-					return "Reset to full dimensions";
-				},
-
-				// Toggle helper visibility
-				showHelper(visible = true) {
-					self.showRenderingBoundsHelper(visible);
-					return `Helper ${visible ? "shown" : "hidden"}`;
-				},
+		this.bounds = {
+			get minX() {
+				return self.renderingBounds.min.x;
 			},
-			{
-				get(target, prop) {
-					// @ts-ignore
-					return target[prop];
-				},
-				set(target, prop, value) {
-					// @ts-ignore
-					target[prop] = value;
-					return true;
-				},
-			}
-		) as any;
+			set minX(value: number) {
+				self.renderingBounds.min.x = value;
+				self.updateRenderingBounds();
+			},
+			get maxX() {
+				return self.renderingBounds.max.x;
+			},
+			set maxX(value: number) {
+				self.renderingBounds.max.x = value;
+				self.updateRenderingBounds();
+			},
+			get minY() {
+				return self.renderingBounds.min.y;
+			},
+			set minY(value: number) {
+				self.renderingBounds.min.y = value;
+				self.updateRenderingBounds();
+			},
+			get maxY() {
+				return self.renderingBounds.max.y;
+			},
+			set maxY(value: number) {
+				self.renderingBounds.max.y = value;
+				self.updateRenderingBounds();
+			},
+			get minZ() {
+				return self.renderingBounds.min.z;
+			},
+			set minZ(value: number) {
+				self.renderingBounds.min.z = value;
+				self.updateRenderingBounds();
+			},
+			get maxZ() {
+				return self.renderingBounds.max.z;
+			},
+			set maxZ(value: number) {
+				self.renderingBounds.max.z = value;
+				self.updateRenderingBounds();
+			},
+			get enabled() {
+				return self.renderingBounds.enabled || false;
+			},
+			set enabled(value: boolean) {
+				self.renderingBounds.enabled = value;
+				self.updateRenderingBounds();
+				self.showRenderingBoundsHelper(value);
+			},
+			// Reset to full dimensions
+			reset() {
+				const dimensions = self.getDimensions();
+				self.setRenderingBounds(
+					new THREE.Vector3(0, 0, 0),
+					new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
+				);
+				return "Reset to full dimensions";
+			},
+			// Toggle helper visibility
+			showHelper(visible = true) {
+				self.showRenderingBoundsHelper(visible);
+				return `Helper ${visible ? "shown" : "hidden"}`;
+			},
+			// Apply bounds changes (triggers rebuild)
+			apply() {
+				self.rebuildMesh();
+				return "Bounds applied and mesh rebuilt";
+			},
+		} as any;
 
 		this.group = new THREE.Group();
 		this.group.name = name;
@@ -295,54 +304,66 @@ export class SchematicObject extends EventEmitter {
 			this.meshesReady = Promise.resolve();
 		}
 
-		// Define property configurations
-		const propertyConfigs: Partial<
-			Record<keyof SchematicObject, PropertyConfig<any>>
-		> = {
-			position: {
-				cast: castToVector3,
-				afterSet: () => {
-					this.updateTransform();
-					this.emitPropertyChanged("position", this.position);
-				},
-			},
-			rotation: {
-				cast: castToEuler,
-				afterSet: () => {
-					this.updateTransform();
-					this.emitPropertyChanged("rotation", this.rotation);
-				},
-			},
-			scale: {
-				cast: castToVector3,
-				afterSet: () => {
-					this.updateTransform();
-					this.emitPropertyChanged("scale", this.scale);
-				},
-			},
-			opacity: {
-				afterSet: () => {
-					this.updateMeshMaterials("opacity");
-					this.emitPropertyChanged("opacity", this.opacity);
-				},
-			},
-			visible: {
-				afterSet: () => {
-					this.updateMeshVisibility();
-					this.emitPropertyChanged("visible", this.visible);
-				},
-			},
-			renderingBounds: {
-				afterSet: () => {
-					// Don't call updateRenderingBounds() here to avoid infinite loops
-					// The specific setRenderingBounds method should be used instead
-					this.emitPropertyChanged("renderingBounds", this.renderingBounds);
-				},
-			},
+		// Instead of proxying the entire object, set up manual property watchers
+		// This avoids interfering with Three.js internal matrix properties
+		this.setupPropertyWatchers();
+	}
+
+	/**
+	 * Set up manual property watchers instead of using reactive proxy
+	 * This avoids interference with Three.js internal matrix properties
+	 */
+	private setupPropertyWatchers(): void {
+		// Store original values for comparison
+		let lastPosition = this.position.clone();
+		let lastRotation = this.rotation.clone();
+		let lastScale = this.scale.clone();
+		let lastOpacity = this.opacity;
+		let lastVisible = this.visible;
+
+		// Set up property change detection
+		const checkForChanges = () => {
+			// Check position
+			if (!this.position.equals(lastPosition)) {
+				lastPosition = this.position.clone();
+				this.updateTransform();
+				this.emitPropertyChanged("position", this.position);
+			}
+
+			// Check rotation
+			if (!this.rotation.equals(lastRotation)) {
+				lastRotation = this.rotation.clone();
+				this.updateTransform();
+				this.emitPropertyChanged("rotation", this.rotation);
+			}
+
+			// Check scale
+			if (!this.scale.equals(lastScale)) {
+				lastScale = this.scale.clone();
+				this.updateTransform();
+				this.emitPropertyChanged("scale", this.scale);
+			}
+
+			// Check opacity
+			if (this.opacity !== lastOpacity) {
+				lastOpacity = this.opacity;
+				this.updateMeshMaterials("opacity");
+				this.emitPropertyChanged("opacity", this.opacity);
+			}
+
+			// Check visibility
+			if (this.visible !== lastVisible) {
+				lastVisible = this.visible;
+				this.updateMeshVisibility();
+				this.emitPropertyChanged("visible", this.visible);
+			}
+
+			// Continue checking periodically
+			setTimeout(checkForChanges, 100); // Check every 100ms
 		};
 
-		// Create the reactive proxy
-		return createReactiveProxy(this as SchematicObject, propertyConfigs);
+		// Start the change detection loop
+		checkForChanges();
 	}
 
 	// Helper method to get cached dimensions
@@ -352,6 +373,258 @@ export class SchematicObject extends EventEmitter {
 			this._cachedDimensions = [dimensions[0], dimensions[1], dimensions[2]];
 		}
 		return this._cachedDimensions;
+	}
+
+	/**
+	 * Display detailed performance monitoring results
+	 */
+	private displayPerformanceResults(sessionData: any): void {
+		console.log(
+			"\n🎯 ================== PERFORMANCE MONITORING RESULTS =================="
+		);
+		console.log(`📊 Session: ${sessionData.sessionId}`);
+		console.log(`🚀 Build Mode: ${sessionData.renderMode}`);
+		console.log(
+			`⏱️ Total Duration: ${sessionData.totalDuration?.toFixed(2)}ms`
+		);
+		console.log(
+			`💾 Peak Memory: ${(sessionData.peakMemoryUsage / 1024 / 1024).toFixed(
+				2
+			)}MB`
+		);
+		console.log(`🎥 Average FPS: ${sessionData.averageFPS.toFixed(2)}`);
+
+		// Memory progression
+		if (sessionData.memorySnapshots.length > 0) {
+			console.log("\n📈 Memory Progression:");
+			sessionData.memorySnapshots.forEach((snapshot: any, index: number) => {
+				if (
+					index % 5 === 0 ||
+					index === sessionData.memorySnapshots.length - 1
+				) {
+					const timeOffset = (
+						(snapshot.timestamp - sessionData.startTime) /
+						1000
+					).toFixed(1);
+					const memoryMB = (snapshot.usedJSHeapSize / 1024 / 1024).toFixed(2);
+					console.log(
+						`  ${timeOffset}s: ${memoryMB}MB (${
+							snapshot.customData?.label || "snapshot"
+						})`
+					);
+				}
+			});
+		}
+
+		// Operation timings
+		if (sessionData.timingData.length > 0) {
+			console.log("\n⏱️ Operation Timings:");
+			const operationStats = new Map();
+			sessionData.timingData.forEach((timing: any) => {
+				if (timing.duration !== undefined) {
+					const existing = operationStats.get(timing.name) || {
+						total: 0,
+						count: 0,
+						max: 0,
+					};
+					existing.total += timing.duration;
+					existing.count += 1;
+					existing.max = Math.max(existing.max, timing.duration);
+					operationStats.set(timing.name, existing);
+				}
+			});
+
+			Array.from(operationStats.entries())
+				.sort((a, b) => b[1].total - a[1].total)
+				.forEach(([name, stats]) => {
+					const avgTime = (stats.total / stats.count).toFixed(2);
+					console.log(
+						`  ${name}: ${stats.total.toFixed(2)}ms total, ${avgTime}ms avg (${
+							stats.count
+						}x, max: ${stats.max.toFixed(2)}ms)`
+					);
+				});
+		}
+
+		// Block processing stats
+		if (sessionData.blockProcessingData.length > 0) {
+			console.log("\n🧱 Block Processing Stats:");
+			const blockStats = new Map();
+			sessionData.blockProcessingData.forEach((data: any) => {
+				const existing = blockStats.get(data.blockType) || {
+					total: 0,
+					count: 0,
+					totalVertices: 0,
+					totalMemory: 0,
+				};
+				existing.total += data.processingTime;
+				existing.count += 1;
+				existing.totalVertices += data.geometryVertices;
+				existing.totalMemory += data.memoryUsed;
+				blockStats.set(data.blockType, existing);
+			});
+
+			Array.from(blockStats.entries())
+				.sort((a, b) => b[1].total - a[1].total)
+				.slice(0, 10) // Top 10 most expensive block types
+				.forEach(([blockType, stats]) => {
+					const avgTime = (stats.total / stats.count).toFixed(2);
+					const avgVertices = Math.round(stats.totalVertices / stats.count);
+					const avgMemory = (stats.totalMemory / stats.count / 1024).toFixed(1);
+					console.log(
+						`  ${blockType}: ${avgTime}ms avg, ${avgVertices} vertices, ${avgMemory}KB (${stats.count}x)`
+					);
+				});
+		}
+
+		// Chunk processing stats
+		if (sessionData.chunkProcessingData.length > 0) {
+			console.log("\n🗂️ Chunk Processing Stats:");
+			const totalChunks = sessionData.chunkProcessingData.length;
+			const totalBlocks = sessionData.chunkProcessingData.reduce(
+				(sum: number, chunk: any) => sum + chunk.blockCount,
+				0
+			);
+			const totalVertices = sessionData.chunkProcessingData.reduce(
+				(sum: number, chunk: any) => sum + chunk.totalVertices,
+				0
+			);
+			const totalMemory = sessionData.chunkProcessingData.reduce(
+				(sum: number, chunk: any) => sum + chunk.memoryUsed,
+				0
+			);
+
+			console.log(`  Total Chunks: ${totalChunks}`);
+			console.log(`  Total Blocks: ${totalBlocks.toLocaleString()}`);
+			console.log(`  Total Vertices: ${totalVertices.toLocaleString()}`);
+			console.log(
+				`  Total Memory: ${(totalMemory / 1024 / 1024).toFixed(2)}MB`
+			);
+			console.log(
+				`  Avg Chunk Time: ${sessionData.averageChunkProcessingTime.toFixed(
+					2
+				)}ms`
+			);
+			console.log(
+				`  Avg Block Time: ${sessionData.averageBlockProcessingTime.toFixed(
+					2
+				)}ms`
+			);
+
+			// Show slowest chunks
+			const slowestChunks = sessionData.chunkProcessingData
+				.sort((a: any, b: any) => b.processingTime - a.processingTime)
+				.slice(0, 5);
+
+			if (slowestChunks.length > 0) {
+				console.log("\n🐌 Slowest Chunks:");
+				slowestChunks.forEach((chunk: any, index: number) => {
+					const coords = chunk.chunkCoords.join(",");
+					console.log(
+						`  ${index + 1}. [${coords}]: ${chunk.processingTime.toFixed(
+							2
+						)}ms, ${chunk.blockCount} blocks, ${chunk.totalVertices} vertices`
+					);
+				});
+			}
+		}
+
+		// getChunkMesh detailed breakdown
+		const getChunkMeshOperations = sessionData.timingData.filter(
+			(op: any) => op.name === "getChunkMesh"
+		);
+		if (getChunkMeshOperations.length > 0) {
+			console.log("\n🔍 getChunkMesh Detailed Analysis:");
+			const totalGetChunkMeshTime = getChunkMeshOperations.reduce(
+				(sum: number, op: any) => sum + (op.duration || 0),
+				0
+			);
+			const avgGetChunkMeshTime =
+				totalGetChunkMeshTime / getChunkMeshOperations.length;
+			console.log(
+				`  Total getChunkMesh calls: ${getChunkMeshOperations.length}`
+			);
+			console.log(
+				`  Total getChunkMesh time: ${totalGetChunkMeshTime.toFixed(2)}ms`
+			);
+			console.log(
+				`  Average getChunkMesh time: ${avgGetChunkMeshTime.toFixed(2)}ms`
+			);
+
+			// Show memory usage per chunk
+			const chunkMemoryDetails = sessionData.timingData.filter(
+				(op: any) => op.name === "getChunkMesh" && op.metadata?.memoryUsed
+			);
+			if (chunkMemoryDetails.length > 0) {
+				console.log("\n💾 Chunk Memory Analysis:");
+				const totalChunkMemory = chunkMemoryDetails.reduce(
+					(sum: number, op: any) => sum + (op.metadata?.memoryUsed || 0),
+					0
+				);
+				const avgChunkMemory = totalChunkMemory / chunkMemoryDetails.length;
+				console.log(
+					`  Total chunk memory: ${(totalChunkMemory / 1024 / 1024).toFixed(
+						2
+					)}MB`
+				);
+				console.log(
+					`  Average per chunk: ${(avgChunkMemory / 1024).toFixed(2)}KB`
+				);
+
+				// Show most memory-intensive chunks
+				const heaviestChunks = chunkMemoryDetails
+					.sort(
+						(a: any, b: any) =>
+							(b.metadata?.memoryUsed || 0) - (a.metadata?.memoryUsed || 0)
+					)
+					.slice(0, 5);
+
+				console.log("\n🏋️ Most Memory-Intensive Chunks:");
+				heaviestChunks.forEach((chunk: any, index: number) => {
+					const coords = chunk.metadata?.chunkCoords?.join(",") || "unknown";
+					const memoryMB = (chunk.metadata?.memoryUsed / 1024 / 1024).toFixed(
+						2
+					);
+					console.log(`  ${index + 1}. [${coords}]: ${memoryMB}MB`);
+				});
+			}
+		}
+
+		// Renderer stats
+		if (sessionData.rendererStats) {
+			console.log("\n🎨 Renderer Stats:");
+			console.log(`  Draw Calls: ${sessionData.rendererStats.drawCalls}`);
+			console.log(
+				`  Triangles: ${sessionData.rendererStats.triangles.toLocaleString()}`
+			);
+			console.log(`  Geometries: ${sessionData.rendererStats.geometries}`);
+			console.log(`  Textures: ${sessionData.rendererStats.textures}`);
+			console.log(`  Programs: ${sessionData.rendererStats.programs}`);
+		}
+
+		// Memory hotspots
+		if (sessionData.memoryHotspots.length > 0) {
+			console.log("\n🔥 Memory Hotspots:");
+			sessionData.memoryHotspots.forEach((hotspot: string) => {
+				console.log(`  - ${hotspot}`);
+			});
+		}
+
+		// Memory leaks
+		if (sessionData.memoryLeaks > 1024 * 1024) {
+			// > 1MB
+			console.log(
+				`\n⚠️ Potential Memory Leak: ${(
+					sessionData.memoryLeaks /
+					1024 /
+					1024
+				).toFixed(2)}MB increase`
+			);
+		}
+
+		console.log(
+			"🎯 ================================================================\n"
+		);
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -595,6 +868,7 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	private async buildMeshes(): Promise<void> {
+		
 		if (!this.visible) {
 			return;
 		}
@@ -672,25 +946,112 @@ export class SchematicObject extends EventEmitter {
 			chunkHeight: 16,
 			chunkLength: 16,
 		},
-		buildMode: "immediate" | "incremental" | "instanced" = this.schematicRenderer.options.meshBuildingMode || "incremental"
+		buildMode: "immediate" | "incremental" | "instanced" = this
+			.schematicRenderer.options.meshBuildingMode || "incremental"
 	) {
-		switch (buildMode) {
-			case "immediate":
-				return this.buildSchematicMeshesImmediate(
-					schematicObject,
-					chunkDimensions
-				);
-			case "incremental":
-				return this.buildSchematicMeshesIncremental(
-					schematicObject,
-					chunkDimensions
-				);
-			case "instanced":
-				return this.buildSchematicMeshesInstanced(schematicObject);
-			default:
-				throw new Error(
-					`Invalid build mode: ${buildMode}. Use 'imediate' or 'incremental'.`
-				);
+
+		// Start performance monitoring session
+		const sessionId = performanceMonitor.startSession(this.id, buildMode);
+		if (this.schematicRenderer.renderManager?.renderer) {
+			performanceMonitor.setRenderer(
+				this.schematicRenderer.renderManager.renderer
+			);
+		}
+
+		performanceMonitor.startOperation(`schematic-build-${buildMode}`, {
+			schematicId: this.id,
+			schematicName: this.name,
+			buildMode: buildMode,
+			chunkDimensions: chunkDimensions,
+		});
+		performanceMonitor.takeMemorySnapshot(`schematic-build-${buildMode}-start`);
+
+		// Track initial memory state
+		const initialMemory = (performance as any).memory
+			? (performance as any).memory.usedJSHeapSize
+			: 0;
+
+		try {
+			let result;
+			switch (buildMode) {
+				case "immediate":
+					result = await this.buildSchematicMeshesImmediate(
+						schematicObject,
+						chunkDimensions
+					);
+					break;
+				case "incremental":
+					result = await this.buildSchematicMeshesIncremental(
+						schematicObject,
+						chunkDimensions
+					);
+					break;
+				case "instanced":
+					result = await this.buildSchematicMeshesInstanced(schematicObject);
+					break;
+				default:
+					throw new Error(
+						`Invalid build mode: ${buildMode}. Use 'imediate' or 'incremental'.`
+					);
+			}
+
+			// Track final memory state and record detailed metrics
+			const finalMemory = (performance as any).memory
+				? (performance as any).memory.usedJSHeapSize
+				: 0;
+			const memoryDelta = finalMemory - initialMemory;
+			// Record detailed chunk processing data
+			performanceMonitor.recordChunkProcessing({
+				chunkId: `${this.id}-complete`,
+				chunkCoords: [0, 0, 0],
+				processingTime:
+					performance.now() -
+						(performanceMonitor as any).getCurrentOperationStartTime?.() || 0,
+				blockCount: result.meshes.length,
+				meshCount: result.meshes.length,
+				memoryUsed: memoryDelta,
+				totalVertices: result.meshes.length * 100, // Estimate
+				totalIndices: result.meshes.length * 150, // Estimate
+				materialGroups: result.meshes.length,
+				blockTypes: ["schematic-complete"], // Summary
+				renderingPhases: [],
+				blockTypeTimings: new Map(),
+				geometryStats: {
+					facesCulled: 0,
+					facesGenerated: result.meshes.length,
+					cullingEfficiency: 0,
+					averageVerticesPerBlock: 100,
+					textureAtlasUsage: [],
+				},
+				memoryBreakdown: {
+					vertexBuffers: memoryDelta * 0.4,
+					indexBuffers: memoryDelta * 0.3,
+					materials: memoryDelta * 0.1,
+					textures: memoryDelta * 0.1,
+					other: memoryDelta * 0.1,
+				},
+			});
+
+			performanceMonitor.takeMemorySnapshot(`schematic-build-${buildMode}-end`);
+
+			// End performance monitoring session and display results
+			const sessionData = performanceMonitor.endSession(sessionId);
+			if (sessionData) {
+				this.displayPerformanceResults(sessionData);
+
+				// Dispatch event for UI components to react
+				if (typeof window !== "undefined") {
+					window.dispatchEvent(
+						new CustomEvent("schematicRenderComplete", {
+							detail: sessionData,
+						})
+					);
+				}
+			}
+
+			return result;
+		} finally {
+			performanceMonitor.endOperation(`schematic-build-${buildMode}`);
 		}
 	}
 
@@ -980,6 +1341,13 @@ export class SchematicObject extends EventEmitter {
 		);
 
 		const totalChunks = iterator.total_chunks();
+		console.log(
+			`[SchematicObject:${
+				schematicObject.id
+			}] Total chunks to process: ${totalChunks} using chunk dimensions ${JSON.stringify(
+				chunkDimensions
+			)}`
+		);
 		if (totalChunks === 0) {
 			console.log(
 				`[SchematicObject:${schematicObject.id}] No chunks to process.`
@@ -1086,7 +1454,6 @@ export class SchematicObject extends EventEmitter {
 							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
 							chunkMap.set(chunkKey, chunkMeshes);
 
-							// IMMEDIATELY apply properties and add to scene
 							this.applyPropertiesToObjects(chunkMeshes);
 							chunkMeshes.forEach((mesh) => {
 								this.group.add(mesh);
@@ -1337,6 +1704,18 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	/**
+	 * Updates rendering bounds without triggering rebuild - just emits change event
+	 */
+	private updateRenderingBounds(): void {
+		// Just emit change event, don't rebuild automatically
+		this.emitPropertyChanged("renderingBounds", {
+			min: this.renderingBounds.min.toArray(),
+			max: this.renderingBounds.max.toArray(),
+			enabled: this.renderingBounds.enabled
+		});
+	}
+
+	/**
 	 * Shows or hides the rendering bounds helper
 	 * @param visible Whether the helper should be visible
 	 */
@@ -1448,6 +1827,8 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public async rebuildMesh() {
+		performanceMonitor.startOperation(`rebuildMesh-${this.name}`);
+
 		// Show progress bar if enabled in renderer options
 		const renderer = this.sceneManager?.schematicRenderer;
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
@@ -1482,6 +1863,8 @@ export class SchematicObject extends EventEmitter {
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.hideProgressBar();
 		}
+
+		performanceMonitor.endOperation(`rebuildMesh-${this.name}`);
 	}
 
 	public getSchematicWrapper(): SchematicWrapper {
@@ -1492,6 +1875,7 @@ export class SchematicObject extends EventEmitter {
 		position: THREE.Vector3 | number[],
 		blockType: string
 	) {
+		performanceMonitor.startOperation("setBlockNoRebuild");
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
@@ -1502,6 +1886,7 @@ export class SchematicObject extends EventEmitter {
 			position.z,
 			blockType
 		);
+		performanceMonitor.endOperation("setBlockNoRebuild");
 	}
 
 	public async setBlock(position: THREE.Vector3 | number[], blockType: string) {
@@ -1517,6 +1902,7 @@ export class SchematicObject extends EventEmitter {
 	public async setBlocks(blocks: [THREE.Vector3 | number[], string][]) {
 		const affectedChunks = new Set<string>();
 		let startTime = performance.now();
+		performanceMonitor.startOperation("setBlocks");
 		console.log("Setting blocks");
 		resetPerformanceMetrics();
 
@@ -1530,6 +1916,7 @@ export class SchematicObject extends EventEmitter {
 			affectedChunks.add(`${chunkCoords.x},${chunkCoords.y},${chunkCoords.z}`);
 		}
 		console.log("Blocks set");
+		performanceMonitor.endOperation("setBlocks");
 		console.log("Time to set blocks:", performance.now() - startTime + "ms");
 
 		startTime = performance.now();

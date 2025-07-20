@@ -1,5 +1,6 @@
 import initializeNucleationWasm from "nucleation";
 await initializeNucleationWasm();
+
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
 import { SceneManager } from "./managers/SceneManager";
@@ -36,6 +37,7 @@ import { UIManager } from "./managers/UIManager";
 import { CreativeControls } from "three-creative-controls";
 
 import { Cubane } from "cubane";
+import { performanceDashboard } from "./ui/PerformanceDashboard";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
@@ -655,6 +657,27 @@ export class SchematicRenderer {
 		}
 
 		this.materialMap.clear();
+	}
+
+	/**
+	 * Shows the performance dashboard UI
+	 */
+	public showPerformanceDashboard(): void {
+		performanceDashboard.show();
+	}
+
+	/**
+	 * Hides the performance dashboard UI
+	 */
+	public hidePerformanceDashboard(): void {
+		performanceDashboard.hide();
+	}
+
+	/**
+	 * Toggles the performance dashboard UI
+	 */
+	public togglePerformanceDashboard(): void {
+		performanceDashboard.toggle();
 	}
 
 	public dispose(): void {
