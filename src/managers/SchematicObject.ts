@@ -1836,6 +1836,10 @@ export class SchematicObject extends EventEmitter {
 			renderer.uiManager.updateProgress(0.1, "Disposing old meshes...");
 		}
 
+		console.log(`[rebuildMesh] Starting rebuild for ${this.name}`);
+		console.log(`[rebuildMesh] meshes array length: ${this.meshes.length}`);
+		console.log(`[rebuildMesh] group children count: ${this.group.children.length}`);
+		
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh as THREE.Object3D);
@@ -1846,9 +1850,30 @@ export class SchematicObject extends EventEmitter {
 				mesh.material.dispose();
 			}
 		});
+		
+		console.log(`[rebuildMesh] After removing meshes, group children: ${this.group.children.length}`);
+		
+		// Also clear ALL children from the group (in case some were missed)
+		let removedCount = 0;
+		while (this.group.children.length > 0) {
+			const child = this.group.children[0];
+			this.group.remove(child);
+			removedCount++;
+			if (child instanceof THREE.Mesh) {
+				child.geometry?.dispose();
+				if (Array.isArray(child.material)) {
+					child.material.forEach((m) => m?.dispose());
+				} else {
+					child.material?.dispose();
+				}
+			}
+		}
+		console.log(`[rebuildMesh] Removed ${removedCount} additional children`);
 
 		// Clear chunk meshes and update progress
 		this.chunkMeshes.clear();
+		this.meshes = [];
+		console.log(`[rebuildMesh] Cleared all data structures`);
 
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.updateProgress(0.2, "Building new meshes...");

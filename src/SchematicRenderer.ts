@@ -769,9 +769,25 @@ export class SchematicRenderer {
 	/**
 	 * Syncs simulation state back to schematic and rebuilds meshes
 	 */
-	public syncSimulation(): void {
-		if (this.simulationManager?.syncToSchematic()) {
-			this.rebuildAllChunks();
+	public async syncSimulation(): Promise<void> {
+		console.log("[syncSimulation] Starting sync...");
+		const updatedSchematic = this.simulationManager?.syncToSchematic();
+		console.log("[syncSimulation] Got updated schematic:", !!updatedSchematic);
+		if (updatedSchematic) {
+			// Update the schematic wrapper and rebuild mesh
+			const firstSchematic = this.schematicManager?.getFirstSchematic();
+			console.log("[syncSimulation] Got first schematic:", !!firstSchematic);
+			if (firstSchematic) {
+				console.log("[syncSimulation] Replacing schematic wrapper...");
+				firstSchematic.schematicWrapper = updatedSchematic;
+				console.log("[syncSimulation] Starting mesh rebuild...");
+				await firstSchematic.rebuildMesh();
+				console.log("[syncSimulation] Mesh rebuilt after sync");
+			} else {
+				console.error("[syncSimulation] No first schematic found!");
+			}
+		} else {
+			console.error("[syncSimulation] No updated schematic returned from sync!");
 		}
 	}
 

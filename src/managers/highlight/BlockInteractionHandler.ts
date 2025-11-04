@@ -123,16 +123,15 @@ export class BlockInteractionHandler {
 		}
 		
 		console.log(
-			`Block at ${position.x}, ${position.y}, ${position.z} interacted - updating schematic and rebuilding ALL meshes`
+			`Block at ${position.x}, ${position.y}, ${position.z} interacted - updating schematic`
 		);
 		
 		// Replace the schematic wrapper with the updated one
 		schematicObject.schematicWrapper = updatedSchematic;
 		
-		// Force a full rebuild since we replaced the wrapper
-		console.log("Starting full mesh rebuild...");
+		// Rebuild the mesh to show the change
 		await schematicObject.rebuildMesh();
-		console.log("Full mesh rebuild complete!");
+		console.log("Mesh rebuilt after interaction");
 	}
 
 	private async toggleLever(

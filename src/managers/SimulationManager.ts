@@ -129,34 +129,21 @@ export class SimulationManager {
 			const leverStateAfterUse = this.simulationWorld.get_lever_power(x, y, z);
 			SimulationLogger.info(`⚡ After on_use_block: leverPower=${leverStateAfterUse}`);
 			
-			// Tick to process redstone propagation
-			this.simulationWorld.tick(2);
-			SimulationLogger.info("✓ Ticked 2 times for redstone propagation");
-			
-			// Flush to ensure the changes are visible
+			// Flush to ensure the changes are visible (but don't tick - that's controlled separately)
 			this.simulationWorld.flush();
-			SimulationLogger.info("✓ Flush complete");
+			SimulationLogger.info("✓ Flush complete (no ticks - use manual tick or auto-tick for propagation)");
 			
-			// Check lever state again
-			const leverStateAfterTick = this.simulationWorld.get_lever_power(x, y, z);
-			SimulationLogger.info(`⚡ After tick/flush: leverPower=${leverStateAfterTick}`);
-			
-			// Sync simulation state to schematic FIRST
-			SimulationLogger.info("🔄 Syncing simulation state to schematic...");
+			// Get the updated schematic directly (without syncing yet - caller will handle mesh rebuild)
+			SimulationLogger.info("🔄 Getting updated schematic from simulation...");
 			this.simulationWorld.sync_to_schematic();
+			const updatedSchematic = this.simulationWorld.get_schematic();
 			
-			// Now check via get_schematic
-			const simSchematic = this.simulationWorld.get_schematic();
-			const simBlock = simSchematic.get_block_with_properties(x, y, z);
+			// Check the lever state
+			const simBlock = updatedSchematic.get_block_with_properties(x, y, z);
 			if (simBlock) {
 				const simProps = simBlock.properties();
-				SimulationLogger.info(`📘 After sync, via get_schematic: powered=${simProps.powered}`);
+				SimulationLogger.info(`📘 Lever state: powered=${simProps.powered}`);
 			}
-			
-			SimulationLogger.info("Getting updated schematic...");
-
-			// Get the updated schematic from the simulation
-			const updatedSchematic = this.syncToSchematic();
 
 			this.eventEmitter.emit("blockInteracted", {
 				position: [x, y, z],
@@ -210,6 +197,9 @@ export class SimulationManager {
 		try {
 			SimulationLogger.info("Syncing simulation state back to schematic...");
 			
+			// Sync the simulation state to the schematic first
+			this.simulationWorld.sync_to_schematic();
+			
 			// Get the updated schematic from simulation world
 			const updatedSchematic = this.simulationWorld.get_schematic();
 			
@@ -240,6 +230,7 @@ export class SimulationManager {
 				updatedSchematic,
 			});
 
+			console.log("[syncToSchematic] Returning updated schematic");
 			return updatedSchematic;
 		} catch (error) {
 			SimulationLogger.error("Failed to sync simulation:", error);
