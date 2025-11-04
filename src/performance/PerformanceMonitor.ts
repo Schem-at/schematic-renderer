@@ -483,6 +483,30 @@ export class PerformanceMonitor {
         this.sessions.clear();
         this.currentSession = null;
     }
+
+    /**
+     * Clear all sessions and reset all performance monitoring data
+     */
+    public clearAllSessions(): void {
+        // Stop any ongoing monitoring
+        this.stopMemoryMonitoring();
+        this.stopFPSMonitoring();
+        
+        // Clear all sessions data
+        this.sessions.clear();
+        this.currentSession = null;
+        
+        // Reset tracking state
+        this.timingStack = [];
+        this.baselineMemory = null;
+        this.frameCount = 0;
+        this.lastTime = performance.now();
+        
+        // Clear any stored FPS data
+        delete (this as any).latestFPS;
+        
+        console.log("[PerformanceMonitor] Cleared all sessions and reset monitoring state.");
+    }
     
     // Utility methods for analysis
     public getMemoryUsageOverTime(sessionId: string): { time: number; memory: number }[] {

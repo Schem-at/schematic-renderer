@@ -17,6 +17,17 @@ export interface ProgressBarOptions {
 	theme?: "light" | "dark" | "custom";
 }
 
+export interface SimulationOptions {
+	// Enable redstone simulation
+	enableSimulation?: boolean;
+	// Auto-tick the simulation at a fixed rate (in ticks per second)
+	autoTickSpeed?: number;
+	// Automatically initialize simulation when schematic is loaded
+	autoInitialize?: boolean;
+	// Sync simulation state back to schematic automatically after ticks
+	autoSync?: boolean;
+}
+
 export interface SchematicRendererOptions {
 	backgroundColor?: number | string; // Accepts hex color or CSS color string
 	hdri?: string;
@@ -48,6 +59,8 @@ export interface SchematicRendererOptions {
 	dragAndDropOptions?: DragAndDropManagerOptions;
 	gizmoOptions?: GizmoManagerOptions;
 	cameraOptions?: CameraManagerOptions;
+	// Simulation options
+	simulationOptions?: SimulationOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -91,6 +104,12 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	cameraOptions: {
 		position: [5, 5, 5],
 	},
+	simulationOptions: {
+		enableSimulation: false,
+		autoTickSpeed: 0,
+		autoInitialize: false,
+		autoSync: true,
+	},
 	resourcePackBlobs: {},
 };
 
@@ -122,4 +141,11 @@ export interface Callbacks {
 	// File handling callbacks
 	onInvalidFileType?: (file: File) => void | Promise<void>;
 	onLoadingProgress?: (file: File, progress: number) => void | Promise<void>;
+
+	// Simulation callbacks
+	onSimulationInitialized?: (schematicName: string) => void;
+	onSimulationTicked?: (tickCount: number) => void;
+	onSimulationSynced?: () => void;
+	onSimulationError?: (error: Error) => void;
+	onBlockInteracted?: (x: number, y: number, z: number) => void;
 }

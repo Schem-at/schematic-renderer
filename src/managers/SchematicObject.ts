@@ -2059,6 +2059,11 @@ export class SchematicObject extends EventEmitter {
 		await this.rebuildChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
 	}
 
+	public rebuildAllChunks(): void {
+		// Rebuild all chunks by triggering a full mesh rebuild
+		this.rebuildMesh();
+	}
+
 	private getChunkCoordinates(position: THREE.Vector3): {
 		x: number;
 		y: number;

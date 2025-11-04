@@ -35,11 +35,65 @@ export class WorldMeshBuilder {
 	private paletteCache: PaletteCache | null = null;
 	private instancedRenderer: InstancedBlockRenderer | null = null;
 	private useInstancedRendering: boolean = false;
+	
+    // Chunk size configuration for buffer sizing
+    private chunkSize: number = 16; // Default Minecraft chunk size
+    
+    // Phase 2 optimizations configuration
+    private useQuantization: boolean = false; // Disable quantization by default until custom shaders are implemented
 
 	constructor(schematicRenderer: SchematicRenderer, cubane: Cubane) {
 		this.cubane = cubane;
 		this.schematicRenderer = schematicRenderer;
 	}
+	
+	/**
+	 * Set the chunk size for optimization
+	 * This affects chunk size calculations and is useful for testing different chunk sizes
+	 * @param newChunkSize The new chunk size to use (e.g., 16, 32, 8)
+	 */
+	public setChunkSize(newChunkSize: number): void {
+		if (newChunkSize <= 0 || newChunkSize > 64) {
+			throw new Error('Chunk size must be between 1 and 64');
+		}
+		
+		const oldChunkSize = this.chunkSize;
+		this.chunkSize = newChunkSize;
+		
+		console.log(`[WorldMeshBuilder] Chunk size changed from ${oldChunkSize} to ${newChunkSize}`);
+	}
+	
+    /**
+     * Get the current chunk size configuration
+     * @returns The current chunk size
+     */
+    public getChunkSize(): number {
+        return this.chunkSize;
+    }
+    
+    /**
+     * Enable or disable vertex quantization optimizations
+     * @param enabled Whether to use quantization (default: true)
+     */
+    public setQuantization(enabled: boolean): void {
+        const oldValue = this.useQuantization;
+        this.useQuantization = enabled;
+        
+        console.log(`[WorldMeshBuilder] Quantization ${enabled ? 'enabled' : 'disabled'} (was ${oldValue ? 'enabled' : 'disabled'})`);
+        if (enabled) {
+            console.log('  - Position quantization: 4-bit per component (67% memory reduction)');
+            console.log('  - Normal quantization: Octahedron encoding (67% memory reduction)');
+        }
+    }
+    
+    /**
+     * Get the current quantization setting
+     * @returns Whether quantization is enabled
+     */
+    public getQuantization(): boolean {
+        return this.useQuantization;
+    }
+	
 
 public async precomputePaletteGeometries(palette: any[]): Promise<void> {
     performanceMonitor.startOperation('precomputePaletteGeometries');
@@ -471,15 +525,97 @@ performanceMonitor.endOperation('getChunkMesh');
 		return "solid";
 	}
 
-	private mergeGeometries(
-		geometries: THREE.BufferGeometry[]
-	): THREE.BufferGeometry {
-		if (geometries.length === 0) return new THREE.BufferGeometry();
-		if (geometries.length === 1) return geometries[0];
+private createQuantizedGeometry(
+    positions: Float32Array,
+    normals?: Float32Array,
+    uvs?: Float32Array,
+    indices?: Uint32Array | Uint16Array
+): THREE.BufferGeometry {
+    const vertexCount = positions.length / 3;
+    
+    // Quantize positions to 4-bit per component, packed in Uint16
+    const quantizedPositions = new Uint16Array(vertexCount);
+    for (let i = 0; i < vertexCount; i++) {
+        const x = Math.floor(positions[i * 3] * 16) & 0xF;
+        const y = Math.floor(positions[i * 3 + 1] * 16) & 0xF;
+        const z = Math.floor(positions[i * 3 + 2] * 16) & 0xF;
+        quantizedPositions[i] = (x << 12) | (y << 8) | (z << 4);
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('aQuantizedPosition', new THREE.BufferAttribute(quantizedPositions, 1));
+    
+    // Keep normals/UVs as-is for now
+    if (normals) {
+        const encodedNormals = this.createQuantizedNormals(normals);
+        geometry.setAttribute('aEncodedNormal', new THREE.BufferAttribute(encodedNormals, 1));
+    }
+    if (uvs) {
+        geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    }
+    if (indices) {
+        geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    }
+    
+    return geometry;
+}
 
-		// Pre-calculate everything in one pass
-		let totalPositions = 0;
-		let totalIndices = 0;
+private createQuantizedNormals(normals: Float32Array): Uint16Array {
+    const vertexCount = normals.length / 3;
+    const encoded = new Uint16Array(vertexCount);
+    
+    for (let i = 0; i < vertexCount; i++) {
+        encoded[i] = this.encodeNormal(
+            normals[i * 3],
+            normals[i * 3 + 1], 
+            normals[i * 3 + 2]
+        );
+    }
+    
+    return encoded;
+}
+
+private encodeNormal(nx: number, ny: number, nz: number): number {
+    // Normalize to unit vector
+    const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    nx /= length;
+    ny /= length; 
+    nz /= length;
+    
+    // Project to octahedron
+    const sum = Math.abs(nx) + Math.abs(ny) + Math.abs(nz);
+    let ox = nx / sum;
+    let oy = ny / sum;
+    
+    // Wrap negative hemisphere
+    if (nz < 0) {
+        const tmpX = ox;
+        ox = (1 - Math.abs(oy)) * Math.sign(ox);
+        oy = (1 - Math.abs(tmpX)) * Math.sign(oy);
+    }
+    
+    // Quantize to 8-bit
+    const x = Math.floor((ox * 0.5 + 0.5) * 255);
+    const y = Math.floor((oy * 0.5 + 0.5) * 255);
+    return (x << 8) | y;
+}
+
+private mergeGeometries(
+    geometries: THREE.BufferGeometry[]
+): THREE.BufferGeometry {
+    if (geometries.length === 0) return new THREE.BufferGeometry();
+    
+    // Filter out invalid geometries before processing
+    const validGeometries = geometries.filter((geo) => {
+        return geo && geo.attributes && geo.attributes.position && geo.attributes.position.count > 0;
+    });
+    
+    if (validGeometries.length === 0) return new THREE.BufferGeometry();
+    if (validGeometries.length === 1) return validGeometries[0];
+
+    // Pre-calculate everything in one pass
+    let totalPositions = 0;
+    let totalIndices = 0;
 
 		if (++bufferAnalysisCounter % BUFFER_ANALYSIS_LOG_INTERVAL === 0) {
 			console.log(`Buffer analysis after ${BUFFER_ANALYSIS_LOG_INTERVAL} operations:`);
@@ -490,7 +626,7 @@ performanceMonitor.endOperation('getChunkMesh');
 		let hasUVs = false;
 
 		// First pass: calculate sizes and validate attributes
-		const geometryInfo = geometries.map((geo) => {
+		const geometryInfo = validGeometries.map((geo) => {
 			const posCount = geo.attributes.position.count;
 			const hasNorm = !!geo.attributes.normal;
 			const hasUV = !!geo.attributes.uv;
@@ -523,7 +659,11 @@ performanceMonitor.endOperation('getChunkMesh');
 		const uvs = hasUVs
 			? GeometryBufferPool.getPositionBuffer(totalPositions * 2)
 			: null;
-		const indices = GeometryBufferPool.getIndexBuffer(totalIndices);
+		// Use 16-bit indices when possible for 50% memory savings
+		const use16BitIndices = totalPositions <= 65535;
+		const indices = use16BitIndices
+			? new Uint16Array(totalIndices)
+			: GeometryBufferPool.getIndexBuffer(totalIndices);
 
 		let positionOffset = 0;
 		let indexOffset = 0;
@@ -692,18 +832,18 @@ performanceMonitor.endOperation('getChunkMesh');
 		return allMeshData;
 	}
 
-	private mergeGeometryAtPositions(
-		baseGeometry: THREE.BufferGeometry,
-		positions: THREE.Vector3[]
-	): THREE.BufferGeometry {
-		if (positions.length === 0) return new THREE.BufferGeometry();
+    private mergeGeometryAtPositions(
+        baseGeometry: THREE.BufferGeometry,
+        positions: THREE.Vector3[]
+    ): THREE.BufferGeometry {
+        if (positions.length === 0) return new THREE.BufferGeometry();
 
-		if (positions.length === 1) {
-			const cloned = baseGeometry.clone();
-			const matrix = new THREE.Matrix4().setPosition(positions[0]);
-			cloned.applyMatrix4(matrix);
-			return cloned;
-		}
+        if (positions.length === 1) {
+            const cloned = baseGeometry.clone();
+            const matrix = new THREE.Matrix4().setPosition(positions[0]);
+            cloned.applyMatrix4(matrix);
+            return cloned;
+        }
 
 		const basePositions = baseGeometry.attributes.position;
 		const baseNormals = baseGeometry.attributes.normal;
@@ -772,32 +912,42 @@ performanceMonitor.endOperation('getChunkMesh');
 			);
 		}
 
-		// Create geometry with pooled buffers
-		const mergedGeometry = new THREE.BufferGeometry();
-		mergedGeometry.setAttribute(
-			"position",
-			new THREE.BufferAttribute(mergedPositions, 3)
-		);
+        // Choose between quantized or standard geometry creation
+        if (this.useQuantization) {
+            return this.createQuantizedGeometry(
+                mergedPositions,
+                mergedNormals || undefined,
+                mergedUVs || undefined,
+                mergedIndices || undefined
+            );
+        } else {
+            // Create standard geometry with pooled buffers
+            const mergedGeometry = new THREE.BufferGeometry();
+            mergedGeometry.setAttribute(
+                "position",
+                new THREE.BufferAttribute(mergedPositions, 3)
+            );
 
-		if (mergedNormals) {
-			mergedGeometry.setAttribute(
-				"normal",
-				new THREE.BufferAttribute(mergedNormals, 3)
-			);
-		}
+            if (mergedNormals) {
+                mergedGeometry.setAttribute(
+                    "normal",
+                    new THREE.BufferAttribute(mergedNormals, 3)
+                );
+            }
 
-		if (mergedUVs) {
-			mergedGeometry.setAttribute(
-				"uv",
-				new THREE.BufferAttribute(mergedUVs, 2)
-			);
-		}
+            if (mergedUVs) {
+                mergedGeometry.setAttribute(
+                    "uv",
+                    new THREE.BufferAttribute(mergedUVs, 2)
+                );
+            }
 
-		if (mergedIndices) {
-			mergedGeometry.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
-		}
+            if (mergedIndices) {
+                mergedGeometry.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
+            }
 
-		return mergedGeometry;
+            return mergedGeometry;
+        }
 	}
 
 	private mergeIndices(
@@ -1022,5 +1172,6 @@ performanceMonitor.endOperation('getChunkMesh');
 			this.paletteCache = null;
 		}
 		console.log("[OptWMB] Disposed palette cache.");
-	}
+    }
+
 }

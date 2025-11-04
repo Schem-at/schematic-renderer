@@ -43,4 +43,13 @@ export class GeometryBufferPool {
             pool.push(buffer);
         }
     }
+
+    /**
+     * Clear all pooled buffers to free memory
+     */
+    static clear(): void {
+        this.positionPools.clear();
+        this.indexPools.clear();
+        console.log("[GeometryBufferPool] Cleared all pooled buffers.");
+    }
 }

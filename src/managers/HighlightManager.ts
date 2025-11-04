@@ -2,6 +2,7 @@
 import { Highlight } from "./highlight/Highlight";
 import { HoverHighlight } from "./highlight/HoverHighlight";
 import { AnnotationHighlight } from "./highlight/AnnotationHighlight";
+import { ClickInteractionHandler } from "./highlight/ClickInteractionHandler";
 import { SchematicRenderer } from "../SchematicRenderer";
 
 export class HighlightManager {
@@ -20,6 +21,10 @@ export class HighlightManager {
 
 		const annotationHighlight = new AnnotationHighlight(this.schematicRenderer);
 		this.addHighlight(annotationHighlight);
+
+		// Add click interaction handler for block interactions
+		const clickHandler = new ClickInteractionHandler(this.schematicRenderer);
+		this.addHighlight(clickHandler);
 
 		// Add other highlights as needed
 	}

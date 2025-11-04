@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redstone Simulation Demo</title>
+
+    <!-- DaisyUI -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+        rel="stylesheet"
+        type="text/css"
+    />
+
+    <!-- Tailwind CSS with DaisyUI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Include Material Icons -->
+    <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+    />
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: #1e1e1e;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            background: #252525;
+        }
+
+        .sidebar-content {
+            padding: 20px;
+            flex: 1;
+        }
+
+        .control-section {
+            margin-bottom: 24px;
+        }
+
+        .control-section h3 {
+            margin-bottom: 12px;
+            color: #60a5fa;
+            font-size: 1em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .control-button {
+            width: 100%;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-active {
+            background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .status-inactive {
+            background-color: #6b7280;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-label {
+            color: #9ca3af;
+        }
+
+        .stat-value {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 3px solid #3b82f6;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2 style="color: #60a5fa; margin: 0; font-size: 1.2em; display: flex; align-items: center; gap: 8px;">
+                <span class="material-icons">settings_input_component</span>
+                <span>Redstone Simulation</span>
+            </h2>
+        </div>
+
+        <div class="sidebar-content">
+
+        <!-- Status Section -->
+        <div class="control-section">
+            <h3>Status</h3>
+            <div class="stat-item">
+                <span class="stat-label">Simulation</span>
+                <span class="stat-value">
+                    <span id="simStatus" class="status-indicator status-inactive"></span>
+                    <span id="simStatusText">Inactive</span>
+                </span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Ticks</span>
+                <span class="stat-value" id="tickCount">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Auto-tick</span>
+                <span class="stat-value" id="autoTickStatus">Off</span>
+            </div>
+        </div>
+
+        <!-- Control Section -->
+        <div class="control-section">
+            <h3>Controls</h3>
+            <button id="initBtn" class="btn btn-primary control-button">
+                <span class="material-icons">play_arrow</span>
+                Initialize Simulation
+            </button>
+            <button id="tickBtn" class="btn btn-secondary control-button" disabled>
+                <span class="material-icons">skip_next</span>
+                Tick Once
+            </button>
+            <button id="tick10Btn" class="btn btn-secondary control-button" disabled>
+                <span class="material-icons">fast_forward</span>
+                Tick 10x
+            </button>
+            <button id="autoTickBtn" class="btn btn-accent control-button" disabled>
+                <span class="material-icons">autorenew</span>
+                Toggle Auto-tick
+            </button>
+            <button id="syncBtn" class="btn btn-info control-button" disabled>
+                <span class="material-icons">sync</span>
+                Sync to Schematic
+            </button>
+            <button id="resetBtn" class="btn btn-warning control-button" disabled>
+                <span class="material-icons">restart_alt</span>
+                Reset Simulation
+            </button>
+        </div>
+
+        <!-- Settings Section -->
+        <div class="control-section">
+            <h3>Settings</h3>
+            <div style="margin-bottom: 12px;">
+                <label class="stat-label" for="tickSpeed">Tick Speed (TPS): <span id="tickSpeedValue">10</span></label>
+                <input type="range" id="tickSpeed" min="1" max="20" value="10" class="range range-primary" style="width: 100%;" />
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="info-box">
+            <strong>How to use:</strong><br>
+            1. Click Initialize Simulation<br>
+            2. Click levers in 3D view to toggle<br>
+            3. Watch console for sim logs<br>
+            4. Sync to update 3D visuals
+        </div>
+        </div>
+    </div>
+
+    <script type="module" src="./scripts/simulation-demo.ts"></script>
+</body>
+</html>

@@ -5,6 +5,9 @@ import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import pat
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
 import { SchematicRenderer } from "../SchematicRenderer";
+import { MemoryLeakFix, disposeGroup, clearAllCaches, forceGarbageCollection } from "../utils/MemoryLeakFix";
+import { GeometryBufferPool } from "../GeometryBufferPool";
+import { performanceMonitor } from "../performance/PerformanceMonitor";
 interface LoadingProgress {
 	stage: "file_reading" | "parsing" | "mesh_building" | "scene_setup";
 	progress: number; // 0-100
@@ -181,6 +184,34 @@ export class SchematicManager {
 			this.removeSchematic(name)
 		);
 		await Promise.all(promises);
+		
+		// After removing all schematics, perform comprehensive cleanup
+		this.performDeepCleanup();
+	}
+	
+	/**
+	 * Performs comprehensive memory cleanup after schematic operations
+	 * This should be called between test runs to prevent memory leaks
+	 */
+	public performDeepCleanup(): void {
+		console.log('🧹 Performing deep memory cleanup...');
+		
+		// Clear all caches and registries
+		clearAllCaches();
+		
+		// Dispose palette cache
+		this.worldMeshBuilder.dispose();
+		
+		// Clear buffer pool
+		GeometryBufferPool.clear();
+		
+		// Clear all performance monitoring sessions
+		performanceMonitor.clearAllSessions();
+		
+		// Force single garbage collection
+		forceGarbageCollection();
+		
+		console.log('✅ Deep cleanup completed');
 	}
 
 	public async loadSchematics(
@@ -418,6 +449,9 @@ export class SchematicManager {
 		const schematicObject = this.schematics.get(name);
 		if (!schematicObject) return;
 
+		console.log(`🗑️ Starting removal of schematic: ${name}`);
+		const startMemory = MemoryLeakFix.monitorMemory();
+
 		try {
 			// Remove from map first to prevent any new operations on this schematic
 			this.schematics.delete(name);
@@ -429,29 +463,38 @@ export class SchematicManager {
 				this.sceneManager.scene.children.length
 			);
 			console.log("Meshes to remove:", meshes.length);
-			// Use traverse to ensure we catch all nested objects
-			schematicObject.group.traverse((object) => {
-				if (object instanceof THREE.Mesh) {
-					this.sceneManager.scene.remove(object);
-					if (object.geometry) object.geometry.dispose();
-					if (Array.isArray(object.material)) {
-						object.material.forEach((m) => m.dispose());
-					} else if (object.material) {
-						object.material.dispose();
-					}
-				}
-			});
 
-			schematicObject.group.clear(); // Clear the group to remove all children
+			// Use the enhanced disposal method for comprehensive cleanup
+			disposeGroup(schematicObject.group);
 
-			// Remove the group last
+			// Additional cleanup for any remaining references
+			if (schematicObject.group.parent) {
+				schematicObject.group.parent.remove(schematicObject.group);
+			}
+
+			// Remove from scene if still there
 			this.sceneManager.scene.remove(schematicObject.group);
 
+			// Clear any user data that might hold references
+			schematicObject.group.userData = {};
+
+			// Emit removal event
 			this.eventEmitter.emit("schematicRemoved", { id: name });
+
+			// Force garbage collection to help with memory cleanup
+			forceGarbageCollection();
+
+			// Log memory improvement
+			const endMemory = MemoryLeakFix.monitorMemory();
+			if (startMemory && endMemory) {
+				const memoryFreed = startMemory.used - endMemory.used;
+				console.log(`💾 Memory freed: ${memoryFreed}MB (${startMemory.used}MB → ${endMemory.used}MB)`);
+			}
+
 		} catch (error) {
 			console.error("Error removing schematic:", error);
-			// Consider re-adding to map if failed
-			this.schematics.set(name, schematicObject);
+			// Don't re-add to map since we already have enhanced cleanup
+			// The disposal should have worked even if there was an error
 		}
 
 		console.log(

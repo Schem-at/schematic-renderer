@@ -33,6 +33,8 @@ import {
 } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
+import { SimulationManager } from "./managers/SimulationManager";
+import { BlockInteractionHandler } from "./managers/highlight/BlockInteractionHandler";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
@@ -54,6 +56,8 @@ export class SchematicRenderer {
 	public schematicManager: SchematicManager | undefined;
 	public worldMeshBuilder: WorldMeshBuilder | undefined;
 	public gizmoManager: GizmoManager | undefined;
+	public simulationManager: SimulationManager | undefined;
+	public blockInteractionHandler: BlockInteractionHandler | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
@@ -255,6 +259,53 @@ export class SchematicRenderer {
 	}
 
 	private initializeInteractionComponents(): void {
+		// Initialize simulation manager if enabled
+		if (this.options.simulationOptions?.enableSimulation) {
+			this.simulationManager = new SimulationManager(this.eventEmitter);
+
+			// Hook up simulation callbacks through eventEmitter
+			this.eventEmitter.on(
+				"simulationInitialized",
+				() => {
+					if (this.schematicManager) {
+						const firstSchematic = this.schematicManager.getFirstSchematic();
+						if (firstSchematic) {
+							this.options.callbacks?.onSimulationInitialized?.(firstSchematic.id);
+						}
+					}
+				}
+			);
+			this.eventEmitter.on("blockInteracted", (data: any) => {
+				const [x, y, z] = data.position || [0, 0, 0];
+				this.options.callbacks?.onBlockInteracted?.(x, y, z);
+			});
+			this.eventEmitter.on("simulationTicked", (data: any) => {
+				this.options.callbacks?.onSimulationTicked?.(data.tickCount || 0);
+			});
+			this.eventEmitter.on("simulationSynced", () => {
+				this.options.callbacks?.onSimulationSynced?.();
+				// Rebuild meshes after sync
+				this.rebuildAllChunks();
+			});
+			this.eventEmitter.on("simulationError", (data: any) => {
+				this.options.callbacks?.onSimulationError?.(data.error);
+			});
+
+			// Configure auto-tick if specified
+			if (this.options.simulationOptions.autoTickSpeed) {
+				this.simulationManager.setTickSpeed(this.options.simulationOptions.autoTickSpeed);
+			}
+		}
+
+		// Initialize block interaction handler
+		if (this.schematicManager) {
+			this.blockInteractionHandler = new BlockInteractionHandler(
+				this.eventEmitter,
+				this.schematicManager,
+				this.simulationManager
+			);
+		}
+
 		if (this.options.enableInteraction) {
 			const interactionOptions: InteractionManagerOptions = {
 				enableSelection:
@@ -326,6 +377,8 @@ export class SchematicRenderer {
 
 			try {
 				await this.cubane.loadResourcePack(blob as Blob);
+				await this.cubane.getAssetLoader().buildTextureAtlas();
+
 				console.log(
 					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
 				);
@@ -572,6 +625,7 @@ export class SchematicRenderer {
 		// Also load directly into Cubane for immediate use
 		try {
 			await this.cubane.loadResourcePack(file);
+			await this.cubane.getAssetLoader().buildTextureAtlas();
 		} catch (error) {
 			console.error("Failed to load new resource pack into Cubane:", error);
 		}
@@ -678,6 +732,92 @@ export class SchematicRenderer {
 	 */
 	public togglePerformanceDashboard(): void {
 		performanceDashboard.toggle();
+	}
+
+	/**
+	 * Initializes simulation for the first schematic
+	 */
+	public async initializeSimulation(): Promise<boolean> {
+		if (!this.simulationManager) {
+			console.warn("Simulation is not enabled");
+			return false;
+		}
+
+		const firstSchematic = this.schematicManager?.getFirstSchematic();
+		if (!firstSchematic) {
+			console.warn("No schematic loaded to simulate");
+			return false;
+		}
+
+		const schematic = firstSchematic.getSchematicWrapper();
+		if (!schematic) {
+			console.warn("Could not get schematic wrapper");
+			return false;
+		}
+
+		return await this.simulationManager.initializeSimulation(schematic);
+	}
+
+	/**
+	 * Manually ticks the simulation
+	 * @param numTicks Number of ticks to advance (default: 1)
+	 */
+	public tickSimulation(numTicks: number = 1): void {
+		this.simulationManager?.tick(numTicks);
+	}
+
+	/**
+	 * Syncs simulation state back to schematic and rebuilds meshes
+	 */
+	public syncSimulation(): void {
+		if (this.simulationManager?.syncToSchematic()) {
+			this.rebuildAllChunks();
+		}
+	}
+
+	/**
+	 * Starts auto-ticking the simulation
+	 */
+	public startAutoTick(): void {
+		this.simulationManager?.startAutoTick();
+	}
+
+	/**
+	 * Stops auto-ticking the simulation
+	 */
+	public stopAutoTick(): void {
+		this.simulationManager?.stopAutoTick();
+	}
+
+	/**
+	 * Resets the simulation
+	 */
+	public async resetSimulation(): Promise<boolean> {
+		if (!this.simulationManager) return false;
+		const success = await this.simulationManager.resetSimulation();
+		if (success) {
+			this.rebuildAllChunks();
+		}
+		return success;
+	}
+
+	/**
+	 * Gets the current simulation state
+	 */
+	public getSimulationState() {
+		return this.simulationManager?.getState();
+	}
+
+	/**
+	 * Rebuilds all chunks in all schematics
+	 */
+	private rebuildAllChunks(): void {
+		const schematics = this.schematicManager?.getAllSchematics();
+		if (!schematics) return;
+
+		for (const schematic of schematics) {
+			schematic.rebuildAllChunks();
+		}
 	}
 
 	public dispose(): void {
