@@ -76,8 +76,8 @@ export class ClickInteractionHandler implements Highlight {
 			const worldHitPoint = new THREE.Vector3();
 			worldHitPoint.copy(intersect.point);
 
-			console.log("%c🎯 [RAYCAST] Click detected", "color: #ff6b6b; font-weight: bold;");
-			console.log("  World hit point:", worldHitPoint.toArray());
+			// console.log("%c🎯 [RAYCAST] Click detected", "color: #ff6b6b; font-weight: bold;");
+			// console.log("  World hit point:", worldHitPoint.toArray());
 			
 			// Draw ray
 			const rayOrigin = this.raycaster.ray.origin;
@@ -107,7 +107,7 @@ export class ClickInteractionHandler implements Highlight {
 				if (schematic.group === intersect.object.parent || 
 					schematic.group.getObjectById(intersect.object.id)) {
 					targetSchematic = schematic;
-					console.log("  Found schematic:", schematic.id);
+					// console.log("  Found schematic:", schematic.id);
 					break;
 				}
 			}
@@ -117,22 +117,22 @@ export class ClickInteractionHandler implements Highlight {
 				return;
 			}
 
-			console.log("  Schematic group position:", targetSchematic.group.position.toArray());
-			console.log("  Schematic position:", targetSchematic.position.toArray());
-			console.log("  Intersected object position:", intersect.object.position.toArray());
-			console.log("  Intersected object parent:", intersect.object.parent?.position.toArray());
+			// console.log("  Schematic group position:", targetSchematic.group.position.toArray());
+			// console.log("  Schematic position:", targetSchematic.position.toArray());
+			// console.log("  Intersected object position:", intersect.object.position.toArray());
+			// console.log("  Intersected object parent:", intersect.object.parent?.position.toArray());
 
 			// Convert world hit point to local coordinates using the MESH's transformation
 			const localHitPoint = worldHitPoint.clone();
 			intersect.object.worldToLocal(localHitPoint);
-			console.log("  Local hit point in mesh space:", localHitPoint.toArray());
+			// console.log("  Local hit point in mesh space:", localHitPoint.toArray());
 			
 			// Now convert from mesh space to schematic space
 			// The mesh is a child of the group, so we need to account for that
 			const meshLocalToGroup = localHitPoint.clone();
 			intersect.object.localToWorld(meshLocalToGroup);
 			targetSchematic.group.worldToLocal(meshLocalToGroup);
-			console.log("  Local hit point in schematic space (raw):", meshLocalToGroup.toArray());
+			// console.log("  Local hit point in schematic space (raw):", meshLocalToGroup.toArray());
 			
 			// Minecraft blocks are rendered offset by 0.5 in all axes
 			// Subtract 0.5 from all coordinates to get schematic block coordinates
@@ -140,47 +140,44 @@ export class ClickInteractionHandler implements Highlight {
 			schematicCoords.x -= 0.5;
 			schematicCoords.y -= 0.5;
 			schematicCoords.z -= 0.5;
-			console.log("  Local hit point after offset adjustment:", schematicCoords.toArray());
+			// console.log("  Local hit point after offset adjustment:", schematicCoords.toArray());
 			
 			// Floor in schematic space to get the block coordinates
 			const localPosition = schematicCoords.clone().floor();
-			console.log("  Local position (floored):", localPosition.toArray());
+			// console.log("  Local position (floored):", localPosition.toArray());
 			
 			// Adjust for face hits - when we hit a boundary, select the block on the solid side
 			if (intersect.face) {
-				const faceNormal = intersect.face.normal;
-				console.log("  Face normal:", faceNormal.toArray());
+					const faceNormal = intersect.face.normal;
+					// console.log("  Face normal:", faceNormal.toArray());
 				
 				const fractional = new THREE.Vector3(
 					schematicCoords.x - localPosition.x,
 					schematicCoords.y - localPosition.y,
 					schematicCoords.z - localPosition.z
 				);
-				console.log("  Fractional position in block:", fractional.toArray());
+					// console.log("  Fractional position in block:", fractional.toArray());
 				
 				// Transform face normal to local space
 				const localFaceNormal = faceNormal.clone().transformDirection(
 					targetSchematic.group.matrixWorld
 				).normalize();
-				console.log("  Local face normal:", localFaceNormal.toArray());
+					// console.log("  Local face normal:", localFaceNormal.toArray());
 				
 				// When hitting a face at a block boundary (fractional ~0), select the block BEHIND the face
 				const epsilon = 0.001;
-				if (Math.abs(localFaceNormal.x) > 0.9 && Math.abs(fractional.x) < epsilon && localFaceNormal.x > 0) {
-					localPosition.x -= 1;
-					console.log("  Adjusted X down for +X face boundary");
-				}
-				if (Math.abs(localFaceNormal.y) > 0.9 && Math.abs(fractional.y) < epsilon && localFaceNormal.y > 0) {
-					localPosition.y -= 1;
-					console.log("  Adjusted Y down for +Y (top) face boundary");
-				}
-				if (Math.abs(localFaceNormal.z) > 0.9 && Math.abs(fractional.z) < epsilon && localFaceNormal.z > 0) {
-					localPosition.z -= 1;
-					console.log("  Adjusted Z down for +Z face boundary");
-				}
+					if (Math.abs(localFaceNormal.x) > 0.9 && Math.abs(fractional.x) < epsilon && localFaceNormal.x > 0) {
+						localPosition.x -= 1;
+					}
+					if (Math.abs(localFaceNormal.y) > 0.9 && Math.abs(fractional.y) < epsilon && localFaceNormal.y > 0) {
+						localPosition.y -= 1;
+					}
+					if (Math.abs(localFaceNormal.z) > 0.9 && Math.abs(fractional.z) < epsilon && localFaceNormal.z > 0) {
+						localPosition.z -= 1;
+					}
 			}
 			
-			console.log("  Final selected position (for rendering):", localPosition.toArray());
+			// console.log("  Final selected position (for rendering):", localPosition.toArray());
 			
 			// Schematic data uses different coordinates - add 1 to all axes
 			const schematicDataPosition = new THREE.Vector3(
@@ -188,7 +185,7 @@ export class ClickInteractionHandler implements Highlight {
 				localPosition.y + 1,
 				localPosition.z + 1
 			);
-			console.log("  Schematic data position:", schematicDataPosition.toArray());
+			// console.log("  Schematic data position:", schematicDataPosition.toArray());
 			
 			// Calculate block center for visualization
 			// The blocks are rendered with +0.5 offset, so we need to add that back for visualization
@@ -197,10 +194,10 @@ export class ClickInteractionHandler implements Highlight {
 				localPosition.y + 0.5 + 0.5, // block pos + center + render offset
 				localPosition.z + 0.5 + 0.5  // block pos + center + render offset
 			);
-			console.log("  Block center in local space:", blockCenterLocal.toArray());
+			// console.log("  Block center in local space:", blockCenterLocal.toArray());
 			const blockCenterWorld = blockCenterLocal.clone();
 			targetSchematic.group.localToWorld(blockCenterWorld);
-			console.log("  Block center in world space:", blockCenterWorld.toArray());
+			// console.log("  Block center in world space:", blockCenterWorld.toArray());
 			
 			// Draw block center (green sphere)
 			const blockCenterMarker = new THREE.Mesh(
@@ -222,22 +219,7 @@ export class ClickInteractionHandler implements Highlight {
 			this.schematicRenderer.sceneManager.scene.add(boxLine);
 			this.debugHelpers.push(boxLine);
 
-			// Check if position is within schematic bounds (using schematic data coordinates)
-			const dimensions = targetSchematic.schematicWrapper.get_dimensions();
-   const offset = (targetSchematic.schematicWrapper as any).get_offset?.() || [0, 0, 0];
-			console.log("  Schematic dimensions:", dimensions);
-			console.log("  Schematic offset (if any):", offset);
-			console.log("  Position in bounds:", 
-				schematicDataPosition.x >= 0 && schematicDataPosition.x < dimensions[0] &&
-				schematicDataPosition.y >= 0 && schematicDataPosition.y < dimensions[1] &&
-				schematicDataPosition.z >= 0 && schematicDataPosition.z < dimensions[2]
-			);
-			
-			// Try to get actual block at this position for debugging
-			const testBlock = targetSchematic.schematicWrapper.get_block(
-				schematicDataPosition.x, schematicDataPosition.y, schematicDataPosition.z
-			);
-			console.log("  Block at schematic position:", testBlock || "AIR/NONE");
+			// Position validation omitted for cleaner logs
 
 			// Emit interactBlock event with schematic data position
 			this.schematicRenderer.eventEmitter.emit("interactBlock", {

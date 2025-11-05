@@ -26,9 +26,7 @@ export class BlockInteractionHandler {
 	}) => {
 		const { interactionPosition, schematicObject } = data;
 
-		console.log("%c🎮 [INTERACT] BlockInteractionHandler received event", "color: #4ecdc4; font-weight: bold;");
-		console.log("  Interaction position:", interactionPosition.toArray());
-		console.log("  Schematic provided:", schematicObject ? schematicObject.id : "NONE");
+		// Block interaction event received
 
 		if (!schematicObject) {
 			console.warn("  ❌ No schematic provided in event.");
@@ -57,7 +55,7 @@ export class BlockInteractionHandler {
 			interactionPosition.z
 		);
 
-		console.log("  Block found:", block ? block.name() : "NONE");
+		// console.log("  Block found:", block ? block.name() : "NONE");
 
 		if (!block) {
 			console.warn("  ❌ No block found at the interacted position.");
@@ -68,25 +66,13 @@ export class BlockInteractionHandler {
 
 		// Check if the block is interactive
 		if (blockName === "minecraft:lever") {
-			console.log("  ✓ Lever detected - processing interaction");
-			console.log("  Simulation manager exists:", !!this.simulationManager);
-			if (this.simulationManager) {
-				console.log("  Simulation active:", this.simulationManager.isSimulationActive());
-			}
-			
 			// If simulation is enabled, use it; otherwise fall back to manual toggle
 			if (this.simulationManager && this.simulationManager.isSimulationActive()) {
-				console.log("  🎮 Using simulation path");
 				this.handleSimulatedInteraction(schematicObject, interactionPosition);
 			} else {
-				console.log("  ⚠️ Using manual toggle (simulation not active)");
 				await this.toggleLever(schematic, block, interactionPosition);
 				// Rebuild the full mesh since chunk rebuild doesn't work
-				console.log("  Rebuilding full mesh...");
 				await schematicObject.rebuildMesh();
-				console.log(
-					`Lever at ${interactionPosition.x}, ${interactionPosition.y}, ${interactionPosition.z} toggled`
-				);
 			}
 		} else {
 			console.log(`  ℹ Block ${blockName} is not interactive`);
@@ -99,7 +85,6 @@ export class BlockInteractionHandler {
 	) {
 		if (!this.simulationManager) return;
 
-		console.log(`Interacting with block at ${position.x}, ${position.y}, ${position.z} in simulation`);
 
 		// Use simulation to interact with the block - this returns the updated schematic
 		const updatedSchematic = this.simulationManager.interactBlock(
@@ -113,25 +98,12 @@ export class BlockInteractionHandler {
 			return;
 		}
 
-		// Verify the lever state changed
-		const leverBlock = updatedSchematic.get_block_with_properties(
-			position.x, position.y, position.z
-		);
-		if (leverBlock) {
-			const props = leverBlock.properties();
-			console.log(`Lever state in updated schematic: powered=${props.powered}`);
-		}
-		
-		console.log(
-			`Block at ${position.x}, ${position.y}, ${position.z} interacted - updating schematic`
-		);
 		
 		// Replace the schematic wrapper with the updated one
 		schematicObject.schematicWrapper = updatedSchematic;
 		
 		// Rebuild the mesh to show the change
 		await schematicObject.rebuildMesh();
-		console.log("Mesh rebuilt after interaction");
 	}
 
 	private async toggleLever(

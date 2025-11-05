@@ -193,7 +193,7 @@ export class PerformanceMonitor {
         // Start FPS monitoring
         this.startFPSMonitoring();
         
-        console.log(`🚀 Performance monitoring session started: ${sessionId}`);
+		// console.log(`🚀 Performance monitoring session started: ${sessionId}`);
         return sessionId;
     }
     
@@ -232,9 +232,9 @@ export class PerformanceMonitor {
         
         this.currentSession = null;
         
-        console.log(`🏁 Performance monitoring session ended: ${session.sessionId}`);
-        console.log(`📊 Total duration: ${session.totalDuration?.toFixed(2)}ms`);
-        console.log(`💾 Peak memory usage: ${(session.peakMemoryUsage / 1024 / 1024).toFixed(2)}MB`);
+		// console.log(`🏁 Performance monitoring session ended: ${session.sessionId}`);
+		// console.log(`📊 Total duration: ${session.totalDuration?.toFixed(2)}ms`);
+		// console.log(`💾 Peak memory usage: ${(session.peakMemoryUsage / 1024 / 1024).toFixed(2)}MB`);
         
         return session;
     }
@@ -310,10 +310,10 @@ export class PerformanceMonitor {
             this.takeMemorySnapshot(name);
         }
         
-        // Only log mesh building operations, not all operations
-        if (name.includes('schematic-build')) {
-            console.log(`⏱️ Operation ${name}: ${operation.duration.toFixed(2)}ms`);
-        }
+		// Mesh building operation logging disabled
+		// if (name.includes('schematic-build')) {
+		// 	console.log(`⏱️ Operation ${name}: ${operation.duration.toFixed(2)}ms`);
+		// }
 	}
 
 	public recordOperationDetails(operationName: string, details: Record<string, any>) {

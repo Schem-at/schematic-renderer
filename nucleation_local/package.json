@@ -1,0 +1,45 @@
+{
+  "name": "nucleation",
+  "type": "module",
+  "collaborators": [
+    "Nano nano@schem.at"
+  ],
+  "description": "A high-performance Minecraft schematic parser and utility library",
+  "version": "0.1.77",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Schem-at/Nucleation"
+  },
+  "files": [
+    "nucleation.js",
+    "nucleation-original.js",
+    "nucleation.d.ts",
+    "nucleation_bg.wasm",
+    "nucleation_bg.d.ts",
+    "nucleation-cdn-loader.js",
+    "README.md"
+  ],
+  "main": "./nucleation.js",
+  "types": "./nucleation.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "keywords": [
+    "minecraft",
+    "schematic",
+    "parser",
+    "voxel"
+  ],
+  "module": "./nucleation.js",
+  "exports": {
+    ".": {
+      "import": "./nucleation.js",
+      "types": "./nucleation.d.ts"
+    },
+    "./cdn-loader": {
+      "import": "./nucleation-cdn-loader.js"
+    },
+    "./package.json": "./package.json"
+  }
+}

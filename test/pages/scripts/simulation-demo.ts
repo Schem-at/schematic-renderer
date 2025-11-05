@@ -78,9 +78,12 @@ const renderer = new SchematicRenderer(
 				}, 1000);
 			},
 			onSimulationInitialized: (schematicName: string) => {
-				console.log(`Simulation initialized for ${schematicName}`);
 				updateSimulationStatus(true);
 				enableControls(true);
+				
+				// Tick 10 times initially to let MCHPRS correct any invalid initial states
+				renderer.tickSimulation(10);
+				renderer.syncSimulation();
 			},
 			onSimulationTicked: (ticks: number) => {
 				currentTicks = ticks;

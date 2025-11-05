@@ -282,11 +282,19 @@ export class SchematicRenderer {
 			this.eventEmitter.on("simulationTicked", (data: any) => {
 				this.options.callbacks?.onSimulationTicked?.(data.tickCount || 0);
 			});
-			this.eventEmitter.on("simulationSynced", () => {
-				this.options.callbacks?.onSimulationSynced?.();
-				// Rebuild meshes after sync
-				this.rebuildAllChunks();
-			});
+		this.eventEmitter.on("simulationSynced", (data: any) => {
+			this.options.callbacks?.onSimulationSynced?.();
+			// Update the schematic wrapper with the synced state before rebuilding
+			const updatedSchematic = data.updatedSchematic;
+			if (updatedSchematic) {
+				const firstSchematic = this.schematicManager?.getFirstSchematic();
+				if (firstSchematic) {
+					firstSchematic.schematicWrapper = updatedSchematic;
+				}
+			}
+			// Rebuild meshes after sync
+			this.rebuildAllChunks();
+		});
 			this.eventEmitter.on("simulationError", (data: any) => {
 				this.options.callbacks?.onSimulationError?.(data.error);
 			});
@@ -770,19 +778,13 @@ export class SchematicRenderer {
 	 * Syncs simulation state back to schematic and rebuilds meshes
 	 */
 	public async syncSimulation(): Promise<void> {
-		console.log("[syncSimulation] Starting sync...");
 		const updatedSchematic = this.simulationManager?.syncToSchematic();
-		console.log("[syncSimulation] Got updated schematic:", !!updatedSchematic);
 		if (updatedSchematic) {
 			// Update the schematic wrapper and rebuild mesh
 			const firstSchematic = this.schematicManager?.getFirstSchematic();
-			console.log("[syncSimulation] Got first schematic:", !!firstSchematic);
 			if (firstSchematic) {
-				console.log("[syncSimulation] Replacing schematic wrapper...");
 				firstSchematic.schematicWrapper = updatedSchematic;
-				console.log("[syncSimulation] Starting mesh rebuild...");
 				await firstSchematic.rebuildMesh();
-				console.log("[syncSimulation] Mesh rebuilt after sync");
 			} else {
 				console.error("[syncSimulation] No first schematic found!");
 			}

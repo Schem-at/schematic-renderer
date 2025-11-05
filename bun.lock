@@ -16,7 +16,7 @@
         "jszip": "^3.10.1",
         "lil-gui": "^0.19.2",
         "n8ao": "^1.10.0",
-        "nucleation": "^0.1.77",
+        "nucleation": "file:./nucleation_local",
         "pako": "^2.1.0",
         "postprocessing": "^6.35.4",
         "stats-js": "^1.0.1",
@@ -786,7 +786,7 @@
 
     "normalize-path": ["normalize-path@3.0.0", "", {}, "sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA=="],
 
-    "nucleation": ["nucleation@0.1.77", "", {}, "sha512-KcYkC2vH2l2WA1xKHL4c5dIWrgKrdk6qLpIQCvzxTyFdgrYS/0pOQsQChq3Hj+vlV1iLw70cZ7HH8tfQvDCT/w=="],
+    "nucleation": ["nucleation@file:nucleation_local", {}],
 
     "oauth-sign": ["oauth-sign@0.9.0", "", {}, "sha512-fexhUFFPTGV8ybAtSIGbV6gOkSv8UtRbDBnAyLQw4QPKkgNlsH2ByPGtMUqdWkos6YCRmAqViwgZrJc/mRDzZQ=="],
 

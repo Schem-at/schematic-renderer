@@ -378,7 +378,10 @@ export class SchematicObject extends EventEmitter {
 	/**
 	 * Display detailed performance monitoring results
 	 */
-	private displayPerformanceResults(sessionData: any): void {
+	private displayPerformanceResults(_sessionData: any): void {
+		// Performance monitoring disabled for cleaner logs - uncomment to re-enable
+		return;
+		/*
 		console.log(
 			"\n🎯 ================== PERFORMANCE MONITORING RESULTS =================="
 		);
@@ -625,6 +628,7 @@ export class SchematicObject extends EventEmitter {
 		console.log(
 			"🎯 ================================================================\n"
 		);
+		*/
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -1068,21 +1072,16 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		console.log(
-			`[SchematicObject:${schematicObject.id}] Starting TRUE lazy immediate build.`
-		);
+		
 		const overallStartTime = performance.now();
 		const schematic = schematicObject.schematicWrapper;
 
 		// STEP 1: Initialize pipeline
-		console.log("🚀 Initializing optimized mesh building pipeline...");
 		this.reportBuildProgress("Initializing pipeline...", 0.05);
 
 		const palettes = schematic.get_all_palettes();
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 
-		// STEP 2: Create iterator
-		console.log("📍 Creating optimized chunk iterator...");
 		this.reportBuildProgress("Creating chunk iterator...", 0.1);
 
 		const iterator = schematic.create_lazy_chunk_iterator(
@@ -1097,9 +1096,7 @@ export class SchematicObject extends EventEmitter {
 
 		const totalChunks = iterator.total_chunks();
 		if (totalChunks === 0) {
-			console.log(
-				`[SchematicObject:${schematicObject.id}] No chunks to process.`
-			);
+			
 			this.reportBuildProgress(
 				"Schematic build complete (no chunks)",
 				1.0,
@@ -1109,9 +1106,7 @@ export class SchematicObject extends EventEmitter {
 			return { meshes: [], chunkMap: new Map() };
 		}
 
-		console.log(
-			`[SchematicObject:${schematicObject.id}] Processing ${totalChunks} chunks with TRUE lazy loading.`
-		);
+		
 
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		const renderingBounds = schematicObject.renderingBounds?.enabled
@@ -1131,7 +1126,7 @@ export class SchematicObject extends EventEmitter {
 
 		// STEP 3: TRUE lazy processing - no accumulation
 		console.log("🔥 Processing chunks with minimal memory footprint...");
-		const chunkProcessingStartTime = performance.now();
+			// const chunkProcessingStartTime = performance.now();
 
 		while (iterator.has_next()) {
 			const chunkData = iterator.next();
@@ -1211,15 +1206,8 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		const chunkProcessingTime = performance.now() - chunkProcessingStartTime;
-		console.log(
-			`[SchematicObject:${
-				schematicObject.id
-			}] TRUE lazy processing completed in ${chunkProcessingTime.toFixed(2)}ms`
-		);
+		
 
-		// STEP 4: Final scene updates
-		console.log("🎨 Final scene updates...");
 		this.reportBuildProgress(
 			"Finalizing scene...",
 			0.95,
@@ -1230,22 +1218,7 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateMatrixWorld(true);
 
 		const totalTime = performance.now() - overallStartTime;
-		console.log(
-			`[SchematicObject:${
-				schematicObject.id
-			}] TRUE lazy build completed in ${totalTime.toFixed(2)}ms`
-		);
-		console.log(
-			`  - Pipeline init: ~${(
-				chunkProcessingStartTime - overallStartTime
-			).toFixed(2)}ms`
-		);
-		console.log(`  - Chunk processing: ${chunkProcessingTime.toFixed(2)}ms`);
-		console.log(
-			`  - Total chunks processed: ${processedChunkCount}/${totalChunks}`
-		);
-		console.log(`  - Total meshes created: ${totalMeshCount}`);
-		console.log(`  - Peak memory: MINIMAL (no mesh accumulation)`);
+	
 
 		// Return meshes from scene graph (not from accumulator!)
 		const finalMeshes = Array.from(this.group.children);
@@ -1317,19 +1290,15 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		console.log(
-			`[SchematicObject:${schematicObject.id}] Starting TRUE lazy incremental build.`
-		);
+		
 		const overallStartTime = performance.now();
 		const renderer = this.schematicRenderer.renderManager?.renderer;
 		const schematic = schematicObject.schematicWrapper;
 
 		// Initialize pipeline
-		console.log("🚀 Initializing optimized mesh building pipeline...");
 		const palettes = schematic.get_all_palettes();
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 
-		console.log("📍 Creating optimized chunk iterator...");
 		const iterator = schematic.create_lazy_chunk_iterator(
 			chunkDimensions.chunkWidth,
 			chunkDimensions.chunkHeight,
@@ -1341,17 +1310,9 @@ export class SchematicObject extends EventEmitter {
 		);
 
 		const totalChunks = iterator.total_chunks();
-		console.log(
-			`[SchematicObject:${
-				schematicObject.id
-			}] Total chunks to process: ${totalChunks} using chunk dimensions ${JSON.stringify(
-				chunkDimensions
-			)}`
-		);
+		
 		if (totalChunks === 0) {
-			console.log(
-				`[SchematicObject:${schematicObject.id}] No chunks to process.`
-			);
+			
 			this.reportBuildProgress(
 				"Schematic build complete (no chunks)",
 				1.0,
@@ -1361,11 +1322,7 @@ export class SchematicObject extends EventEmitter {
 			return { meshes: [], chunkMap: new Map() };
 		}
 
-		console.log(
-			`[SchematicObject:${schematicObject.id}] Processing ${totalChunks} chunks with TRUE lazy incremental loading.`
-		);
-
-		// CRITICAL: No mesh accumulator here either!
+		
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		let totalMeshCount = 0;
 
@@ -1485,21 +1442,9 @@ export class SchematicObject extends EventEmitter {
 						frameCounterForLog % LOG_INTERVAL_FRAMES === 0 ||
 						!iterator.has_next()
 					) {
-						console.log(
-							`--- TRUE Lazy Frame Log (Processed ${processedChunkCount}/${totalChunks} chunks) ---`
-						);
+					
 						const jsTimeThisFrame =
 							performance.now() - frameProcessingStartTime;
-						console.log(
-							`  JS Work This Frame: ${jsTimeThisFrame.toFixed(
-								2
-							)}ms (Budget: ${currentFrameJsBudget.toFixed(2)}ms)`
-						);
-						console.log(`  Meshes Added This Frame: ${meshesAddedThisFrame}`);
-						console.log(`  Last Render Time: ${lastRenderTimeMs.toFixed(2)}ms`);
-						console.log(`  Total Scene Meshes: ${this.group.children.length}`);
-						console.log(`  Memory Usage: MINIMAL (no accumulation)`);
-
 						// Dynamic budget adjustment
 						const combinedTime = jsTimeThisFrame + lastRenderTimeMs;
 						if (
@@ -1507,36 +1452,18 @@ export class SchematicObject extends EventEmitter {
 							currentFrameJsBudget > 4
 						) {
 							currentFrameJsBudget = Math.max(4, currentFrameJsBudget * 0.8);
-							console.log(
-								`  --> Reducing JS budget to: ${currentFrameJsBudget.toFixed(
-									2
-								)}ms`
-							);
+							
 						} else if (
 							combinedTime < TARGET_FRAME_TIME * 0.5 &&
 							currentFrameJsBudget < 16
 						) {
 							currentFrameJsBudget = Math.min(16, currentFrameJsBudget * 1.2);
-							console.log(
-								`  --> Increasing JS budget to: ${currentFrameJsBudget.toFixed(
-									2
-								)}ms`
-							);
 						}
 					}
 
 					if (iterator.has_next()) {
 						requestAnimationFrame(processNextFrame);
 					} else {
-						// All chunks processed
-						console.log(
-							`[SchematicObject:${
-								schematicObject.id
-							}] All ${totalChunks} chunks processed with TRUE lazy incremental. Total time: ${(
-								performance.now() - overallStartTime
-							).toFixed(2)}ms.`
-						);
-
 						this.group.updateMatrixWorld(true);
 
 						// Return meshes from scene graph
@@ -1560,11 +1487,6 @@ export class SchematicObject extends EventEmitter {
 							);
 						}
 
-						if (renderer && renderer.info) {
-							console.log(
-								`FINAL TRUE LAZY INCREMENTAL STATS - Draw Calls: ${renderer.info.render.calls}, Tris: ${renderer.info.render.triangles}`
-							);
-						}
 
 						this.reportBuildProgress(
 							"TRUE lazy incremental complete",
@@ -1600,9 +1522,7 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		console.log(
-			`[SchematicObject:${schematicObject.id}] Starting INSTANCED build.`
-		);
+		
 		const overallStartTime = performance.now();
 
 		// Initialize instanced rendering
@@ -1616,11 +1536,7 @@ export class SchematicObject extends EventEmitter {
 		await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
 
 		const totalTime = performance.now() - overallStartTime;
-		console.log(
-			`[SchematicObject:${
-				schematicObject.id
-			}] INSTANCED build completed in ${totalTime.toFixed(2)}ms`
-		);
+		
 
 		// Return instanced meshes from scene graph
 		const instancedMeshes = Array.from(this.group.children);
@@ -1836,10 +1752,6 @@ export class SchematicObject extends EventEmitter {
 			renderer.uiManager.updateProgress(0.1, "Disposing old meshes...");
 		}
 
-		console.log(`[rebuildMesh] Starting rebuild for ${this.name}`);
-		console.log(`[rebuildMesh] meshes array length: ${this.meshes.length}`);
-		console.log(`[rebuildMesh] group children count: ${this.group.children.length}`);
-		
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh as THREE.Object3D);
@@ -1851,7 +1763,6 @@ export class SchematicObject extends EventEmitter {
 			}
 		});
 		
-		console.log(`[rebuildMesh] After removing meshes, group children: ${this.group.children.length}`);
 		
 		// Also clear ALL children from the group (in case some were missed)
 		let removedCount = 0;
@@ -1868,12 +1779,10 @@ export class SchematicObject extends EventEmitter {
 				}
 			}
 		}
-		console.log(`[rebuildMesh] Removed ${removedCount} additional children`);
 
 		// Clear chunk meshes and update progress
 		this.chunkMeshes.clear();
 		this.meshes = [];
-		console.log(`[rebuildMesh] Cleared all data structures`);
 
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.updateProgress(0.2, "Building new meshes...");

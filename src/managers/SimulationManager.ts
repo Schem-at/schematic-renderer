@@ -194,46 +194,23 @@ export class SimulationManager {
 			return null;
 		}
 
-		try {
-			SimulationLogger.info("Syncing simulation state back to schematic...");
-			
-			// Sync the simulation state to the schematic
-			// This updates all block states from MCHPRS simulation
-			this.simulationWorld.sync_to_schematic();
-			
-			// Get the updated schematic from simulation world
-			const updatedSchematic = this.simulationWorld.get_schematic();
-			
-			// Log verification of component states
-			const dimensions = updatedSchematic.get_dimensions();
-			let componentCount = 0;
-			for (let x = 0; x < dimensions[0]; x++) {
-				for (let y = 0; y < dimensions[1]; y++) {
-					for (let z = 0; z < dimensions[2]; z++) {
-						const block = updatedSchematic.get_block(x, y, z);
-						if (block && (block.includes("lever") || block.includes("torch") || block.includes("redstone") || block.includes("lamp"))) {
-							const blockWithProps = updatedSchematic.get_block_with_properties(x, y, z);
-							if (blockWithProps) {
-								const props = blockWithProps.properties();
-								const propsStr = JSON.stringify(props);
-								SimulationLogger.info(`[${x},${y},${z}] ${block}: ${propsStr}`);
-								componentCount++;
-							}
-						}
-					}
-				}
-			}
-
-			SimulationLogger.sync();
-			SimulationLogger.info(`Verified ${componentCount} components in synced schematic`);
-			console.log(`[syncToSchematic] synced ${componentCount} redstone components`);
+	try {
+		SimulationLogger.info("Syncing simulation state back to schematic...");
+		
+		// Sync the simulation state to the schematic
+		// This updates all block states from MCHPRS simulation
+		this.simulationWorld.sync_to_schematic();
+		
+		// Get the updated schematic from simulation world
+		const updatedSchematic = this.simulationWorld.get_schematic();
+		
+		SimulationLogger.sync();
 
 			this.eventEmitter.emit("simulationSynced", {
 				tickCount: this.state.tickCount,
 				updatedSchematic,
 			});
 
-			console.log("[syncToSchematic] Returning updated schematic");
 			return updatedSchematic;
 		} catch (error) {
 			SimulationLogger.error("Failed to sync simulation:", error);
