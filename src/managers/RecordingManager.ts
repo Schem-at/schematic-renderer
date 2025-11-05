@@ -305,7 +305,7 @@ export class RecordingManager {
 
 						let blobData: BlobPart;
 						if (data instanceof Uint8Array) {
-							blobData = data;
+       blobData = data as any;
 						} else if (typeof data === "string") {
 							// Convert base64 string to Uint8Array if needed
 							const binaryString = atob(data);

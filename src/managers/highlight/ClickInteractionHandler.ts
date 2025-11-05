@@ -224,7 +224,7 @@ export class ClickInteractionHandler implements Highlight {
 
 			// Check if position is within schematic bounds (using schematic data coordinates)
 			const dimensions = targetSchematic.schematicWrapper.get_dimensions();
-			const offset = targetSchematic.schematicWrapper.get_offset?.() || [0, 0, 0];
+   const offset = (targetSchematic.schematicWrapper as any).get_offset?.() || [0, 0, 0];
 			console.log("  Schematic dimensions:", dimensions);
 			console.log("  Schematic offset (if any):", offset);
 			console.log("  Position in bounds:", 

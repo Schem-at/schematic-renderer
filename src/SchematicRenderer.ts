@@ -377,7 +377,7 @@ export class SchematicRenderer {
 
 			try {
 				await this.cubane.loadResourcePack(blob as Blob);
-				await this.cubane.getAssetLoader().buildTextureAtlas();
+    await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
 
 				console.log(
 					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
@@ -625,7 +625,7 @@ export class SchematicRenderer {
 		// Also load directly into Cubane for immediate use
 		try {
 			await this.cubane.loadResourcePack(file);
-			await this.cubane.getAssetLoader().buildTextureAtlas();
+   await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
 		} catch (error) {
 			console.error("Failed to load new resource pack into Cubane:", error);
 		}
