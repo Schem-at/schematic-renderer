@@ -17,7 +17,7 @@ export class BlockInteractionHandler {
 		this.eventEmitter = eventEmitter;
 		this.simulationManager = simulationManager || null;
 
-		this.eventEmitter.on("interactBlock", this.onInteractBlock);
+		this.eventEmitter.on("interactWithBlock", this.onInteractBlock);
 	}
 
 	private onInteractBlock = async (data: {
@@ -87,7 +87,7 @@ export class BlockInteractionHandler {
 
 
 		// Use simulation to interact with the block - this returns the updated schematic
-		const updatedSchematic = this.simulationManager.interactBlock(
+		const updatedSchematic = this.simulationManager.interactWithBlock(
 			position.x,
 			position.y,
 			position.z
@@ -151,6 +151,6 @@ export class BlockInteractionHandler {
 	}
 
 	dispose() {
-		this.eventEmitter.off("interactBlock", this.onInteractBlock);
+		this.eventEmitter.off("interactWithBlock", this.onInteractBlock);
 	}
 }

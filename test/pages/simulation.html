@@ -193,16 +193,22 @@
                 <label class="stat-label" for="tickSpeed">Tick Speed (TPS): <span id="tickSpeedValue">10</span></label>
                 <input type="range" id="tickSpeed" min="1" max="20" value="10" class="range range-primary" style="width: 100%;" />
             </div>
+            <div style="margin-bottom: 12px;">
+                <label class="cursor-pointer flex items-center gap-2">
+                    <input type="checkbox" id="autoSyncCheckbox" class="checkbox checkbox-primary" />
+                    <span class="stat-label">Auto-sync on tick</span>
+                </label>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label class="cursor-pointer flex items-center gap-2">
+                    <input type="checkbox" id="ioOnlyCheckbox" class="checkbox checkbox-primary" />
+                    <span class="stat-label">IO Only Mode (faster)</span>
+                </label>
+                <p style="font-size: 0.75em; color: #6b7280; margin-top: 4px;">When enabled, only inputs/outputs update (no wire power)</p>
+            </div>
         </div>
 
-        <!-- Info Section -->
-        <div class="info-box">
-            <strong>How to use:</strong><br>
-            1. Click Initialize Simulation<br>
-            2. Click levers in 3D view to toggle<br>
-            3. Watch console for sim logs<br>
-            4. Sync to update 3D visuals
-        </div>
+        
         </div>
     </div>
 

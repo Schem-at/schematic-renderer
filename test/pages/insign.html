@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insign Regions Test</title>
+
+    <!-- DaisyUI -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+        rel="stylesheet"
+        type="text/css"
+    />
+
+    <!-- Tailwind CSS with DaisyUI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Include Material Icons -->
+    <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+    />
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+            background: #0a0a0a;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .sidebar {
+            width: 380px;
+            background: #1a1a1a;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            background: #222;
+        }
+
+        .sidebar-header h1 {
+            margin: 0;
+            font-size: 1.5em;
+            color: #a78bfa;
+            font-weight: 600;
+        }
+
+        .sidebar-content {
+            padding: 20px;
+            flex: 1;
+        }
+
+        .control-section {
+            margin-bottom: 24px;
+            background: #222;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .control-section h3 {
+            margin: 0 0 12px 0;
+            color: #a78bfa;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .region-item {
+            background: #2a2a2a;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .region-item:hover {
+            background: #333;
+        }
+
+        .region-item.selected {
+            border-color: #a78bfa;
+            background: #2d2540;
+        }
+
+        .region-color-badge {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .region-name {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .region-meta {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .stat-item {
+            background: #2a2a2a;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #a78bfa;
+        }
+
+        .help-text {
+            background: #2a2a2a;
+            padding: 16px;
+            border-radius: 6px;
+            border-left: 3px solid #a78bfa;
+            font-size: 0.85em;
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+        .help-text code {
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #a78bfa;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metadata-viewer {
+            background: #1a1a1a;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #999;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            color: #ccc;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #666;
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            color: #999;
+            transition: all 0.2s;
+        }
+
+        .file-drop-zone.drag-over {
+            border-color: #a78bfa;
+            background: #2d2540;
+            color: #a78bfa;
+        }
+
+        button {
+            background: #a78bfa;
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #8b5cf6;
+        }
+
+        button:disabled {
+            background: #444;
+            cursor: not-allowed;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #ccc;
+            cursor: pointer;
+        }
+
+        .overlay-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 32px 48px;
+            border-radius: 12px;
+            border: 2px solid #a78bfa;
+            text-align: center;
+            color: #fff;
+            max-width: 400px;
+        }
+
+        .overlay-message h2 {
+            margin: 0 0 16px 0;
+            color: #a78bfa;
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+    <div class="canvas-container">
+        <canvas id="canvas"></canvas>
+      
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>🗺️ Insign Regions</h1>
+            <p style="margin: 8px 0 0 0; color: #999; font-size: 0.9em;">
+                Visualize region annotations from signs
+            </p>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- File Input -->
+            <div class="control-section">
+                <h3>📁 Load Schematic</h3>
+                <button id="load-test-btn" style="margin-bottom: 12px;">
+                    Load Test Schematic
+                </button>
+                <input type="file" id="file-input" accept=".schem,.schematic,.litematic" />
+            </div>
+
+            <!-- Visualization Controls -->
+            <div class="control-section">
+                <h3>👁️ Visualization</h3>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="show-regions" checked />
+                    <span>Show Regions</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="show-labels" checked />
+                    <span>Show Labels</span>
+                </label>
+            </div>
+
+            <!-- Summary Stats -->
+            <div id="summary-section" class="control-section" style="display: none;">
+                <h3>📊 Summary</h3>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Total Regions</div>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">With Geometry</div>
+                        <div class="stat-value" id="stat-geometry">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">IO Regions</div>
+                        <div class="stat-value" id="stat-io">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Selected</div>
+                        <div class="stat-value" id="stat-selected">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Region List -->
+            <div id="regions-section" class="control-section" style="display: none;">
+                <h3>📍 Regions (<span id="region-count">0</span>)</h3>
+                <div id="region-list" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+
+            <!-- Region Details -->
+            <div id="details-section" class="control-section" style="display: none;">
+                <h3>🔍 Region Details</h3>
+                <div style="margin-bottom: 12px;">
+                    <strong style="color: #a78bfa;">ID:</strong>
+                    <span id="detail-id" style="color: #ccc;"></span>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <strong style="color: #a78bfa;">Metadata:</strong>
+                    <pre id="detail-metadata" class="metadata-viewer"></pre>
+                </div>
+                <div>
+                    <strong style="color: #a78bfa;">Bounding Boxes:</strong>
+                    <pre id="detail-boxes" class="metadata-viewer"></pre>
+                </div>
+            </div>
+
+            <!-- Help -->
+            <div class="help-text">
+                <strong style="color: #a78bfa;">How to use Insign:</strong><br><br>
+                1. Add signs to your schematic<br>
+                2. Use <code>@rc([x,y,z])</code> for relative coords<br>
+                3. Add metadata: <code>#key="value"</code><br>
+                4. For IO: <code>#io.type="i"</code> or <code>"o"</code>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./scripts/insign.ts"></script>
+</body>
+</html>
+

@@ -103,6 +103,8 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	},
 	cameraOptions: {
 		position: [5, 5, 5],
+		preserveCameraOnUpdate: false,
+		useTightBounds: true,
 	},
 	simulationOptions: {
 		enableSimulation: false,

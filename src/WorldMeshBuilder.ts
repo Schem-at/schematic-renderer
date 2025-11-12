@@ -199,6 +199,7 @@ public async precomputePaletteGeometries(palette: any[]): Promise<void> {
 		}
 
 this.paletteCache = {
+    palette: palette,
     blockData: paletteBlockData,
     globalMaterials,
     isReady: true,
@@ -222,6 +223,24 @@ public async getChunkMesh(
         enabled?: boolean;
     }
 ): Promise<THREE.Object3D[]> {
+	// Get all block entities (tile entities with NBT data) from the schematic
+	const blockEntities = schematicObject.schematicWrapper.get_all_block_entities() || [];
+	const blockEntityMap = new Map<string, any>();
+	
+	// Build a quick lookup map for block entities by position
+	// blockEntities is an array of { id, position: [x,y,z], nbt: {...} }
+	for (const entity of blockEntities) {
+		if (entity && entity.position && Array.isArray(entity.position) && entity.position.length === 3) {
+			const [x, y, z] = entity.position;
+			const posKey = `${x},${y},${z}`;
+			blockEntityMap.set(posKey, entity);
+		}
+	}
+	
+	console.log(`[WorldMeshBuilder] Loaded ${blockEntityMap.size} block entities for chunk`, {
+		chunkCoords: [chunkData.chunk_x, chunkData.chunk_y, chunkData.chunk_z],
+		entities: Array.from(blockEntityMap.keys())
+	});
 		const initialChunkMemory = (performance as any).memory ? (performance as any).memory.usedJSHeapSize : 0;
 		
 		// Get call stack trace to identify caller
@@ -244,43 +263,68 @@ public async getChunkMesh(
 
 		if (chunkData.blocks.length === 0) return [];
 
-		// Group blocks by category using precomputed categories
-		const categorizedBlocks: {
-			solid: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
-			water: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
-			redstone: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
-			transparent: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
-			emissive: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
-		} = {
-		solid: [],
-			water: [],
-			redstone: [],
-			transparent: [],
-			emissive: [],
-		};
+	// Group blocks by category using precomputed categories
+	const categorizedBlocks: {
+		solid: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
+		water: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
+		redstone: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
+		transparent: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
+		emissive: Array<{ paletteIndex: number; position: THREE.Vector3 }>;
+	} = {
+	solid: [],
+		water: [],
+		redstone: [],
+		transparent: [],
+		emissive: [],
+	};
 
-		performanceMonitor.startOperation('categorizeBlocks');
+	// Track tile entities (signs, chests, etc.) that need custom meshes
+	const tileEntityBlocks: Array<{
+		x: number;
+		y: number;
+		z: number;
+		paletteIndex: number;
+		nbtData: any;
+	}> = [];
 
-		for (const blockArray of chunkData.blocks) {
-			const [x, y, z, paletteIndex] = blockArray;
+	performanceMonitor.startOperation('categorizeBlocks');
 
-			if (renderingBounds?.enabled) {
-				if (
-					x < renderingBounds.min.x ||
-					x >= renderingBounds.max.x ||
-					y < renderingBounds.min.y ||
-					y >= renderingBounds.max.y ||
-					z < renderingBounds.min.z ||
-					z >= renderingBounds.max.z
-				) {
-					continue;
-				}
+	for (const blockArray of chunkData.blocks) {
+		const [x, y, z, paletteIndex] = blockArray;
+
+		if (renderingBounds?.enabled) {
+			if (
+				x < renderingBounds.min.x ||
+				x >= renderingBounds.max.x ||
+				y < renderingBounds.min.y ||
+				y >= renderingBounds.max.y ||
+				z < renderingBounds.min.z ||
+				z >= renderingBounds.max.z
+			) {
+				continue;
 			}
+		}
 
-			const blockData = this.paletteCache.blockData[paletteIndex];
-			if (blockData && blockData.materialGroups.length > 0) {
-				if (!INVISIBLE_BLOCKS.has(blockData.blockName)) {
-					const position = new THREE.Vector3(x, y, z);
+		const blockData = this.paletteCache.blockData[paletteIndex];
+		if (blockData && blockData.materialGroups.length > 0) {
+			if (!INVISIBLE_BLOCKS.has(blockData.blockName)) {
+				const position = new THREE.Vector3(x, y, z);
+				
+				// Check if this block has NBT data (tile entity)
+				const posKey = `${x},${y},${z}`;
+				const blockEntity = blockEntityMap.get(posKey);
+				
+				// For signs and other tile entities with NBT, create custom meshes
+				if (blockEntity && blockData.blockName.includes('sign')) {
+					tileEntityBlocks.push({
+						x,
+						y,
+						z,
+						paletteIndex,
+						nbtData: blockEntity
+					});
+				} else {
+					// Regular blocks use instanced rendering
 					categorizedBlocks[blockData.category].push({
 						paletteIndex,
 						position,
@@ -288,9 +332,16 @@ public async getChunkMesh(
 				}
 			}
 		}
-		performanceMonitor.endOperation('categorizeBlocks');
+	}
+	performanceMonitor.endOperation('categorizeBlocks');
+	
+	if (tileEntityBlocks.length > 0) {
+		console.log(`[WorldMeshBuilder] Found ${tileEntityBlocks.length} tile entity blocks (signs) in chunk`, {
+			blocks: tileEntityBlocks.map(b => ({ pos: [b.x, b.y, b.z], id: b.nbtData.id }))
+		});
+	}
 
-		// Create meshes for each category
+	// Create meshes for each category
 		const resultMeshes: THREE.Object3D[] = [];
 		const meshOrder = [
 			"solid",
@@ -315,6 +366,62 @@ public async getChunkMesh(
 		}
 
 		performanceMonitor.endOperation('createMeshes');
+
+	// Create custom meshes for tile entities (signs with text, etc.)
+	if (tileEntityBlocks.length > 0) {
+		performanceMonitor.startOperation('createTileEntityMeshes');
+		
+		const palette = this.paletteCache.palette;
+		
+		for (const tileBlock of tileEntityBlocks) {
+			const { x, y, z, paletteIndex, nbtData } = tileBlock;
+			const blockState = palette[paletteIndex];
+			
+			if (blockState) {
+				try {
+					// Get block string with properties
+					const blockString = this.createBlockStringFromPaletteEntry(blockState);
+					
+					// Create mesh with NBT data for text rendering
+					const customMesh = await this.cubane.getBlockMesh(
+						blockString,
+						'plains',
+						false, // Don't use cache for tile entities (each is unique)
+						nbtData.nbt || nbtData // Pass NBT data
+					);
+					
+			if (customMesh) {
+				// Position the mesh at the block location
+				// Note: The mesh may already have an internal offset (e.g., signs need offsets within block)
+				// So we ADD the block position to the existing position rather than SET
+				const currentOffset = customMesh.position.clone();
+				customMesh.position.set(x + currentOffset.x, y + currentOffset.y, z + currentOffset.z);
+				customMesh.name = `tile_entity_${blockState.name}_${x}_${y}_${z}`;
+				
+				console.log(`[WorldMeshBuilder] Tile entity ${blockState.name} at block (${x},${y},${z})`, {
+					cubaneOffset: currentOffset.toArray(),
+					finalPosition: customMesh.position.toArray()
+				});
+				
+				resultMeshes.push(customMesh);
+			}
+				} catch (error) {
+					console.warn(`Failed to create custom mesh for tile entity at ${x},${y},${z}:`, error);
+					// Fall back to regular palette geometry if custom mesh fails
+					const blockData = this.paletteCache.blockData[paletteIndex];
+					if (blockData) {
+						const position = new THREE.Vector3(x, y, z);
+						categorizedBlocks[blockData.category].push({
+							paletteIndex,
+							position,
+						});
+					}
+				}
+			}
+		}
+		
+		performanceMonitor.endOperation('createTileEntityMeshes');
+	}
 
 performanceMonitor.recordChunkProcessing({
     chunkId: `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`,

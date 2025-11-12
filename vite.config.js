@@ -11,6 +11,7 @@ export default defineConfig({
     open: true,
   },
   root: './test/pages',
+  publicDir: '../public',
   build: {
     outDir: '../../dist',
     lib: {

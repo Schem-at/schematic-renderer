@@ -208,6 +208,9 @@ export class AnnotationHighlight implements Highlight {
 	}
 
 	private updateAnnotationVisibility() {
+		if (!this.schematicRenderer.cameraManager?.activeCamera) {
+			return;
+		}
 		const cameraPosition =
 			this.schematicRenderer.cameraManager.activeCamera.position as THREE.Vector3;
 		for (const key in this.annotations) {

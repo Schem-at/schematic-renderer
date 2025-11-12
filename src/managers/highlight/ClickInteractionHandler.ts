@@ -76,30 +76,6 @@ export class ClickInteractionHandler implements Highlight {
 			const worldHitPoint = new THREE.Vector3();
 			worldHitPoint.copy(intersect.point);
 
-			// console.log("%c🎯 [RAYCAST] Click detected", "color: #ff6b6b; font-weight: bold;");
-			// console.log("  World hit point:", worldHitPoint.toArray());
-			
-			// Draw ray
-			const rayOrigin = this.raycaster.ray.origin;
-			const rayDirection = this.raycaster.ray.direction;
-			const rayLength = rayOrigin.distanceTo(worldHitPoint) + 2;
-			const rayHelper = new THREE.ArrowHelper(
-				rayDirection,
-				rayOrigin,
-				rayLength,
-				0xff0000 // Red
-			);
-			this.schematicRenderer.sceneManager.scene.add(rayHelper);
-			this.debugHelpers.push(rayHelper);
-			
-			// Draw hit point (red sphere)
-			const hitPointMarker = new THREE.Mesh(
-				new THREE.SphereGeometry(0.05),
-				new THREE.MeshBasicMaterial({ color: 0xff0000 })
-			);
-			hitPointMarker.position.copy(worldHitPoint);
-			this.schematicRenderer.sceneManager.scene.add(hitPointMarker);
-			this.debugHelpers.push(hitPointMarker);
 
 			// Find which schematic this mesh belongs to
 			let targetSchematic = null;
@@ -197,23 +173,33 @@ export class ClickInteractionHandler implements Highlight {
 			// console.log("  Block center in local space:", blockCenterLocal.toArray());
 			const blockCenterWorld = blockCenterLocal.clone();
 			targetSchematic.group.localToWorld(blockCenterWorld);
-			// console.log("  Block center in world space:", blockCenterWorld.toArray());
 			
-			// Draw block center (green sphere)
-			const blockCenterMarker = new THREE.Mesh(
-				new THREE.SphereGeometry(0.08),
-				new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+			// Draw polished block highlight with slight scale and better material
+			const highlightBox = new THREE.Mesh(
+				new THREE.BoxGeometry(1.01, 1.01, 1.01), // Slightly larger for outline effect
+				new THREE.MeshBasicMaterial({
+					color: 0xffffff,
+					opacity: 0.3,
+					transparent: true,
+					depthWrite: false,
+					side: THREE.BackSide // Render inside faces for subtle glow
+				})
 			);
-			blockCenterMarker.position.copy(blockCenterWorld);
-			this.schematicRenderer.sceneManager.scene.add(blockCenterMarker);
-			this.debugHelpers.push(blockCenterMarker);
+			highlightBox.position.copy(blockCenterWorld);
+			this.schematicRenderer.sceneManager.scene.add(highlightBox);
+			this.debugHelpers.push(highlightBox);
 			
-			// Draw block outline
-			const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+			// Draw sharper edge outline
+			const boxGeometry = new THREE.BoxGeometry(1.02, 1.02, 1.02);
 			const boxEdges = new THREE.EdgesGeometry(boxGeometry);
 			const boxLine = new THREE.LineSegments(
 				boxEdges,
-				new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 })
+				new THREE.LineBasicMaterial({ 
+					color: 0xffffff,
+					linewidth: 2,
+					transparent: true,
+					opacity: 0.8
+				})
 			);
 			boxLine.position.copy(blockCenterWorld);
 			this.schematicRenderer.sceneManager.scene.add(boxLine);
@@ -226,8 +212,6 @@ export class ClickInteractionHandler implements Highlight {
 				interactionPosition: schematicDataPosition,
 				schematicObject: targetSchematic,
 			});
-		} else {
-			console.log("%c🎯 [RAYCAST] No intersections", "color: #95a5a6; font-weight: bold;");
 		}
 	};
 }

@@ -35,6 +35,7 @@ import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
 import { SimulationManager } from "./managers/SimulationManager";
 import { BlockInteractionHandler } from "./managers/highlight/BlockInteractionHandler";
+import { InsignManager } from "./managers/InsignManager";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
@@ -58,6 +59,7 @@ export class SchematicRenderer {
 	public gizmoManager: GizmoManager | undefined;
 	public simulationManager: SimulationManager | undefined;
 	public blockInteractionHandler: BlockInteractionHandler | undefined;
+	public insignManager: InsignManager | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
@@ -190,6 +192,7 @@ export class SchematicRenderer {
 			);
 			this.renderManager = new RenderManager(this);
 			this.highlightManager = new HighlightManager(this);
+			this.insignManager = new InsignManager(this);
 
 			// Initialize optional components
 			if (this.options.enableGizmos) {
@@ -282,19 +285,19 @@ export class SchematicRenderer {
 			this.eventEmitter.on("simulationTicked", (data: any) => {
 				this.options.callbacks?.onSimulationTicked?.(data.tickCount || 0);
 			});
-		this.eventEmitter.on("simulationSynced", (data: any) => {
-			this.options.callbacks?.onSimulationSynced?.();
-			// Update the schematic wrapper with the synced state before rebuilding
-			const updatedSchematic = data.updatedSchematic;
-			if (updatedSchematic) {
-				const firstSchematic = this.schematicManager?.getFirstSchematic();
-				if (firstSchematic) {
-					firstSchematic.schematicWrapper = updatedSchematic;
+			this.eventEmitter.on("simulationSynced", (data: any) => {
+				this.options.callbacks?.onSimulationSynced?.();
+				// Update the schematic wrapper with the synced state before rebuilding
+				const updatedSchematic = data.updatedSchematic;
+				if (updatedSchematic) {
+					const firstSchematic = this.schematicManager?.getFirstSchematic();
+					if (firstSchematic) {
+						firstSchematic.schematicWrapper = updatedSchematic;
+					}
 				}
-			}
-			// Rebuild meshes after sync
-			this.rebuildAllChunks();
-		});
+				// Rebuild meshes after sync
+				this.rebuildAllChunks();
+			});
 			this.eventEmitter.on("simulationError", (data: any) => {
 				this.options.callbacks?.onSimulationError?.(data.error);
 			});
@@ -385,7 +388,7 @@ export class SchematicRenderer {
 
 			try {
 				await this.cubane.loadResourcePack(blob as Blob);
-    await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
+				await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
 
 				console.log(
 					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
@@ -399,8 +402,29 @@ export class SchematicRenderer {
 		this.options.resourcePackBlobs = resourcePackBlobs;
 	}
 
+	private lastFrameTime = 0;
+	private targetFPS = 30;
+	private frameInterval = 1000 / this.targetFPS;
+	private animationFrameId: number | null = null;
+	private isDisposed = false;
+
 	private animate(): void {
-		requestAnimationFrame(() => this.animate());
+		// Stop animation loop if disposed
+		if (this.isDisposed) {
+			return;
+		}
+
+		this.animationFrameId = requestAnimationFrame(() => this.animate());
+
+		// Throttle to target FPS
+		const now = performance.now();
+		const elapsed = now - this.lastFrameTime;
+
+		if (elapsed < this.frameInterval) {
+			return; // Skip this frame
+		}
+
+		this.lastFrameTime = now - (elapsed % this.frameInterval);
 		const deltaTime = this.clock.getDelta();
 
 		// Update creative controls if active
@@ -633,7 +657,7 @@ export class SchematicRenderer {
 		// Also load directly into Cubane for immediate use
 		try {
 			await this.cubane.loadResourcePack(file);
-   await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
+			await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
 		} catch (error) {
 			console.error("Failed to load new resource pack into Cubane:", error);
 		}
@@ -812,11 +836,9 @@ export class SchematicRenderer {
 	 */
 	public async resetSimulation(): Promise<boolean> {
 		if (!this.simulationManager) return false;
-		const success = await this.simulationManager.resetSimulation();
-		if (success) {
-			this.rebuildAllChunks();
-		}
-		return success;
+		this.simulationManager.reset();
+		this.rebuildAllChunks();
+		return true;
 	}
 
 	/**
@@ -839,6 +861,15 @@ export class SchematicRenderer {
 	}
 
 	public dispose(): void {
+		// Mark as disposed to stop animation loop
+		this.isDisposed = true;
+
+		// Cancel the animation frame to stop the loop immediately
+		if (this.animationFrameId !== null) {
+			cancelAnimationFrame(this.animationFrameId);
+			this.animationFrameId = null;
+		}
+
 		if (!this.renderManager) {
 			return;
 		}

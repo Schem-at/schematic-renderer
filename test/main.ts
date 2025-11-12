@@ -1,6 +1,20 @@
 import { SchematicRenderer } from "../src/SchematicRenderer";
+import { SelectableObject } from "../src/managers/SelectableObject";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL } from "@ffmpeg/util";
+
+// Type declarations for HMR and window extensions
+declare global {
+	interface Window {
+		renderer: SchematicRenderer;
+	}
+	interface ImportMetaHot {
+		dispose(cb: (data: any) => void): void;
+	}
+	interface ImportMeta {
+		readonly hot?: ImportMetaHot;
+	}
+}
 
 const schematicBase64 =
 	"H4sIAAAAAAAAA11P20rEQAw9ncHtdrx8hJ8h6IO44IOLguJ6QSS2aRvsTqETUF/9UT9FM6ywYiAk53BykgRU13XPa1KpS1Snw1i/npESgLkliqJwDrNzlq5X5PaCY6c9XMB8yUqNiT2q1eKybRPr3bfFH3z/Dz9kU+xitoHWexN8WT2x+hlQXtHAquyxv5bI9UStHpFM+RaPwy3XTZTS80s++DHF8e3juKUh8VP29zjYChPFxjhnbPg1X9J7VlXYu5GBF1FFhVPYjJa3PCUZY97osLOSJr+LH/Ay+vAqAQAA";
@@ -47,6 +61,16 @@ const initFFmpeg = async () => {
 };
 initFFmpeg();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+
+// Cleanup old renderer instance on hot reload
+if (import.meta.hot) {
+	import.meta.hot.dispose(() => {
+		if (window.renderer) {
+			console.log("Disposing old renderer on hot reload...");
+			window.renderer.dispose();
+		}
+	});
+}
 
 const renderer = new SchematicRenderer(
 	canvas,
@@ -236,7 +260,7 @@ if (uploadButton) {
 		fileInput.onchange = async (event) => {
 			const files = (event.target as HTMLInputElement).files;
 			if (files && files[0]) {
-				await renderer.uploadResourcePack(files[0]);
+				await renderer.addResourcePack(files[0]);
 				console.log("Resource pack uploaded");
 			}
 		};
@@ -246,14 +270,17 @@ if (uploadButton) {
 
 if (clearButton) {
 	clearButton.addEventListener("click", async () => {
-		await renderer.clearResourcePacks();
+		const packs = await renderer.getResourcePacks();
+		for (const pack of packs) {
+			await renderer.removeResourcePack(pack.name);
+		}
 		console.log("Resource packs cleared");
 	});
 }
 
 if (listButton) {
 	listButton.addEventListener("click", async () => {
-		const packs = await renderer.listResourcePacks();
+		const packs = await renderer.getResourcePacks();
 		console.log("Stored resource packs:", packs);
 	});
 }

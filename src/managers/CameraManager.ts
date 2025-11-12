@@ -18,6 +18,8 @@ export interface CameraManagerOptions {
 	enableZoomInOnLoad?: boolean; // Whether to zoom in when schematics load
 	zoomInDuration?: number; // Duration of zoom-in animation
 	autoOrbitAfterZoom?: boolean; // Whether to start auto-orbit after zoom-in
+	preserveCameraOnUpdate?: boolean; // Whether to preserve camera position when schematics update
+	useTightBounds?: boolean; // Whether to use tight bounds (actual block content) for camera framing
 }
 
 export interface CameraFrame {
@@ -636,7 +638,9 @@ export class CameraManager extends EventEmitter {
 			padding?: number; // Percentage of padding (0.1 = 10% padding)
 			animationDuration?: number; // Duration in seconds for smooth transition
 			easing?: (t: number) => number;
-			skipPathFitting?: boolean; // New option
+			skipPathFitting?: boolean; // Skip fitting camera paths
+			useTightBounds?: boolean; // Use tight bounds (actual block content) instead of allocated space
+			preserveCamera?: boolean; // Override: preserve camera position even if this method is called
 		} = {}
 	): Promise<void> {
 		console.log("Focusing on schematics with improved framing");
@@ -647,12 +651,20 @@ export class CameraManager extends EventEmitter {
 		if (this.schematicRenderer.schematicManager.isEmpty()) {
 			return;
 		}
+		
+		// Check if camera preservation is requested (either in options or global camera options)
+		const shouldPreserveCamera = options.preserveCamera ?? this.cameraOptions.preserveCameraOnUpdate ?? false;
+		if (shouldPreserveCamera) {
+			console.log("Camera preservation enabled, skipping focus");
+			return;
+		}
 
 		const {
 			padding = 0.15, // 15% padding by default
 			animationDuration = 0,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t), // smooth step
 			skipPathFitting = false,
+			useTightBounds = this.cameraOptions.useTightBounds ?? true, // Use tight bounds by default for better framing
 		} = options;
 
 		// Temporarily disable controls
@@ -662,7 +674,7 @@ export class CameraManager extends EventEmitter {
 		}
 
 		// Get comprehensive schematic bounds
-		const bounds = this.calculateSchematicBounds();
+		const bounds = this.calculateSchematicBounds(useTightBounds);
 		if (!bounds) {
 			console.warn("No valid schematic bounds found");
 			if (controls) controls.enabled = true;
@@ -1082,7 +1094,7 @@ export class CameraManager extends EventEmitter {
 		console.log("Starting cinematic zoom-in to schematics");
 
 		// Get the optimal target position first (without animation)
-		const bounds = this.calculateSchematicBounds();
+		const bounds = this.calculateSchematicBounds(true); // Use tight bounds by default
 		if (!bounds) return;
 
 		const { center, size } = bounds;
@@ -1348,7 +1360,7 @@ export class CameraManager extends EventEmitter {
 		});
 	}
 
-	private calculateSchematicBounds(): {
+	private calculateSchematicBounds(useTightBounds: boolean = true): {
 		center: THREE.Vector3;
 		size: THREE.Vector3; // Represents dimensions (width, height, depth)
 		boundingBox: THREE.Box3;
@@ -1362,8 +1374,11 @@ export class CameraManager extends EventEmitter {
 
 		const center =
 			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
-		const dimensions = // This should be a Vector3 representing width, height, depth
-			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+		const dimensions = useTightBounds
+			? this.schematicRenderer.schematicManager.getMaxSchematicTightDimensions()
+			: this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+		
+		console.log(`[CameraManager] Using ${useTightBounds ? 'TIGHT' : 'ALLOCATED'} bounds for framing:`, dimensions);
 
 		const halfSize = dimensions.clone().multiplyScalar(0.5);
 		const boundingBox = new THREE.Box3(

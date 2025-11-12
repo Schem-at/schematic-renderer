@@ -33,8 +33,13 @@ const autoTickStatus = document.getElementById("autoTickStatus") as HTMLSpanElem
 
 let currentTicks = 0;
 let autoTickActive = false;
+let autoSyncEnabled = false;
 
-// Create renderer with simulation enabled
+// Get additional UI elements
+const autoSyncCheckbox = document.getElementById("autoSyncCheckbox") as HTMLInputElement;
+const ioOnlyCheckbox = document.getElementById("ioOnlyCheckbox") as HTMLInputElement;
+
+// Create renderer with simulation enabled and drag & drop
 const renderer = new SchematicRenderer(
 	canvas,
 	{
@@ -58,11 +63,12 @@ const renderer = new SchematicRenderer(
 		},
 		singleSchematicMode: true,
 		hdri: "/minecraft_day.hdr",
+		enableDragAndDrop: true,
 		// Enable simulation
 		simulationOptions: {
 			enableSimulation: true,
 			autoInitialize: false,
-			autoSync: true,
+			autoSync: false,
 			autoTickSpeed: 10,
 		},
 		callbacks: {
@@ -88,9 +94,24 @@ const renderer = new SchematicRenderer(
 			onSimulationTicked: (ticks: number) => {
 				currentTicks = ticks;
 				tickCount.textContent = ticks.toString();
+				// Auto-sync if enabled
+				if (autoSyncEnabled) {
+					renderer.syncSimulation();
+				}
 			},
 			onSimulationSynced: () => {
-				console.log("Simulation synced to schematic");
+				// Silent sync
+			},
+			onSchematicLoaded: async (schematicName: string) => {
+				console.log(`New schematic loaded: ${schematicName}`);
+				// Auto-initialize simulation for new schematic
+				if (renderer.simulationManager) {
+					const success = await renderer.initializeSimulation();
+					if (success) {
+						initBtn.textContent = "Initialized ✓";
+						initBtn.disabled = true;
+					}
+				}
 			},
 			onSimulationError: (error: Error) => {
 				console.error("Simulation error:", error);
@@ -214,7 +235,21 @@ tickSpeed.addEventListener("input", (e) => {
 	}
 });
 
+// Auto-sync checkbox
+autoSyncCheckbox.addEventListener("change", (e) => {
+	autoSyncEnabled = (e.target as HTMLInputElement).checked;
+	console.log(`Auto-sync: ${autoSyncEnabled ? "enabled" : "disabled"}`);
+});
+
+// IO Only checkbox
+ioOnlyCheckbox.addEventListener("change", async (e) => {
+	const ioOnly = (e.target as HTMLInputElement).checked;
+	console.log(`IO Only mode: ${ioOnly ? "enabled" : "disabled"}`);
+	alert(`IO Only setting will apply on next simulation initialization.\nCurrent: ${ioOnly ? "ON (faster, no wire states)" : "OFF (slower, shows wire power)"}`);
+	// Note: io_only requires re-initialization to take effect
+});
+
 // Expose renderer globally for debugging
 (window as any).renderer = renderer;
 
-console.log("Simulation demo loaded. Click 'Initialize Simulation' to start.");
+console.log("Simulation demo loaded. Drag & drop a schematic or initialize the default one.");

@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.0.34",
+  "version": "1.0.43",
 	"license": "AGPL-3.0-only",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
@@ -49,7 +49,7 @@
 		"jszip": "^3.10.1",
 		"lil-gui": "^0.19.2",
 		"n8ao": "^1.10.0",
-		"nucleation": "file:./nucleation_local",
+    "nucleation": "^0.1.93",
 		"pako": "^2.1.0",
 		"postprocessing": "^6.35.4",
 		"stats-js": "^1.0.1",

@@ -158,11 +158,20 @@ export class SchematicObject extends EventEmitter {
 		}
 
 		const schematicDimensions = this.getDimensions();
-		console.log("Schematic dimensions:", schematicDimensions);
+		const tightDimensions = this.getTightDimensions();
+		console.log("Schematic dimensions (allocated):", schematicDimensions);
+		console.log("Schematic dimensions (tight bounds):", tightDimensions);
+		
+		// Use tight bounds for centering if available, otherwise fall back to allocated dimensions
+		const centeringDimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
+			? tightDimensions
+			: schematicDimensions;
+		
+		console.log("Centering schematic using dimensions:", centeringDimensions);
 		this.position = new THREE.Vector3(
-			-schematicDimensions[0] / 2 + 0.5, // Center the schematic
+			-centeringDimensions[0] / 2 + 0.5, // Center the schematic
 			0.5,
-			-schematicDimensions[2] / 2 + 0.5 // Center the schematic
+			-centeringDimensions[2] / 2 + 0.5 // Center the schematic
 		);
 
 		if (properties?.meshBoundingBox) {
@@ -366,13 +375,42 @@ export class SchematicObject extends EventEmitter {
 		checkForChanges();
 	}
 
-	// Helper method to get cached dimensions
+	// Helper method to get cached dimensions (allocated space)
 	private getDimensions(): [number, number, number] {
 		if (!this._cachedDimensions) {
 			let dimensions = this.schematicWrapper.get_dimensions();
 			this._cachedDimensions = [dimensions[0], dimensions[1], dimensions[2]];
 		}
 		return this._cachedDimensions;
+	}
+	
+	/**
+	 * Get tight dimensions (actual block content, not pre-allocated space)
+	 * Returns [width, height, length] or [0, 0, 0] if no blocks exist
+	 */
+	public getTightDimensions(): [number, number, number] {
+		const dimensions = this.schematicWrapper.get_tight_dimensions();
+		return [dimensions[0], dimensions[1], dimensions[2]];
+	}
+	
+	/**
+	 * Get tight bounding box min coordinates [x, y, z]
+	 * Returns null if no non-air blocks have been placed
+	 */
+	public getTightBoundsMin(): [number, number, number] | null {
+		const min = this.schematicWrapper.get_tight_bounds_min();
+		if (!min) return null;
+		return [min[0], min[1], min[2]];
+	}
+	
+	/**
+	 * Get tight bounding box max coordinates [x, y, z]
+	 * Returns null if no non-air blocks have been placed
+	 */
+	public getTightBoundsMax(): [number, number, number] | null {
+		const max = this.schematicWrapper.get_tight_bounds_max();
+		if (!max) return null;
+		return [max[0], max[1], max[2]];
 	}
 
 	/**
@@ -1823,6 +1861,39 @@ export class SchematicObject extends EventEmitter {
 		performanceMonitor.endOperation("setBlockNoRebuild");
 	}
 
+	public async setBlockWithNbt(
+		position: THREE.Vector3 | number[],
+		blockType: string,
+		nbtData: Record<string, string>
+	) {
+		performanceMonitor.startOperation("setBlockWithNbt");
+		if (Array.isArray(position)) {
+			position = new THREE.Vector3(position[0], position[1], position[2]);
+		}
+
+		this.schematicWrapper.setBlockWithNbt(
+			position.x,
+			position.y,
+			position.z,
+			blockType,
+			nbtData
+		);
+		performanceMonitor.endOperation("setBlockWithNbt");
+	}
+
+	/**
+	 * Compiles Insign annotations from sign blocks in the schematic
+	 * @returns Raw Insign data (DslMap) or null if compilation fails
+	 */
+	public compileInsign(): any {
+		try {
+			return this.schematicWrapper.compileInsign();
+		} catch (e) {
+			console.warn('[SchematicObject] Insign compilation failed:', e);
+			return null;
+		}
+	}
+
 	public async setBlock(position: THREE.Vector3 | number[], blockType: string) {
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
@@ -2117,7 +2188,12 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public getSchematicCenter(): THREE.Vector3 {
-		const dimensions = this.getDimensions();
+		// Use tight bounds for center calculation if available
+		const tightDimensions = this.getTightDimensions();
+		const dimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
+			? tightDimensions
+			: this.getDimensions();
+		
 		return new THREE.Vector3(
 			this.position.x + Math.abs(dimensions[0] / 2),
 			this.position.y + Math.abs(dimensions[1] / 2),

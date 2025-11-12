@@ -188,6 +188,7 @@ export interface PaletteBlockData {
 }
 
 export interface PaletteCache {
+    palette: any[]; // Original palette data
     blockData: PaletteBlockData[]; // Direct array access by palette index
     globalMaterials: Material[]; // All unique materials across palette
     isReady: boolean;

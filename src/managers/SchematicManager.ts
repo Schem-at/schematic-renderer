@@ -548,10 +548,13 @@ export class SchematicManager {
 		const schematics = this.getAllSchematics();
 		if (schematics.length === 0) return averagePosition;
 		for (const schematic of schematics) {
-			averagePosition.add(schematic.getSchematicCenter());
+			const center = schematic.getSchematicCenter();
+			console.log("[SchematicManager] Schematic center:", center);
+			averagePosition.add(center);
 		}
 		averagePosition.divideScalar(schematics.length);
 		averagePosition.subScalar(0.5);
+		console.log("[SchematicManager] Average center position:", averagePosition);
 		return averagePosition;
 	}
 
@@ -564,6 +567,32 @@ export class SchematicManager {
 			maxDimensions.max(
 				new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
 			);
+		}
+		return maxDimensions;
+	}
+	
+	/**
+	 * Get maximum tight dimensions across all schematics
+	 * Uses actual block content, not pre-allocated space
+	 * Falls back to allocated dimensions if tight bounds are not available
+	 */
+	public getMaxSchematicTightDimensions(): THREE.Vector3 {
+		if (this.isEmpty()) return new THREE.Vector3();
+		const maxDimensions = new THREE.Vector3();
+		const schematics = this.getAllSchematics();
+		for (const schematic of schematics) {
+			const tightDimensions = schematic.getTightDimensions();
+			// Fall back to allocated dimensions if tight bounds are empty (no blocks)
+			if (tightDimensions[0] === 0 && tightDimensions[1] === 0 && tightDimensions[2] === 0) {
+				const dimensions = schematic.schematicWrapper.get_dimensions();
+				maxDimensions.max(
+					new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
+				);
+			} else {
+				maxDimensions.max(
+					new THREE.Vector3(tightDimensions[0], tightDimensions[1], tightDimensions[2])
+				);
+			}
 		}
 		return maxDimensions;
 	}
