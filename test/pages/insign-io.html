@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insign IO Visualization - Schematic Renderer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .panel {
+            position: fixed;
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #fff;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+
+        .panel h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 12px 0 8px 0;
+            color: #ccc;
+        }
+
+        #controls-panel {
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        #stats-panel {
+            top: 20px;
+            left: 20px;
+            width: 280px;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 6px;
+            color: #bbb;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4499ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #3388ee;
+        }
+
+        button.secondary {
+            background: #555;
+        }
+
+        button.secondary:hover {
+            background: #666;
+        }
+
+        .io-region-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .io-region-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: #555;
+        }
+
+        .io-region-item.visible {
+            border-color: #4499ff;
+        }
+
+        .io-region-item.input {
+            border-left: 3px solid #4499ff;
+        }
+
+        .io-region-item.output {
+            border-left: 3px solid #ff4466;
+        }
+
+        .io-region-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .io-region-meta {
+            font-size: 11px;
+            color: #888;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .io-region-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-item.input .stat-value {
+            color: #4499ff;
+        }
+
+        .stat-item.output .stat-value {
+            color: #ff4466;
+        }
+
+        #overlay-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+        }
+
+        #overlay-message h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        #overlay-message p {
+            font-size: 14px;
+            color: #bbb;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <!-- Stats Panel -->
+    <div id="stats-panel" class="panel">
+        <h2>📊 IO Statistics</h2>
+        <div class="stat-grid">
+            <div class="stat-item input">
+                <div class="stat-label">Inputs</div>
+                <div class="stat-value" id="stat-inputs">0</div>
+            </div>
+            <div class="stat-item output">
+                <div class="stat-label">Outputs</div>
+                <div class="stat-value" id="stat-outputs">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Input Bits</div>
+                <div class="stat-value" id="stat-input-bits">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Output Bits</div>
+                <div class="stat-value" id="stat-output-bits">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div id="controls-panel" class="panel">
+        <h2>🎮 Insign IO Visualization</h2>
+        
+        <div class="control-group">
+            <button id="load-test-btn">Load Test Circuit</button>
+        </div>
+
+        <div class="control-group">
+            <button id="load-file-btn" class="secondary">Load Schematic File</button>
+            <input type="file" id="file-input" accept=".litematic,.schem,.schematic" style="display: none;">
+        </div>
+
+        <h3>Visibility Controls</h3>
+        <div class="control-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="show-all-inputs" checked>
+                <label for="show-all-inputs">Show All Inputs</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="show-all-outputs" checked>
+                <label for="show-all-outputs">Show All Outputs</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="show-bit-numbers" checked>
+                <label for="show-bit-numbers">Show Bit Numbers</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="show-data-types" checked>
+                <label for="show-data-types">Show Data Types</label>
+            </div>
+        </div>
+
+        <h3>IO Regions</h3>
+        <div id="io-regions-list"></div>
+    </div>
+
+    <!-- Overlay Message -->
+    <div id="overlay-message">
+        <h2>Loading...</h2>
+        <p>Initializing Insign IO visualization</p>
+    </div>
+
+    <script type="module" src="./scripts/insign-io.ts"></script>
+</body>
+</html>
+

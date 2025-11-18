@@ -28,6 +28,25 @@ export interface SimulationOptions {
 	autoSync?: boolean;
 }
 
+export interface KeyboardControlsOptions {
+	// Enable keyboard controls while right-clicking (orbit controls)
+	enabled?: boolean;
+	// Movement speed in units per second
+	flySpeed?: number;
+	// Sprint multiplier when holding shift
+	sprintMultiplier?: number;
+	// Keybinds for movement
+	keybinds?: {
+		forward?: string;
+		backward?: string;
+		left?: string;
+		right?: string;
+		up?: string;
+		down?: string;
+		sprint?: string;
+	};
+}
+
 export interface SchematicRendererOptions {
 	backgroundColor?: number | string; // Accepts hex color or CSS color string
 	hdri?: string;
@@ -54,6 +73,12 @@ export interface SchematicRendererOptions {
 	enableProgressBar?: boolean;
 	// Progress bar customization options
 	progressBarOptions?: ProgressBarOptions;
+	// FPS and performance options
+	targetFPS?: number; // Target FPS when active (default: 60, set to 0 for uncapped)
+	idleFPS?: number; // FPS when idle/static scene (default: 1)
+	enableAdaptiveFPS?: boolean; // Enable adaptive FPS based on camera movement (default: true)
+	logFPS?: boolean; // Log FPS to console for debugging (default: false)
+	idleThreshold?: number; // Milliseconds of inactivity before entering idle mode (default: 100)
 	// Options for individual managers
 	interactionOptions?: InteractionManagerOptions;
 	dragAndDropOptions?: DragAndDropManagerOptions;
@@ -61,6 +86,8 @@ export interface SchematicRendererOptions {
 	cameraOptions?: CameraManagerOptions;
 	// Simulation options
 	simulationOptions?: SimulationOptions;
+	// Keyboard controls options
+	keyboardControlsOptions?: KeyboardControlsOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -89,6 +116,11 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		theme: "dark",
 	},
 	showRenderingBoundsHelper: false,
+	targetFPS: 60, // 60 FPS when active
+	idleFPS: 1, // 1 FPS when idle
+	enableAdaptiveFPS: true, // Enable adaptive FPS by default
+	idleThreshold: 100, // 100ms of inactivity before idle mode
+	logFPS: false,
 	callbacks: {},
 	interactionOptions: {
 		enableSelection: false,
@@ -111,6 +143,20 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		autoTickSpeed: 0,
 		autoInitialize: false,
 		autoSync: true,
+	},
+	keyboardControlsOptions: {
+		enabled: true,
+		flySpeed: 5.0, // 5 units per second
+		sprintMultiplier: 2.5, // 2.5x speed when sprinting
+		keybinds: {
+			forward: 'w',
+			backward: 's',
+			left: 'a',
+			right: 'd',
+			up: ' ', // Space
+			down: 'Shift', // Shift
+			sprint: 'Shift', // Shift for sprint
+		},
 	},
 	resourcePackBlobs: {},
 };

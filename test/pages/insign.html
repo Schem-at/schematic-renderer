@@ -1,357 +1,706 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Insign Regions Test</title>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Insign Regions Test</title>
 
-    <!-- DaisyUI -->
-    <link
-        href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
-        rel="stylesheet"
-        type="text/css"
-    />
+		<!-- DaisyUI -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+			rel="stylesheet"
+			type="text/css"
+		/>
 
-    <!-- Tailwind CSS with DaisyUI -->
-    <script src="https://cdn.tailwindcss.com"></script>
+		<!-- Tailwind CSS with DaisyUI -->
+		<script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Include Material Icons -->
-    <link
-        href="https://fonts.googleapis.com/icon?family=Material+Icons"
-        rel="stylesheet"
-    />
+		<!-- Include Material Icons -->
+		<link
+			href="https://fonts.googleapis.com/icon?family=Material+Icons"
+			rel="stylesheet"
+		/>
 
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            display: flex;
-            height: 100vh;
-            background: #0a0a0a;
-        }
+		<style>
+			body {
+			    margin: 0;
+			    overflow: hidden;
+			    display: flex;
+			    height: 100vh;
+			    background: #0a0a0a;
+			}
 
-        .canvas-container {
-            flex: 1;
-            position: relative;
-        }
+			.canvas-container {
+			    flex: 1;
+			    position: relative;
+			}
 
-        #canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
+			#canvas {
+			    width: 100%;
+			    height: 100%;
+			    display: block;
+			}
 
-        .sidebar {
-            width: 380px;
-            background: #1a1a1a;
-            border-left: 1px solid #333;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+			.sidebar {
+			    width: 380px;
+			    background: #1a1a1a;
+			    border-left: 1px solid #333;
+			    display: flex;
+			    flex-direction: column;
+			    overflow-y: auto;
+			    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			}
 
-        .sidebar-header {
-            padding: 20px;
-            border-bottom: 1px solid #333;
-            background: #222;
-        }
+			.sidebar-header {
+			    padding: 20px;
+			    border-bottom: 1px solid #333;
+			    background: #222;
+			}
 
-        .sidebar-header h1 {
-            margin: 0;
-            font-size: 1.5em;
-            color: #a78bfa;
-            font-weight: 600;
-        }
+			.sidebar-header h1 {
+			    margin: 0;
+			    font-size: 1.5em;
+			    color: #a78bfa;
+			    font-weight: 600;
+			}
 
-        .sidebar-content {
-            padding: 20px;
-            flex: 1;
-        }
+			.sidebar-content {
+			    padding: 20px;
+			    flex: 1;
+			}
 
-        .control-section {
-            margin-bottom: 24px;
-            background: #222;
-            padding: 16px;
-            border-radius: 8px;
-            border: 1px solid #333;
-        }
+			.control-section {
+			    margin-bottom: 24px;
+			    background: #222;
+			    padding: 16px;
+			    border-radius: 8px;
+			    border: 1px solid #333;
+			}
 
-        .control-section h3 {
-            margin: 0 0 12px 0;
-            color: #a78bfa;
-            font-size: 0.9em;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
+			.control-section h3 {
+			    margin: 0 0 12px 0;
+			    color: #a78bfa;
+			    font-size: 0.9em;
+			    font-weight: 600;
+			    text-transform: uppercase;
+			    letter-spacing: 0.05em;
+			}
 
-        .region-item {
-            background: #2a2a2a;
-            padding: 12px;
-            margin-bottom: 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s;
-        }
+			.region-item {
+			    background: #2a2a2a;
+			    padding: 12px;
+			    margin-bottom: 8px;
+			    border-radius: 6px;
+			    cursor: pointer;
+			    border: 2px solid transparent;
+			    transition: all 0.2s;
+			}
 
-        .region-item:hover {
-            background: #333;
-        }
+			.region-item:hover {
+			    background: #333;
+			}
 
-        .region-item.selected {
-            border-color: #a78bfa;
-            background: #2d2540;
-        }
+			.region-item.selected {
+			    border-color: #a78bfa;
+			    background: #2d2540;
+			}
 
-        .region-color-badge {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border-radius: 3px;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
+			.region-color-badge {
+			    display: inline-block;
+			    width: 16px;
+			    height: 16px;
+			    border-radius: 3px;
+			    margin-right: 8px;
+			    vertical-align: middle;
+			}
 
-        .region-name {
-            font-weight: 600;
-            color: #fff;
-            margin-bottom: 4px;
-        }
+			.region-name {
+			    font-weight: 600;
+			    color: #fff;
+			    margin-bottom: 4px;
+			}
 
-        .region-meta {
-            font-size: 0.85em;
-            color: #999;
-        }
+			.region-meta {
+			    font-size: 0.85em;
+			    color: #999;
+			}
 
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
+			.stat-grid {
+			    display: grid;
+			    grid-template-columns: 1fr 1fr;
+			    gap: 12px;
+			    margin-bottom: 16px;
+			}
 
-        .stat-item {
-            background: #2a2a2a;
-            padding: 12px;
-            border-radius: 6px;
-        }
+			.stat-item {
+			    background: #2a2a2a;
+			    padding: 12px;
+			    border-radius: 6px;
+			}
 
-        .stat-label {
-            font-size: 0.75em;
-            color: #999;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
+			.stat-label {
+			    font-size: 0.75em;
+			    color: #999;
+			    text-transform: uppercase;
+			    letter-spacing: 0.05em;
+			}
 
-        .stat-value {
-            font-size: 1.5em;
-            font-weight: 700;
-            color: #a78bfa;
-        }
+			.stat-value {
+			    font-size: 1.5em;
+			    font-weight: 700;
+			    color: #a78bfa;
+			}
 
-        .help-text {
-            background: #2a2a2a;
-            padding: 16px;
-            border-radius: 6px;
-            border-left: 3px solid #a78bfa;
-            font-size: 0.85em;
-            color: #ccc;
-            line-height: 1.6;
-        }
+			.help-text {
+			    background: #2a2a2a;
+			    padding: 16px;
+			    border-radius: 6px;
+			    border-left: 3px solid #a78bfa;
+			    font-size: 0.85em;
+			    color: #ccc;
+			    line-height: 1.6;
+			}
 
-        .help-text code {
-            background: #1a1a1a;
-            padding: 2px 6px;
-            border-radius: 3px;
-            color: #a78bfa;
-            font-family: 'Courier New', monospace;
-        }
+			.help-text code {
+			    background: #1a1a1a;
+			    padding: 2px 6px;
+			    border-radius: 3px;
+			    color: #a78bfa;
+			    font-family: 'Courier New', monospace;
+			}
 
-        .metadata-viewer {
-            background: #1a1a1a;
-            padding: 12px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85em;
-            color: #999;
-            overflow-x: auto;
-            max-height: 300px;
-            overflow-y: auto;
-        }
+			.metadata-viewer {
+			    background: #1a1a1a;
+			    padding: 12px;
+			    border-radius: 6px;
+			    font-family: 'Courier New', monospace;
+			    font-size: 0.85em;
+			    color: #999;
+			    overflow-x: auto;
+			    max-height: 300px;
+			    overflow-y: auto;
+			}
 
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            color: #ccc;
-        }
+			.checkbox-label {
+			    display: flex;
+			    align-items: center;
+			    gap: 8px;
+			    margin-bottom: 8px;
+			    cursor: pointer;
+			    color: #ccc;
+			}
 
-        .file-drop-zone {
-            border: 2px dashed #666;
-            border-radius: 8px;
-            padding: 32px;
-            text-align: center;
-            color: #999;
-            transition: all 0.2s;
-        }
+			.file-drop-zone {
+			    border: 2px dashed #666;
+			    border-radius: 8px;
+			    padding: 32px;
+			    text-align: center;
+			    color: #999;
+			    transition: all 0.2s;
+			}
 
-        .file-drop-zone.drag-over {
-            border-color: #a78bfa;
-            background: #2d2540;
-            color: #a78bfa;
-        }
+			.file-drop-zone.drag-over {
+			    border-color: #a78bfa;
+			    background: #2d2540;
+			    color: #a78bfa;
+			}
 
-        button {
-            background: #a78bfa;
-            color: #fff;
-            border: none;
-            padding: 10px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s;
-            width: 100%;
-        }
+			button {
+			    background: #a78bfa;
+			    color: #fff;
+			    border: none;
+			    padding: 10px 16px;
+			    border-radius: 6px;
+			    cursor: pointer;
+			    font-weight: 600;
+			    transition: all 0.2s;
+			    width: 100%;
+			}
 
-        button:hover {
-            background: #8b5cf6;
-        }
+			button:hover {
+			    background: #8b5cf6;
+			}
 
-        button:disabled {
-            background: #444;
-            cursor: not-allowed;
-        }
+			button:disabled {
+			    background: #444;
+			    cursor: not-allowed;
+			}
 
-        input[type="file"] {
-            width: 100%;
-            padding: 8px;
-            border-radius: 6px;
-            background: #2a2a2a;
-            border: 1px solid #444;
-            color: #ccc;
-            cursor: pointer;
-        }
+			input[type="file"] {
+			    width: 100%;
+			    padding: 8px;
+			    border-radius: 6px;
+			    background: #2a2a2a;
+			    border: 1px solid #444;
+			    color: #ccc;
+			    cursor: pointer;
+			}
 
-        .overlay-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 32px 48px;
-            border-radius: 12px;
-            border: 2px solid #a78bfa;
-            text-align: center;
-            color: #fff;
-            max-width: 400px;
-        }
+			.overlay-message {
+			    position: absolute;
+			    top: 50%;
+			    left: 50%;
+			    transform: translate(-50%, -50%);
+			    background: rgba(0, 0, 0, 0.9);
+			    padding: 32px 48px;
+			    border-radius: 12px;
+			    border: 2px solid #a78bfa;
+			    text-align: center;
+			    color: #fff;
+			    max-width: 400px;
+			}
 
-        .overlay-message h2 {
-            margin: 0 0 16px 0;
-            color: #a78bfa;
-            font-size: 1.5em;
-        }
-    </style>
-</head>
-<body>
-    <div class="canvas-container">
-        <canvas id="canvas"></canvas>
-      
-    </div>
+			.overlay-message h2 {
+			    margin: 0 0 16px 0;
+			    color: #a78bfa;
+			    font-size: 1.5em;
+			}
 
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <h1>🗺️ Insign Regions</h1>
-            <p style="margin: 8px 0 0 0; color: #999; font-size: 0.9em;">
-                Visualize region annotations from signs
-            </p>
-        </div>
+			/* Simulation Controls */
+			.input-control {
+			    background: rgba(255, 255, 255, 0.05);
+			    border: 1px solid #333;
+			    border-radius: 6px;
+			    padding: 10px;
+			    margin-bottom: 8px;
+			}
 
-        <div class="sidebar-content">
-            <!-- File Input -->
-            <div class="control-section">
-                <h3>📁 Load Schematic</h3>
-                <button id="load-test-btn" style="margin-bottom: 12px;">
-                    Load Test Schematic
-                </button>
-                <input type="file" id="file-input" accept=".schem,.schematic,.litematic" />
-            </div>
+			.input-control-header {
+			    display: flex;
+			    justify-content: space-between;
+			    align-items: center;
+			    margin-bottom: 8px;
+			}
 
-            <!-- Visualization Controls -->
-            <div class="control-section">
-                <h3>👁️ Visualization</h3>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="show-regions" checked />
-                    <span>Show Regions</span>
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="show-labels" checked />
-                    <span>Show Labels</span>
-                </label>
-            </div>
+			.input-control-name {
+			    font-weight: 600;
+			    font-size: 0.95em;
+			    color: #4499ff;
+			}
 
-            <!-- Summary Stats -->
-            <div id="summary-section" class="control-section" style="display: none;">
-                <h3>📊 Summary</h3>
-                <div class="stat-grid">
-                    <div class="stat-item">
-                        <div class="stat-label">Total Regions</div>
-                        <div class="stat-value" id="stat-total">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">With Geometry</div>
-                        <div class="stat-value" id="stat-geometry">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">IO Regions</div>
-                        <div class="stat-value" id="stat-io">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Selected</div>
-                        <div class="stat-value" id="stat-selected">-</div>
-                    </div>
-                </div>
-            </div>
+			.input-control-type {
+			    font-size: 0.8em;
+			    color: #888;
+			    text-transform: uppercase;
+			}
 
-            <!-- Region List -->
-            <div id="regions-section" class="control-section" style="display: none;">
-                <h3>📍 Regions (<span id="region-count">0</span>)</h3>
-                <div id="region-list" style="max-height: 400px; overflow-y: auto;"></div>
-            </div>
+			.input-control-value {
+			    display: flex;
+			    gap: 8px;
+			    align-items: center;
+			}
 
-            <!-- Region Details -->
-            <div id="details-section" class="control-section" style="display: none;">
-                <h3>🔍 Region Details</h3>
-                <div style="margin-bottom: 12px;">
-                    <strong style="color: #a78bfa;">ID:</strong>
-                    <span id="detail-id" style="color: #ccc;"></span>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <strong style="color: #a78bfa;">Metadata:</strong>
-                    <pre id="detail-metadata" class="metadata-viewer"></pre>
-                </div>
-                <div>
-                    <strong style="color: #a78bfa;">Bounding Boxes:</strong>
-                    <pre id="detail-boxes" class="metadata-viewer"></pre>
-                </div>
-            </div>
+			.input-control input[type="number"] {
+			    flex: 1;
+			    background: rgba(0, 0, 0, 0.3);
+			    border: 1px solid #444;
+			    border-radius: 4px;
+			    padding: 6px 10px;
+			    color: #fff;
+			    font-size: 0.9em;
+			}
 
-            <!-- Help -->
-            <div class="help-text">
-                <strong style="color: #a78bfa;">How to use Insign:</strong><br><br>
-                1. Add signs to your schematic<br>
-                2. Use <code>@rc([x,y,z])</code> for relative coords<br>
-                3. Add metadata: <code>#key="value"</code><br>
-                4. For IO: <code>#io.type="i"</code> or <code>"o"</code>
-            </div>
-        </div>
-    </div>
+			.input-control input[type="checkbox"] {
+			    width: 20px;
+			    height: 20px;
+			    cursor: pointer;
+			}
 
-    <script type="module" src="./scripts/insign.ts"></script>
-</body>
+			.bit-toggle-group {
+			    display: flex;
+			    gap: 4px;
+			    flex-wrap: wrap;
+			}
+
+			.bit-toggle {
+			    width: 32px;
+			    height: 32px;
+			    background: rgba(0, 0, 0, 0.3);
+			    border: 1px solid #444;
+			    border-radius: 4px;
+			    display: flex;
+			    align-items: center;
+			    justify-content: center;
+			    cursor: pointer;
+			    font-size: 0.85em;
+			    font-weight: 600;
+			    color: #666;
+			    transition: all 0.2s;
+			}
+
+			.bit-toggle.active {
+			    background: #4499ff;
+			    border-color: #4499ff;
+			    color: #fff;
+			}
+
+			.bit-toggle:hover {
+			    border-color: #666;
+			}
+
+			.output-display {
+			    background: rgba(255, 255, 255, 0.05);
+			    border: 1px solid #333;
+			    border-left: 3px solid #ff4466;
+			    border-radius: 6px;
+			    padding: 10px;
+			    margin-bottom: 8px;
+			}
+
+			.output-display-header {
+			    display: flex;
+			    justify-content: space-between;
+			    align-items: center;
+			    margin-bottom: 8px;
+			}
+
+			.output-display-name {
+			    font-weight: 600;
+			    font-size: 0.95em;
+			    color: #ff4466;
+			}
+
+			.output-display-type {
+			    font-size: 0.8em;
+			    color: #888;
+			    text-transform: uppercase;
+			}
+
+			.output-display-value {
+			    font-size: 1.5em;
+			    font-weight: 700;
+			    color: #fff;
+			    font-family: 'Courier New', monospace;
+			}
+
+			.output-display-bits {
+			    display: flex;
+			    gap: 4px;
+			    flex-wrap: wrap;
+			    margin-top: 8px;
+			}
+
+			.bit-display {
+			    width: 32px;
+			    height: 32px;
+			    background: rgba(0, 0, 0, 0.3);
+			    border: 1px solid #444;
+			    border-radius: 4px;
+			    display: flex;
+			    align-items: center;
+			    justify-center;
+			    font-size: 0.85em;
+			    font-weight: 600;
+			    color: #666;
+			}
+
+			.bit-display.active {
+			    background: #ff4466;
+			    border-color: #ff4466;
+			    color: #fff;
+			}
+
+			/* IO Region Editor */
+			.io-region-item {
+			    background: rgba(255, 255, 255, 0.05);
+			    border: 1px solid #333;
+			    border-radius: 6px;
+			    padding: 10px;
+			    margin-bottom: 8px;
+			}
+
+			.io-region-item input[type="text"],
+			.io-region-item input[type="number"],
+			.io-region-item select {
+			    width: 100%;
+			    padding: 6px 8px;
+			    border-radius: 4px;
+			    background: rgba(0, 0, 0, 0.3);
+			    border: 1px solid #444;
+			    color: #fff;
+			    font-size: 0.85em;
+			    margin-top: 4px;
+			}
+
+			.io-region-item label {
+			    display: block;
+			    font-size: 0.75em;
+			    color: #888;
+			    text-transform: uppercase;
+			    margin-top: 8px;
+			    margin-bottom: 2px;
+			}
+
+			.io-region-item .io-region-header {
+			    display: flex;
+			    justify-content: space-between;
+			    align-items: center;
+			    margin-bottom: 8px;
+			}
+
+			.io-region-item .io-region-name {
+			    font-weight: 600;
+			    color: #a78bfa;
+			}
+
+			.io-region-item button {
+			    padding: 4px 8px;
+			    font-size: 0.8em;
+			    width: auto;
+			}
+
+			.io-region-item .delete-btn {
+			    background: #ff4466;
+			}
+
+			.io-region-item .delete-btn:hover {
+			    background: #cc3355;
+			}
+
+			.coord-input-group {
+			    display: grid;
+			    grid-template-columns: 1fr 1fr 1fr;
+			    gap: 4px;
+			    margin-top: 4px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="canvas-container">
+			<canvas id="canvas"></canvas>
+		</div>
+
+		<div class="sidebar">
+			<div class="sidebar-header">
+				<h1>Insign Regions</h1>
+				<p style="margin: 8px 0 0 0; color: #999; font-size: 0.9em">
+					Visualize region annotations from signs
+				</p>
+			</div>
+
+			<div class="sidebar-content">
+				<!-- File Input -->
+				<div class="control-section">
+					<h3>Load Schematic</h3>
+					<div style="margin-bottom: 12px">
+						<label
+							style="
+								display: block;
+								margin-bottom: 6px;
+								color: #999;
+								font-size: 0.85em;
+							"
+							>Test Circuit:</label
+						>
+						<select
+							id="circuit-selector"
+							style="
+								width: 100%;
+								padding: 8px;
+								border-radius: 6px;
+								background: #2a2a2a;
+								border: 1px solid #444;
+								color: #ccc;
+								cursor: pointer;
+								margin-bottom: 8px;
+							"
+						>
+							<option value="not_gate" selected>
+								NOT Gate (1 input, 1 output)
+							</option>
+							<option value="xor">XOR Gate (2 inputs, 1 output)</option>
+							<option value="full_adder">
+								Full Adder (3 inputs, 2 outputs)
+							</option>
+						</select>
+					</div>
+					<button id="load-test-btn" style="margin-bottom: 8px">
+						Load Test Circuit
+					</button>
+					<button
+						id="load-preset-btn"
+						style="margin-bottom: 12px; background: #8b5cf6"
+					>
+						Load into Builder
+					</button>
+					<input
+						type="file"
+						id="file-input"
+						accept=".schem,.schematic,.litematic"
+					/>
+				</div>
+
+				<!-- Visualization Controls -->
+				<div class="control-section">
+					<h3>Visualization</h3>
+					<label class="checkbox-label">
+						<input type="checkbox" id="show-regions" checked />
+						<span>Show Regions</span>
+					</label>
+					<label class="checkbox-label">
+						<input type="checkbox" id="show-labels" checked />
+						<span>Show Labels</span>
+					</label>
+				</div>
+
+				<!-- Summary Stats -->
+				<div id="summary-section" class="control-section" style="display: none">
+					<h3>Summary</h3>
+					<div class="stat-grid">
+						<div class="stat-item">
+							<div class="stat-label">Total Regions</div>
+							<div class="stat-value" id="stat-total">0</div>
+						</div>
+						<div class="stat-item">
+							<div class="stat-label">With Geometry</div>
+							<div class="stat-value" id="stat-geometry">0</div>
+						</div>
+						<div class="stat-item">
+							<div class="stat-label">IO Regions</div>
+							<div class="stat-value" id="stat-io">0</div>
+						</div>
+						<div class="stat-item">
+							<div class="stat-label">Selected</div>
+							<div class="stat-value" id="stat-selected">-</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- IO Regions List -->
+				<div id="regions-section" class="control-section" style="display: none">
+					<h3>IO Regions (<span id="region-count">0</span>)</h3>
+					<div
+						id="region-list"
+						style="max-height: 300px; overflow-y: auto"
+					></div>
+				</div>
+
+				<!-- Circuit Builder -->
+				<div class="control-section">
+					<h3>Circuit Builder</h3>
+
+					<div style="margin-bottom: 12px">
+						<label
+							style="
+								display: block;
+								margin-bottom: 6px;
+								color: #999;
+								font-size: 0.85em;
+							"
+							>Template (SchematicBuilder format):</label
+						>
+						<textarea
+							id="template-input"
+							style="
+								width: 100%;
+								height: 150px;
+								padding: 8px;
+								border-radius: 6px;
+								background: #1a1a1a;
+								border: 1px solid #444;
+								color: #ccc;
+								font-family: 'Courier New', monospace;
+								font-size: 0.85em;
+								resize: vertical;
+							"
+							placeholder="# Base layer&#10;cccc&#10;cccc&#10;&#10;# Logic layer&#10;·│█·&#10;┌▲▲┐"
+						></textarea>
+					</div>
+
+					<button id="build-from-template-btn" style="margin-bottom: 16px">
+						Build Circuit
+					</button>
+
+					<div
+						style="
+							border-top: 1px solid #333;
+							padding-top: 12px;
+							margin-top: 12px;
+						"
+					>
+						<strong style="color: #a78bfa; font-size: 0.9em">IO Regions</strong>
+						<div
+							id="io-regions-list"
+							style="margin-top: 8px; max-height: 200px; overflow-y: auto"
+						></div>
+
+						<button
+							id="add-io-btn"
+							style="margin-top: 8px; background: #4499ff"
+						>
+							Add IO Region
+						</button>
+					</div>
+				</div>
+
+				<!-- Simulation Panel -->
+				<div
+					id="simulation-section"
+					class="control-section"
+					style="display: none"
+				>
+					<h3>Circuit Simulation</h3>
+
+					<div style="margin-bottom: 12px">
+						<label class="checkbox-label">
+							<input type="checkbox" id="live-sync-mode" />
+							<span>Live Sync Mode</span>
+						</label>
+						<div
+							style="
+								font-size: 0.85em;
+								color: #888;
+								margin-top: 4px;
+								margin-left: 24px;
+							"
+						>
+							Show simulation updates in real-time (slower)
+						</div>
+					</div>
+
+					<div id="simulation-inputs" style="margin-bottom: 16px">
+						<strong style="color: #4499ff; font-size: 0.9em">INPUTS</strong>
+						<div id="input-controls" style="margin-top: 8px"></div>
+					</div>
+
+					<button id="run-simulation-btn" style="margin-bottom: 16px">
+						Run Simulation
+					</button>
+
+					<div id="simulation-outputs">
+						<strong style="color: #ff4466; font-size: 0.9em">OUTPUTS</strong>
+						<div id="output-displays" style="margin-top: 8px"></div>
+					</div>
+				</div>
+
+				<!-- Region Details -->
+				<div id="details-section" class="control-section" style="display: none">
+					<h3>Region Details</h3>
+					<div style="margin-bottom: 12px">
+						<strong style="color: #a78bfa">ID:</strong>
+						<span id="detail-id" style="color: #ccc"></span>
+					</div>
+					<div style="margin-bottom: 12px">
+						<strong style="color: #a78bfa">Metadata:</strong>
+						<pre id="detail-metadata" class="metadata-viewer"></pre>
+					</div>
+					<div>
+						<strong style="color: #a78bfa">Bounding Boxes:</strong>
+						<pre id="detail-boxes" class="metadata-viewer"></pre>
+					</div>
+				</div>
+
+				<!-- Help -->
+				<div class="help-text">
+					<strong style="color: #a78bfa">How to use Insign:</strong><br /><br />
+					1. Add signs to your schematic<br />
+					2. Use <code>@rc([x,y,z])</code> for relative coords<br />
+					3. Add metadata: <code>#key="value"</code><br />
+					4. For IO: <code>#io.type="i"</code> or <code>"o"</code>
+				</div>
+			</div>
+		</div>
+
+		<script type="module" src="./scripts/insign.ts"></script>
+	</body>
 </html>
-

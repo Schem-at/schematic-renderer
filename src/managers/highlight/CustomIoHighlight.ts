@@ -25,26 +25,20 @@ export class CustomIoHighlight implements Highlight {
 	}
 
 	private onCustomIoPositionsChanged = (data: { positions: Array<{ x: number; y: number; z: number }> }) => {
-		console.log('[CustomIoHighlight] Received customIoPositionsChanged event with positions:', data.positions);
 		this.updateMarkers(data.positions);
 	};
 
 	private onSimulationInitialized = (data: { state: any }) => {
-		console.log('[CustomIoHighlight] Received simulationInitialized event with state:', data.state);
 		if (data.state && data.state.customIoPositions) {
 			this.updateMarkers(data.state.customIoPositions);
 		}
 	};
 
 	activate() {
-		console.log('[CustomIoHighlight] Activating...');
 		// Initialize markers if simulation is already active
 		if (this.schematicRenderer.simulationManager?.isSimulationActive()) {
 			const state = this.schematicRenderer.simulationManager.getState();
-			console.log('[CustomIoHighlight] Simulation active, state:', state);
 			this.updateMarkers(state.customIoPositions);
-		} else {
-			console.log('[CustomIoHighlight] No active simulation yet');
 		}
 	}
 
@@ -73,13 +67,9 @@ export class CustomIoHighlight implements Highlight {
 	}
 
 	private updateMarkers(positions: Array<{ x: number; y: number; z: number }>) {
-		console.log('[CustomIoHighlight] updateMarkers called with positions:', positions);
 		// Remove markers that are no longer in the list
 		const currentKeys = Object.keys(this.markers);
 		const newKeys = positions.map(p => `${p.x},${p.y},${p.z}`);
-		
-		console.log('[CustomIoHighlight] Current marker keys:', currentKeys);
-		console.log('[CustomIoHighlight] New marker keys:', newKeys);
 		
 		for (const key of currentKeys) {
 			if (!newKeys.includes(key)) {
@@ -95,11 +85,9 @@ export class CustomIoHighlight implements Highlight {
 
 	private addMarker(position: { x: number; y: number; z: number }) {
 		const key = `${position.x},${position.y},${position.z}`;
-		console.log('[CustomIoHighlight] addMarker called for position:', position, 'key:', key);
 
 		// Don't duplicate
 		if (this.markers[key]) {
-			console.log('[CustomIoHighlight] Marker already exists at key:', key);
 			return;
 		}
 
@@ -112,7 +100,6 @@ export class CustomIoHighlight implements Highlight {
 			// Use the first schematic's position as the offset
 			const firstSchematic = schematics[0];
 			schematicOffset.copy(firstSchematic.position);
-			console.log('[CustomIoHighlight] Schematic offset:', schematicOffset);
 		}
 
 		// Calculate world position (schematic coordinates + offset)
@@ -121,8 +108,6 @@ export class CustomIoHighlight implements Highlight {
 			position.y + schematicOffset.y,
 			position.z + schematicOffset.z
 		);
-		
-		console.log('[CustomIoHighlight] World position:', worldPos);
 
 		// Create a clean cube overlay for custom IO at block size
 		const size = 1.0; // Exact block size
@@ -199,7 +184,6 @@ export class CustomIoHighlight implements Highlight {
 			mesh: group as any, // Store group as mesh
 			label: sprite 
 		};
-		console.log('[CustomIoHighlight] ✓ Marker created and added to scene at:', position, 'Total markers:', Object.keys(this.markers).length);
 	}
 
 	private removeMarker(key: string) {

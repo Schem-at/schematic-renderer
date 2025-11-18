@@ -36,11 +36,14 @@ import { UIManager } from "./managers/UIManager";
 import { SimulationManager } from "./managers/SimulationManager";
 import { BlockInteractionHandler } from "./managers/highlight/BlockInteractionHandler";
 import { InsignManager } from "./managers/InsignManager";
+import { InsignIoManager } from "./managers/InsignIoManager";
+import { OverlayManager } from "./managers/OverlayManager";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
 import { Cubane } from "cubane";
 import { performanceDashboard } from "./ui/PerformanceDashboard";
+import { KeyboardControls } from "./managers/KeyboardControls";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
@@ -60,6 +63,9 @@ export class SchematicRenderer {
 	public simulationManager: SimulationManager | undefined;
 	public blockInteractionHandler: BlockInteractionHandler | undefined;
 	public insignManager: InsignManager | undefined;
+	public insignIoManager: InsignIoManager | undefined;
+	public overlayManager: OverlayManager | undefined;
+	public keyboardControls: KeyboardControls | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
@@ -79,6 +85,14 @@ export class SchematicRenderer {
 		this.canvas = canvas;
 
 		this.options = merge({}, DEFAULT_OPTIONS, options);
+
+		// Initialize FPS settings from options
+		this.targetFPS = this.options.targetFPS ?? 60;
+		this.idleFPS = this.options.idleFPS ?? 1;
+		this.enableAdaptiveFPS = this.options.enableAdaptiveFPS ?? true;
+		this.idleThreshold = this.options.idleThreshold ?? 100;
+		this.frameInterval = this.targetFPS > 0 ? 1000 / this.targetFPS : 0;
+
 		this.clock = new THREE.Clock();
 		this.materialMap = new Map();
 		this.eventEmitter = new EventEmitter();
@@ -93,6 +107,15 @@ export class SchematicRenderer {
 
 		// Initialize camera manager
 		this.cameraManager = new CameraManager(this, options.cameraOptions);
+
+		// Initialize keyboard controls
+		if (options.keyboardControlsOptions?.enabled !== false) {
+			this.keyboardControls = new KeyboardControls(
+				this.cameraManager.activeCamera.camera,
+				this.canvas,
+				options.keyboardControlsOptions
+			);
+		}
 
 		this.sceneManager.updateHelpers();
 		this.eventEmitter.emit("sceneReady");
@@ -111,6 +134,9 @@ export class SchematicRenderer {
 		}
 
 		this.cubane = new Cubane();
+
+		// Bind pointer events for immediate wake-up from idle mode
+		this.bindPointerEvents();
 
 		// Start the initialization process
 		this.initialize(schematicData, defaultResourcePacks);
@@ -193,6 +219,8 @@ export class SchematicRenderer {
 			this.renderManager = new RenderManager(this);
 			this.highlightManager = new HighlightManager(this);
 			this.insignManager = new InsignManager(this);
+			this.insignIoManager = new InsignIoManager(this);
+			this.overlayManager = new OverlayManager(this);
 
 			// Initialize optional components
 			if (this.options.enableGizmos) {
@@ -403,41 +431,187 @@ export class SchematicRenderer {
 	}
 
 	private lastFrameTime = 0;
-	private targetFPS = 30;
-	private frameInterval = 1000 / this.targetFPS;
+	private targetFPS: number;
+	private idleFPS: number;
+	private enableAdaptiveFPS: boolean;
+	private idleThreshold: number;
+	private frameInterval: number;
 	private animationFrameId: number | null = null;
 	private isDisposed = false;
+	private frameCount = 0;
+	private lastDebugTime = 0;
+	private throttledFrames = 0;
+
+	// Adaptive FPS tracking
+	private lastCameraPosition = new THREE.Vector3();
+	private lastCameraQuaternion = new THREE.Quaternion();
+	private lastInteractionTime = 0;
+	private isIdle = false;
+	private idleTimeoutId: number | null = null;
+	private pointerEventBound = false;
+	private wakeUpHandler: (() => void) | null = null;
+
+	/**
+	 * Bind pointer events to canvas for immediate wake-up from idle mode
+	 */
+	private bindPointerEvents(): void {
+		if (this.pointerEventBound) return;
+
+		this.wakeUpHandler = () => {
+			// Always update interaction time to prevent/exit idle mode
+			this.lastInteractionTime = performance.now();
+
+			if (this.isIdle) {
+				console.log("[Renderer] Waking up from idle mode due to pointer event");
+				this.isIdle = false;
+
+				// Cancel the pending setTimeout if we're in idle mode
+				if (this.idleTimeoutId !== null) {
+					clearTimeout(this.idleTimeoutId);
+					this.idleTimeoutId = null;
+				}
+
+				// Immediately schedule next frame with requestAnimationFrame
+				if (this.animationFrameId !== null) {
+					clearTimeout(this.animationFrameId);
+					this.animationFrameId = null;
+				}
+				this.animationFrameId = requestAnimationFrame(() => this.animate());
+			}
+		};
+
+		// Listen to pointer events that indicate user interaction
+		this.canvas.addEventListener('pointerdown', this.wakeUpHandler);
+		this.canvas.addEventListener('pointermove', this.wakeUpHandler);
+		this.canvas.addEventListener('wheel', this.wakeUpHandler);
+		this.canvas.addEventListener('touchstart', this.wakeUpHandler);
+		this.canvas.addEventListener('touchmove', this.wakeUpHandler);
+
+		this.pointerEventBound = true;
+	}
+
+	/**
+	 * Unbind pointer events
+	 */
+	private unbindPointerEvents(): void {
+		if (!this.pointerEventBound || !this.wakeUpHandler) return;
+
+		this.canvas.removeEventListener('pointerdown', this.wakeUpHandler);
+		this.canvas.removeEventListener('pointermove', this.wakeUpHandler);
+		this.canvas.removeEventListener('wheel', this.wakeUpHandler);
+		this.canvas.removeEventListener('touchstart', this.wakeUpHandler);
+		this.canvas.removeEventListener('touchmove', this.wakeUpHandler);
+
+		this.wakeUpHandler = null;
+		this.pointerEventBound = false;
+	}
 
 	private animate(): void {
 		// Stop animation loop if disposed
 		if (this.isDisposed) {
+			console.log("[Renderer] Animation loop stopped - disposed");
 			return;
 		}
 
-		this.animationFrameId = requestAnimationFrame(() => this.animate());
-
-		// Throttle to target FPS
 		const now = performance.now();
-		const elapsed = now - this.lastFrameTime;
 
-		if (elapsed < this.frameInterval) {
-			return; // Skip this frame
+		// Initialize lastDebugTime on first frame
+		if (this.lastDebugTime === 0) {
+			this.lastDebugTime = now;
+			this.lastInteractionTime = now;
+			console.log("[Renderer] Animation loop started with adaptive FPS");
 		}
 
-		this.lastFrameTime = now - (elapsed % this.frameInterval);
-		const deltaTime = this.clock.getDelta();
+		// Adaptive FPS logic (only if enabled)
+		let currentTargetFPS = this.targetFPS;
+		if (this.enableAdaptiveFPS) {
+			// Detect camera movement for adaptive FPS
+			const camera = this.cameraManager.activeCamera.camera;
+			const cameraMoved = !camera.position.equals(this.lastCameraPosition) ||
+				!camera.quaternion.equals(this.lastCameraQuaternion);
 
-		// Update creative controls if active
-		const activeControlKey = this.cameraManager.activeControlKey;
-		if (activeControlKey?.includes("creative")) {
-			const controls = this.cameraManager.controls.get(activeControlKey);
-			const speed = new THREE.Vector3(200, 200, 200);
-			if (controls) {
-				CreativeControls.update(controls, speed);
+			if (cameraMoved) {
+				this.lastInteractionTime = now;
+				this.lastCameraPosition.copy(camera.position);
+				this.lastCameraQuaternion.copy(camera.quaternion);
+			}
+
+			// Determine if scene is idle
+			const timeSinceInteraction = now - this.lastInteractionTime;
+			const wasIdle = this.isIdle;
+			this.isIdle = timeSinceInteraction > this.idleThreshold;
+
+			// Adapt frame interval based on idle state
+			currentTargetFPS = this.isIdle ? this.idleFPS : this.targetFPS;
+
+			// Log state changes
+			if (wasIdle !== this.isIdle) {
+				console.log(`[Renderer] ${this.isIdle ? 'Entering idle mode' : 'Exiting idle mode'} (target FPS: ${currentTargetFPS})`);
 			}
 		}
 
-		// Rest of your existing updates
+		// Update frame interval (0 = uncapped)
+		this.frameInterval = currentTargetFPS > 0 ? 1000 / currentTargetFPS : 0;
+
+		// Schedule next frame NOW (before any early returns)
+		// Use setTimeout for idle mode to avoid unnecessary rAF calls
+		if (this.isIdle && this.frameInterval > 0) {
+			this.idleTimeoutId = setTimeout(() => this.animate(), this.frameInterval) as any;
+		} else {
+			this.animationFrameId = requestAnimationFrame(() => this.animate());
+		}
+
+		const elapsed = now - this.lastFrameTime;
+		const shouldUpdate = this.frameInterval === 0 || elapsed >= this.frameInterval;
+
+		if (shouldUpdate) {
+			this.lastFrameTime = this.frameInterval === 0 ? now : now - (elapsed % this.frameInterval);
+		}
+
+		const deltaTime = this.clock.getDelta();
+
+		// ALWAYS update controls for smooth interaction (critical for responsiveness)
+		const activeControlKey = this.cameraManager.activeControlKey;
+		if (activeControlKey) {
+			const controls = this.cameraManager.controls.get(activeControlKey);
+			if (controls) {
+				if (activeControlKey.includes("creative")) {
+					// Update creative controls
+					const speed = new THREE.Vector3(200, 200, 200);
+					CreativeControls.update(controls, speed);
+				} else if ((controls as any).update) {
+					// Update OrbitControls or other controls that have an update method
+					(controls as any).update();
+				}
+			}
+		}
+
+		// Update keyboard controls (WASD movement while right-clicking)
+		if (this.keyboardControls) {
+			this.keyboardControls.update(deltaTime);
+		}
+
+		// Debug logging every 2 seconds
+		this.frameCount++;
+		if (this.options.logFPS && now - this.lastDebugTime > 2000) {
+			const actualFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
+			const renderFPS = (this.frameCount - this.throttledFrames) / ((now - this.lastDebugTime) / 1000);
+			const mode = this.enableAdaptiveFPS ? (this.isIdle ? 'idle' : 'active') : 'fixed';
+			const fpsTarget = currentTargetFPS === 0 ? 'uncapped' : `${currentTargetFPS}`;
+			console.log(`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`);
+			this.frameCount = 0;
+			this.throttledFrames = 0;
+			this.lastDebugTime = now;
+		}
+
+		// Early exit if we're throttling this frame
+		// Controls are updated above, but we skip expensive operations and rendering
+		if (!shouldUpdate) {
+			this.throttledFrames++;
+			return;
+		}
+
+		// Rest of your existing updates (only when not throttled)
 		if (!this.highlightManager) return;
 		if (!this.renderManager) return;
 
@@ -864,10 +1038,25 @@ export class SchematicRenderer {
 		// Mark as disposed to stop animation loop
 		this.isDisposed = true;
 
-		// Cancel the animation frame to stop the loop immediately
+		// Cancel the animation frame/timeout to stop the loop immediately
 		if (this.animationFrameId !== null) {
 			cancelAnimationFrame(this.animationFrameId);
 			this.animationFrameId = null;
+		}
+
+		// Cancel idle timeout if active
+		if (this.idleTimeoutId !== null) {
+			clearTimeout(this.idleTimeoutId);
+			this.idleTimeoutId = null;
+		}
+
+		// Unbind pointer events
+		this.unbindPointerEvents();
+
+		// Dispose keyboard controls
+		if (this.keyboardControls) {
+			this.keyboardControls.dispose();
+			this.keyboardControls = undefined;
 		}
 
 		if (!this.renderManager) {

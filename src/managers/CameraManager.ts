@@ -217,6 +217,14 @@ export class CameraManager extends EventEmitter {
 		this.controls.forEach((control, key) => {
 			control.enabled = key === this.activeControlKey;
 		});
+		
+		// Set initial orbit controls for keyboard controls if using orbit control type
+		if (initialPreset.controlType === "orbit" && this.schematicRenderer.keyboardControls) {
+			const initialControls = this.controls.get(this.activeControlKey);
+			if (initialControls) {
+				this.schematicRenderer.keyboardControls.setOrbitControls(initialControls as any);
+			}
+		}
 
 		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
 			showVisualization: options.showCameraPathVisualization || false,
@@ -463,6 +471,16 @@ export class CameraManager extends EventEmitter {
 			// Only call update on orbit controls
 			if (preset.controlType === "orbit" && activeControl.update) {
 				activeControl.update();
+				
+				// Update keyboard controls with new orbit controls reference
+				if (this.schematicRenderer.keyboardControls) {
+					this.schematicRenderer.keyboardControls.setOrbitControls(activeControl as any);
+				}
+			} else {
+				// Clear orbit controls reference for non-orbit modes
+				if (this.schematicRenderer.keyboardControls) {
+					this.schematicRenderer.keyboardControls.setOrbitControls(null);
+				}
 			}
 		}
 

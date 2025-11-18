@@ -1793,11 +1793,11 @@ export class SchematicObject extends EventEmitter {
 		// Remove old meshes from the scene
 		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh as THREE.Object3D);
-			mesh.geometry.dispose();
+			mesh.geometry?.dispose();
 			if (Array.isArray(mesh.material)) {
-				mesh.material.forEach((material) => material.dispose());
+				mesh.material.forEach((material) => material?.dispose());
 			} else {
-				mesh.material.dispose();
+				mesh.material?.dispose();
 			}
 		});
 		

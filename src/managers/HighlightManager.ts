@@ -4,12 +4,14 @@ import { HoverHighlight } from "./highlight/HoverHighlight";
 import { AnnotationHighlight } from "./highlight/AnnotationHighlight";
 import { ClickInteractionHandler } from "./highlight/ClickInteractionHandler";
 import { CustomIoHighlight } from "./highlight/CustomIoHighlight";
+import { InsignIoHoverHandler } from "./highlight/InsignIoHoverHandler";
 import { SchematicRenderer } from "../SchematicRenderer";
 
 export class HighlightManager {
 	private highlights: Highlight[] = [];
 	private schematicRenderer: SchematicRenderer;
 	public customIoHighlight: CustomIoHighlight | null = null;
+	public insignIoHoverHandler: InsignIoHoverHandler | null = null;
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
@@ -31,6 +33,10 @@ export class HighlightManager {
 		// Add custom IO highlight for simulation custom IO nodes
 		this.customIoHighlight = new CustomIoHighlight(this.schematicRenderer);
 		this.addHighlight(this.customIoHighlight);
+
+		// Add Insign IO hover handler for showing IO metadata overlays
+		this.insignIoHoverHandler = new InsignIoHoverHandler(this.schematicRenderer);
+		this.addHighlight(this.insignIoHoverHandler);
 
 		// Add other highlights as needed
 	}

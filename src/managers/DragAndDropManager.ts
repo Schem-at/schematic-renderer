@@ -107,14 +107,20 @@ export class DragAndDropManager {
 						performance.now() - startTime,
 						"ms"
 					);
-				} else if (fileType === FileType.RESOURCE_PACK) {
-					await this.handleResourcePackDrop(file);
-				} else {
-					// Show error message for unsupported file types
-					this.uiManager.showMessage(`Unsupported file type: ${file.name}`);
-					// Call invalid file type callback
-					await this.options.callbacks?.onInvalidFileType?.(file);
-				}
+			} else if (fileType === FileType.RESOURCE_PACK) {
+				await this.handleResourcePackDrop(file);
+			} else {
+				// Show error message for unsupported file types
+				const extension = file.name.split(".").pop()?.toLowerCase() || "unknown";
+				const supportedTypes = this.options.acceptedFileTypes?.length 
+					? this.options.acceptedFileTypes.join(", ")
+					: "schem, litematic, nbt, schematic";
+				this.uiManager.showMessage(
+					`Unsupported file type: .${extension}\nSupported formats: ${supportedTypes}`
+				);
+				// Call invalid file type callback
+				await this.options.callbacks?.onInvalidFileType?.(file);
+			}
 			}
 		}
 	};

@@ -243,6 +243,12 @@ export class InsignManager extends EventEmitter {
       return;
     }
 
+    // Skip IO regions (those starting with 'io.') - they should be handled by InsignIoManager
+    if (regionId.startsWith('io.')) {
+      console.log(`[InsignManager] Skipping IO region '${regionId}' - use InsignIoManager instead`);
+      return;
+    }
+
     // If already active, just update style
     if (this.activeHighlights.has(regionId)) {
       if (style) {
@@ -253,22 +259,14 @@ export class InsignManager extends EventEmitter {
 
     // Determine default style based on metadata
     const entry = this.insignData[regionId];
-    const ioType = entry.metadata?.['io.type'];
     
-    let defaultStyle;
-    if (ioType === 'i') {
-      defaultStyle = { ...InsignManager.STYLE_PRESETS.input };
-    } else if (ioType === 'o') {
-      defaultStyle = { ...InsignManager.STYLE_PRESETS.output };
-    } else {
-      // For non-IO regions, use hash-based coloring by default
-      defaultStyle = { 
-        ...InsignManager.STYLE_PRESETS.default,
-        color: this.getRegionColor(regionId, entry)
-      };
-    }
+    // Use hash-based coloring for all non-IO regions
+    const defaultStyle = { 
+      ...InsignManager.STYLE_PRESETS.default,
+      color: this.getRegionColor(regionId, entry)
+    };
     
-    // Allow explicit color override via vis.color metadata for IO types too
+    // Allow explicit color override via vis.color metadata
     if (!style?.color && entry.metadata?.['vis.color']) {
       defaultStyle.color = this.getRegionColor(regionId, entry);
     }
@@ -432,31 +430,39 @@ export class InsignManager extends EventEmitter {
 
   /**
    * Get regions by IO type (input/output)
+   * @deprecated Use InsignIoManager for IO regions instead
    */
   public getByIOType(type: 'i' | 'o'): Array<{ id: string; entry: DslEntry }> {
+    console.warn('[InsignManager] getByIOType is deprecated - use InsignIoManager for IO regions');
     return this.queryByMetadata('io.type', type);
   }
 
   /**
    * Helper: Show all inputs
+   * @deprecated Use InsignIoManager.showAllInputs() for IO regions instead
    */
   public showAllInputs(style?: Partial<InsignRegionStyle>): void {
+    console.warn('[InsignManager] showAllInputs is deprecated - use InsignIoManager for IO regions');
     const inputs = this.getByIOType('i');
     inputs.forEach(({ id }) => this.showRegion(id, style));
   }
 
   /**
    * Helper: Show all outputs
+   * @deprecated Use InsignIoManager.showAllOutputs() for IO regions instead
    */
   public showAllOutputs(style?: Partial<InsignRegionStyle>): void {
+    console.warn('[InsignManager] showAllOutputs is deprecated - use InsignIoManager for IO regions');
     const outputs = this.getByIOType('o');
     outputs.forEach(({ id }) => this.showRegion(id, style));
   }
 
   /**
    * Helper: Show only IO regions (inputs and outputs)
+   * @deprecated Use InsignIoManager for IO regions instead
    */
   public showOnlyIO(style?: Partial<InsignRegionStyle>): void {
+    console.warn('[InsignManager] showOnlyIO is deprecated - use InsignIoManager for IO regions');
     this.hideAllRegions();
     this.showAllInputs(style);
     this.showAllOutputs(style);

@@ -12,72 +12,129 @@ interface DslEntry {
 
 type DslMap = Record<string, DslEntry>;
 
-// Helper function to create a test schematic with Insign annotations
-function createInsignTestSchematic(renderer: SchematicRenderer, name: string): void {
-  const schematic = renderer.schematicManager?.createEmptySchematic(name);
-  if (!schematic) return;
+// Circuit definitions
+const CIRCUITS = {
+  not_gate: {
+    name: "NOT Gate (Buffer)",
+    template: `# Base layer
+c·
+cc
+c·
 
-  // Create a simple AND gate structure
-  // Input A (redstone torch on block)
-  schematic.setBlockNoRebuild([0, 0, 0], "minecraft:lever[face=wall,facing=north,powered=false]");
-  schematic.setBlockNoRebuild([2, 0, 0], "minecraft:lever[face=wall,facing=north,powered=false]");
+# Logic layer
+│·
+▲─
+│·
+`,
+    signs: [
+      { pos: [0, 2, 2], id: "io.back", type: "input", dataType: "nibble" },
+      { pos: [1, 2, 1], id: "io.side", type: "input", dataType: "nibble" },
+      { pos: [0, 2, 0], id: "io.out", type: "output", dataType: "nibble" },
+    ],
+    description: "Signal strength inputs/outputs (0-15 using Packed4 encoding)"
+  },
+  xor: {
+    name: "XOR Gate",
+    template: `# Base layer
+cccc
+cccc
+cccc
 
-  schematic.setBlockNoRebuild([0, 0, 1], "minecraft:stone");
-  schematic.setBlockNoRebuild([0, 1, 1], "minecraft:redstone_torch[lit=true]");
-  
-  // Input B (redstone torch on block)
-  schematic.setBlockNoRebuild([2, 0, 1], "minecraft:stone");
-  schematic.setBlockNoRebuild([2, 1, 1], "minecraft:redstone_torch[lit=true]");
-  
-  // Wire from inputs
-  schematic.setBlockNoRebuild([1, 0, 1], "minecraft:stone");
-  schematic.setBlockNoRebuild([1, 1, 1], "minecraft:redstone_wire[power=15,north=none,east=side,south=none,west=side]");
-  schematic.setBlockNoRebuild([1, 0, 2], "minecraft:redstone_wall_torch[lit=false, facing=south]");
-  
-  // Output (redstone lamp)
-  schematic.setBlockNoRebuild([1, 0, 3], "minecraft:redstone_lamp[lit=false]");
-  
-  // Add signs with Insign annotations using the new NBT API
-  
-  // Sign for Input A region (torch at [0,1,0], sign at [0,2,0], so relative is [0,-1,0])
-  schematic.setBlockWithNbt([1, 0, 0], "minecraft:oak_wall_sign[facing=south]", {
-    Text1: '{"text":"@input_a=rc([-1,0,0],[-1,0,0])"}',
-    Text2: '{"text":"#input_a.io.type=\\"i\\""}',
-    Text3: '{"text":"@input_b=rc([1,0,0],[1,0,0])"}',
-    Text4: '{"text":"#input_b.io.type=\\"i\\""}',
-  });
+# Logic layer
+·│█·
+┌▲▲┐
+├┴┴┤
+`,
+    signs: [
+      { pos: [0, 2, 2], id: "io.a", type: "input", dataType: "bool" },
+      { pos: [3, 2, 2], id: "io.b", type: "input", dataType: "bool" },
+      { pos: [1, 2, 0], id: "io.out", type: "output", dataType: "bool" },
+    ],
+    description: "2x boolean inputs (a, b), 1x boolean output (out)"
+  },
+  full_adder: {
+    name: "Full Adder",
+    template: `# Base layer
+·····c····
+·····c····
+··ccccc···
+·ccccccc··
+cc··cccccc
+·c··c·····
+·ccccc····
+·cccccc···
+···cccc···
+···c··c···
 
+# Logic layer
+·····│····
+·····↑····
+··│█←┤█···
+·█◀←┬▲▲┐··
+──··├┴┴┴←─
+·█··↑·····
+·▲─←┤█····
+·█←┬▲▲┐···
+···├┴┴┤···
+···│··│···
+`,
+    signs: [
+      { pos: [3, 2, 9], id: "io.a", type: "input", dataType: "bool" },
+      { pos: [6, 2, 9], id: "io.b", type: "input", dataType: "bool" },
+      { pos: [9, 2, 4], id: "io.carry_in", type: "input", dataType: "bool" },
+      { pos: [5, 2, 0], id: "io.sum", type: "output", dataType: "bool" },
+      { pos: [0, 2, 4], id: "io.carry_out", type: "output", dataType: "bool" },
+    ],
+    description: "3x boolean inputs (a, b, carry_in), 2x boolean outputs (sum, carry_out)"
+  }
+};
 
-  schematic.setBlockWithNbt([1, 1, 3], "minecraft:oak_sign[rotation=8]", {
-    Text1: '{"text":"@output=rc([0,-1,0],[0,-1,0])"}',
-    Text2: '{"text":"#output.io.type=\\"o\\""}',
-    Text3: '{"text":"@and_gate=rc([-1,-1,-3],[1,0,0])"}',
-    Text4: '{"text":"#and_gate.doc.label=\\"AND Gate\\""}',
-  });
+type CircuitType = keyof typeof CIRCUITS;
+let currentCircuit: CircuitType = "not_gate";
 
-  // Rebuild mesh after all blocks are set
-  schematic.rebuildMesh();
-
-  console.log('[Insign] Created test schematic with Insign annotations');
-  
-  // Debug: Check if signs were created and try to compile
-  console.log('[Insign Debug] Attempting to extract signs from schematic...');
+// Helper function to create a test schematic with Insign IO annotations using SchematicBuilder
+async function createInsignTestSchematic(renderer: SchematicRenderer, name: string, circuitType: CircuitType = "not_gate"): Promise<void> {
   try {
-    const signs = schematic.schematicWrapper.extractSigns();
-    console.log('[Insign Debug] Extracted signs:', signs);
-    
-    // Try compiling directly
-    console.log('[Insign Debug] Attempting to compile Insign...');
-    const compiled = schematic.schematicWrapper.compileInsign();
-    console.log('[Insign Debug] Compiled result:', compiled);
-    console.log('[Insign Debug] Result type:', compiled instanceof Map ? 'Map' : typeof compiled);
-    console.log('[Insign Debug] Result size:', compiled instanceof Map ? compiled.size : Object.keys(compiled || {}).length);
-    
-    if (!compiled || (compiled instanceof Map ? compiled.size === 0 : Object.keys(compiled).length === 0)) {
-      console.warn('[Insign Debug] Compilation returned empty or null');
+    const circuit = CIRCUITS[circuitType];
+    console.log(`[Insign] Building ${circuit.name} circuit with SchematicBuilder...`);
+
+    const { SchematicBuilderWrapper } = await import("../../../src/nucleationExports");
+
+    // Build the schematic from template
+    const builder = SchematicBuilderWrapper.fromTemplate(circuit.template);
+    const builtSchematic = builder.build();
+
+    // Load the schematic directly into the manager
+    await renderer.schematicManager?.loadSchematic(name, builtSchematic);
+
+    // Get the loaded schematic to add Insign IO annotations
+    const schematic = renderer.schematicManager?.getSchematic(name);
+    if (!schematic) {
+      console.error('[Insign] Failed to get loaded schematic');
+      return;
     }
-  } catch (e) {
-    console.error('[Insign Debug] Failed to extract/compile signs:', e);
+
+    console.log(`[Insign] Adding Insign IO annotations to ${circuit.name}...`);
+
+    // Add all signs
+    for (const sign of circuit.signs) {
+      schematic.setBlockWithNbt(sign.pos as [number, number, number], "minecraft:oak_sign[rotation=0]", {
+        Text1: `{"text":"@${sign.id}=rc([0,-1,0],[0,-1,0])"}`,
+        Text2: `{"text":"#${sign.id}:type=\\"${sign.type}\\""}`,
+        Text3: `{"text":"#${sign.id}:data_type=\\"${sign.dataType}\\""}`,
+        Text4: '{"text":""}',
+      });
+    }
+
+    // Rebuild mesh after all blocks are set
+    schematic.rebuildMesh();
+
+    console.log(`[Insign] ✓ Created ${circuit.name} circuit with Insign IO annotations`);
+    console.log(`[Insign] - ${circuit.description}`);
+
+    currentCircuit = circuitType;
+  } catch (error) {
+    console.error('[Insign] Failed to create test schematic:', error);
   }
 }
 
@@ -88,6 +145,8 @@ const showRegionsCheckbox = document.getElementById("show-regions") as HTMLInput
 const showLabelsCheckbox = document.getElementById("show-labels") as HTMLInputElement;
 const overlayMessage = document.getElementById("overlay-message") as HTMLDivElement;
 const loadTestBtn = document.getElementById("load-test-btn") as HTMLButtonElement;
+const loadPresetBtn = document.getElementById("load-preset-btn") as HTMLButtonElement;
+const circuitSelector = document.getElementById("circuit-selector") as HTMLSelectElement;
 
 const summarySection = document.getElementById("summary-section") as HTMLDivElement;
 const regionsSection = document.getElementById("regions-section") as HTMLDivElement;
@@ -105,9 +164,57 @@ const detailId = document.getElementById("detail-id") as HTMLSpanElement;
 const detailMetadata = document.getElementById("detail-metadata") as HTMLPreElement;
 const detailBoxes = document.getElementById("detail-boxes") as HTMLPreElement;
 
+// Simulation elements
+const simulationSection = document.getElementById("simulation-section") as HTMLDivElement;
+const inputControls = document.getElementById("input-controls") as HTMLDivElement;
+const outputDisplays = document.getElementById("output-displays") as HTMLDivElement;
+const runSimulationBtn = document.getElementById("run-simulation-btn") as HTMLButtonElement;
+const liveSyncModeCheckbox = document.getElementById("live-sync-mode") as HTMLInputElement;
+
+// Circuit builder elements
+const templateInput = document.getElementById("template-input") as HTMLTextAreaElement;
+const buildFromTemplateBtn = document.getElementById("build-from-template-btn") as HTMLButtonElement;
+const ioRegionsList = document.getElementById("io-regions-list") as HTMLDivElement;
+const addIoBtn = document.getElementById("add-io-btn") as HTMLButtonElement;
+
 // State
 let insignData: DslMap | null = null;
 let selectedRegion: string | null = null;
+let inputValues: Record<string, number> = {}; // Store current input values
+
+// IO Region management
+/**
+ * Nucleation Data Type System:
+ * 
+ * Valid dataType values:
+ * - "bool"            : 1-bit boolean (requires 1 wire position, OneToOne layout)
+ * - "nibble"          : 4-bit signal strength value (0-15 on 1 wire, Packed4 layout) ⭐ NEW!
+ * - "signal"          : Alias for "nibble"
+ * - "signal_strength" : Alias for "nibble"
+ * - "unsigned"        : Unsigned int (bit width = position count, OneToOne layout)
+ * - "signed"          : Signed int (bit width = position count, OneToOne layout)
+ * - "unsigned:N"      : N-bit unsigned int (explicit bit width)
+ * - "signed:N"        : N-bit signed int (explicit bit width)
+ * - "float32"         : 32-bit float (requires 32 positions)
+ * 
+ * Layout Encoding (auto-selected based on bit width vs position count):
+ * - OneToOne: Each bit = 1 wire (wire is 0=false or 15=true)
+ *   Example: "unsigned" with 4 wires = 4-bit value (4 bits, 4 wires)
+ *   Example: "bool" with 1 wire = boolean (ON=15, OFF=0)
+ * 
+ * - Packed4: 4 bits per wire using signal strength 0-15
+ *   Example: "nibble" with 1 wire = signal strength 0-15 ⭐ RECOMMENDED!
+ *   Example: "unsigned:4" with 1 wire = 4-bit value (4 bits in 1 wire)
+ *   Example: "unsigned:8" with 2 wires = 8-bit value (2 nibbles)
+ */
+interface IoRegionDef {
+  id: string;
+  pos: [number, number, number];
+  type: "input" | "output";
+  dataType: "bool" | "nibble" | "signal" | "signal_strength" | "unsigned" | "signed" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
+}
+
+let ioRegions: IoRegionDef[] = [];
 
 // Create renderer
 const renderer = new SchematicRenderer(canvas, {}, {
@@ -117,6 +224,8 @@ const renderer = new SchematicRenderer(canvas, {}, {
     return new Blob([buffer], { type: "application/zip" });
   },
 }, {
+  logFPS: false,
+  enableAdaptiveFPS: true,
   cameraOptions: {
     enableZoomInOnLoad: true,
   },
@@ -129,22 +238,22 @@ const renderer = new SchematicRenderer(canvas, {}, {
   hdri: "/minecraft_day.hdr",
   enableDragAndDrop: true,
   callbacks: {
-    onRendererInitialized: (r) => {
+    onRendererInitialized: async (r) => {
       console.log('[Insign] Renderer initialized - creating test schematic');
 
       console.log('Adding renderer to window for debugging');
       (window as any).renderer = r;
-      
+
       // Hide empty state overlay
       r.uiManager?.hideEmptyState();
-      
+
       // Create test schematic with Insign annotations
-      createInsignTestSchematic(r, "insign_test");
+      await createInsignTestSchematic(r, "insign_test");
       r.cameraManager.focusOnSchematics();
-      
+
       // Compile Insign after mesh is built
       setTimeout(() => {
-        tryCompileInsign("insign_test");
+        tryCompileInsign();
       }, 200);
     },
   },
@@ -154,14 +263,39 @@ const renderer = new SchematicRenderer(canvas, {}, {
 async function tryCompileInsign(schematicName?: string) {
   try {
     insignData = await renderer.insignManager!.loadFromSchematic(schematicName);
-    
+
     if (insignData) {
       console.log('[Insign] Compiled data:', insignData);
       updateUI();
-      
-      // DON'T show regions by default - let user toggle them
+
+      // Also try to load IO regions if available
+      if (renderer.insignIoManager) {
+        try {
+          console.log('[Insign] Attempting to parse IO regions from:', insignData);
+          await renderer.insignIoManager.parseFromInsign(insignData);
+          const stats = renderer.insignIoManager.getStatistics();
+          console.log('[Insign] IO regions parsed:', stats);
+          console.log('[Insign] All inputs:', renderer.insignIoManager.getAllInputs());
+          console.log('[Insign] All outputs:', renderer.insignIoManager.getAllOutputs());
+
+          // Show IO regions if the checkbox is checked
+          if (stats.totalRegions > 0 && showRegionsCheckbox.checked) {
+            renderer.insignIoManager.showAllRegions();
+            console.log(`[Insign] Showing ${stats.inputs} inputs and ${stats.outputs} outputs`);
+          }
+
+          // Build simulation UI
+          buildSimulationUI();
+        } catch (ioError) {
+          console.error('[Insign] Failed to parse IO regions:', ioError);
+        }
+      } else {
+        console.warn('[Insign] No InsignIoManager available');
+      }
+
+      // DON'T show regular regions by default - let user toggle them
       // renderer.insignManager!.showAllRegions();
-      
+
       // Hide overlay
       if (overlayMessage) {
         overlayMessage.style.display = 'none';
@@ -182,7 +316,7 @@ async function loadSchematicFromBuffer(arrayBuffer: ArrayBuffer) {
   try {
     const uint8Array = new Uint8Array(arrayBuffer);
     await renderer.loadSchematic(uint8Array);
-    
+
     // Wait a bit for schematic to be loaded
     setTimeout(() => {
       tryCompileInsign();
@@ -200,29 +334,59 @@ async function loadSchematic(file: File) {
 }
 
 // Load test schematic
-function loadTestSchematic() {
-  console.log('[Insign] Creating test schematic with Insign annotations...');
-  
-  // Remove existing schematic if any
-  const existingSchematic = renderer.schematicManager.getSchematic();
-  if (existingSchematic) {
-    renderer.schematicManager.removeSchematic(existingSchematic.name);
+async function loadTestSchematic() {
+  const selectedCircuit = circuitSelector.value as CircuitType;
+  console.log(`[Insign] Creating ${CIRCUITS[selectedCircuit].name} schematic with Insign annotations...`);
+
+  // Clear old IO highlights
+  if (renderer.insignIoManager) {
+    renderer.insignIoManager.clear();
   }
-  
-  // Create new test schematic
-  createInsignTestSchematic(renderer, "insign_test");
+
+  // Remove existing schematic if any
+  const existingSchematic = renderer.schematicManager?.getSchematic();
+  if (existingSchematic) {
+    renderer.schematicManager?.removeSchematic(existingSchematic.name);
+  }
+
+  // Clear old Insign data
+  insignData = null;
+
+  // Create new test schematic with selected circuit
+  await createInsignTestSchematic(renderer, "insign_test", selectedCircuit);
   renderer.cameraManager.focusOnSchematics();
-  
+
   // Compile Insign after a short delay
   setTimeout(() => {
-    tryCompileInsign("insign_test");
+    tryCompileInsign();
   }, 200);
+}
+
+// Load preset into circuit builder
+function loadPresetIntoBuilder() {
+  const selectedCircuit = circuitSelector.value as CircuitType;
+  const circuit = CIRCUITS[selectedCircuit];
+
+  // Load template
+  templateInput.value = circuit.template;
+
+  // Load IO regions
+  ioRegions = circuit.signs.map(sign => ({
+    id: sign.id,
+    pos: [...sign.pos] as [number, number, number],
+    type: sign.type as "input" | "output",
+    dataType: sign.dataType as any
+  }));
+
+  renderIoRegionsList();
+
+  console.log(`[CircuitBuilder] Loaded ${circuit.name} preset into builder`);
 }
 
 // Get regions with geometry
 function getRegionsWithGeometry(): Array<{ id: string; entry: DslEntry }> {
   if (!insignData) return [];
-  
+
   return Object.entries(insignData)
     .filter(([_, entry]) => entry.bounding_boxes && entry.bounding_boxes.length > 0)
     .map(([id, entry]) => ({ id, entry }));
@@ -236,40 +400,40 @@ function updateUI() {
     detailsSection.style.display = 'none';
     return;
   }
-  
+
   const regions = getRegionsWithGeometry();
-  const ioRegions = regions.filter(r => r.entry.metadata['io.type']);
-  
+  const ioRegionsInInsign = regions.filter(r => r.entry.metadata['io.type']);
+
   // Update summary
   summarySection.style.display = 'block';
   statTotal.textContent = Object.keys(insignData).length.toString();
   statGeometry.textContent = regions.length.toString();
-  statIo.textContent = ioRegions.length.toString();
+  statIo.textContent = ioRegionsInInsign.length.toString();
   statSelected.textContent = selectedRegion || '-';
-  
-  // Update region list
-  regionsSection.style.display = 'block';
-  regionCount.textContent = regions.length.toString();
+
+  // Update IO region list from InsignIoManager
+  const ioRegions = renderer.insignIoManager ?
+    [...renderer.insignIoManager.getAllInputs(), ...renderer.insignIoManager.getAllOutputs()] : [];
+
+  regionsSection.style.display = ioRegions.length > 0 ? 'block' : 'none';
+  regionCount.textContent = ioRegions.length.toString();
   regionList.innerHTML = '';
-  
-  regions.forEach(({ id, entry }) => {
-    const ioType = entry.metadata['io.type'];
-    const label = entry.metadata['doc.label'] || id;
-    const isSelected = selectedRegion === id;
-    const isVisible = renderer.insignManager!.isRegionVisible(id);
-    
-    // Get the actual color from hash
-    const colorNum = (renderer.insignManager!.constructor as any).generateColorFromString(id);
-    const color = '#' + colorNum.toString(16).padStart(6, '0');
-    
+
+  ioRegions.forEach((region) => {
+    const displayName = region.regionId.replace(/^io\./, '');
+    const isVisible = renderer.insignIoManager!.isRegionVisible(region.regionId);
+    const direction = region.direction;
+    const color = direction === 'input' ? '#4499ff' : '#ff4466';
+
     const item = document.createElement('div');
-    item.className = 'region-item' + (isSelected ? ' selected' : '');
+    item.className = 'region-item';
     item.style.cssText = `
       display: flex;
       align-items: center;
       gap: 8px;
+      border-left: 3px solid ${color};
     `;
-    
+
     // Create checkbox for toggling visibility
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -277,36 +441,26 @@ function updateUI() {
     checkbox.style.cssText = 'cursor: pointer; margin: 0;';
     checkbox.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (checkbox.checked) {
-        renderer.insignManager!.showRegion(id);
-      } else {
-        renderer.insignManager!.hideRegion(id);
-      }
-      // Re-render to update checkboxes
+      renderer.insignIoManager!.toggleRegion(region.regionId);
       setTimeout(() => updateUI(), 50);
     });
-    
+
     // Create content div
     const content = document.createElement('div');
-    content.style.cssText = 'flex: 1; cursor: pointer;';
+    content.style.cssText = 'flex: 1;';
     content.innerHTML = `
       <div class="region-name">
         <span class="region-color-badge" style="background: ${color};"></span>
-        ${label}
+        ${displayName}
       </div>
-      ${id !== label ? `<div class="region-meta">ID: ${id}</div>` : ''}
-      ${ioType ? `<div class="region-meta">IO: ${ioType === 'i' ? 'Input' : 'Output'}</div>` : ''}
-      <div class="region-meta">Boxes: ${entry.bounding_boxes?.length || 0}</div>
+      <div class="region-meta">${direction === 'input' ? 'Input' : 'Output'} | ${region.dataType} | ${region.positions.length} bit${region.positions.length > 1 ? 's' : ''}</div>
     `;
-    content.addEventListener('click', () => {
-      selectRegion(isSelected ? null : id);
-    });
-    
+
     item.appendChild(checkbox);
     item.appendChild(content);
     regionList.appendChild(item);
   });
-  
+
   // Update details
   if (selectedRegion && insignData[selectedRegion]) {
     updateDetails();
@@ -318,7 +472,7 @@ function updateUI() {
 // Select region
 function selectRegion(regionId: string | null) {
   const previousSelection = selectedRegion;
-  
+
   // Reset previous selection's style
   if (previousSelection && renderer.insignManager!.isRegionVisible(previousSelection)) {
     // Restore original style based on IO type
@@ -329,10 +483,10 @@ function selectRegion(regionId: string | null) {
     else if (ioType === 'o') style = { ...InsignManager.STYLE_PRESETS.output };
     renderer.insignManager!.updateRegionStyle(previousSelection, style);
   }
-  
+
   // Update selection
   selectedRegion = regionId;
-  
+
   // Highlight new selection
   if (selectedRegion && renderer.insignManager!.isRegionVisible(selectedRegion)) {
     renderer.insignManager!.updateRegionStyle(
@@ -340,7 +494,7 @@ function selectRegion(regionId: string | null) {
       InsignManager.STYLE_PRESETS.selected
     );
   }
-  
+
   updateUI();
 }
 
@@ -350,10 +504,10 @@ function updateDetails() {
     detailsSection.style.display = 'none';
     return;
   }
-  
+
   const entry = insignData[selectedRegion];
   detailsSection.style.display = 'block';
-  
+
   detailId.textContent = selectedRegion;
   detailMetadata.textContent = JSON.stringify(entry.metadata, null, 2);
   detailBoxes.textContent = JSON.stringify(entry.bounding_boxes, null, 2);
@@ -385,15 +539,22 @@ canvas.addEventListener('drop', (e) => {
 // Visualization controls
 showRegionsCheckbox.addEventListener('change', () => {
   if (showRegionsCheckbox.checked) {
-    // Show all regions
+    // Show all regions (both regular and IO)
     if (insignData) {
       Object.keys(insignData).forEach(id => {
-        renderer.insignManager!.showRegion(id);
+        if (id.startsWith('io.')) {
+          // Show IO regions via InsignIoManager
+          renderer.insignIoManager?.showRegion(id);
+        } else {
+          // Show regular regions via InsignManager
+          renderer.insignManager!.showRegion(id);
+        }
       });
     }
   } else {
-    // Hide all regions
+    // Hide all regions (both regular and IO)
     renderer.insignManager!.hideAllRegions();
+    renderer.insignIoManager?.hideAllRegions();
   }
   // Update UI to reflect checkbox states
   setTimeout(() => updateUI(), 50);
@@ -410,6 +571,621 @@ if (loadTestBtn) {
     loadTestSchematic();
   });
 }
+
+// Load preset into builder button
+if (loadPresetBtn) {
+  loadPresetBtn.addEventListener('click', () => {
+    loadPresetIntoBuilder();
+  });
+}
+
+// ===== SIMULATION FUNCTIONALITY =====
+
+// Build simulation UI for IO regions
+function buildSimulationUI() {
+  console.log('[Simulation] buildSimulationUI called');
+  if (!renderer.insignIoManager) {
+    console.log('[Simulation] No insignIoManager');
+    return;
+  }
+
+  const inputs = renderer.insignIoManager.getAllInputs();
+  const outputs = renderer.insignIoManager.getAllOutputs();
+  console.log('[Simulation] Found', inputs.length, 'inputs and', outputs.length, 'outputs');
+
+  if (inputs.length === 0 && outputs.length === 0) {
+    simulationSection.style.display = 'none';
+    return;
+  }
+
+  console.log('[Simulation] Setting simulationSection display to block');
+  simulationSection.style.display = 'block';
+
+  // Build input controls
+  inputControls.innerHTML = '';
+  inputs.forEach(region => {
+    const control = createInputControl(region);
+    inputControls.appendChild(control);
+  });
+
+  // Build output displays
+  outputDisplays.innerHTML = '';
+  outputs.forEach(region => {
+    const display = createOutputDisplay(region);
+    outputDisplays.appendChild(display);
+  });
+}
+
+// Helper to extract bit width from dataType (e.g., "unsigned:4" -> 4)
+function getDataTypeBitWidth(dataType: string): number | null {
+  const match = dataType.match(/^(unsigned|signed|uint|int):(\d+)$/);
+  return match ? parseInt(match[2]) : null;
+}
+
+// Helper to check if dataType is a signal strength type (nibble, signal, signal_strength)
+function isSignalStrengthType(dataType: string): boolean {
+  const lowerType = dataType.toLowerCase();
+  return lowerType === 'nibble' || lowerType === 'signal' || lowerType === 'signal_strength';
+}
+
+// Create input control based on data type
+function createInputControl(region: any): HTMLElement {
+  const control = document.createElement('div');
+  control.className = 'input-control';
+
+  const displayName = region.regionId.replace(/^io\./, '');
+  const bitCount = region.positions.length;
+  const explicitBitWidth = getDataTypeBitWidth(region.dataType);
+
+  // Initialize input value if not set
+  if (!(region.regionId in inputValues)) {
+    inputValues[region.regionId] = 0;
+  }
+
+  // Determine the actual bit width (for display and max values)
+  const isSignalStrength = isSignalStrengthType(region.dataType);
+  const effectiveBitWidth = isSignalStrength ? 4 : (explicitBitWidth || bitCount);
+  const isPacked4 = (bitCount === 1 && explicitBitWidth && explicitBitWidth > 1) || isSignalStrength;
+
+  control.innerHTML = `
+    <div class="input-control-header">
+      <span class="input-control-name">${displayName}</span>
+      <span class="input-control-type">${region.dataType} (${effectiveBitWidth} bit${effectiveBitWidth > 1 ? 's' : ''} in ${bitCount} wire${bitCount > 1 ? 's' : ''}${isSignalStrength ? ', signal strength 0-15' : ''})</span>
+    </div>
+  `;
+
+  const valueContainer = document.createElement('div');
+  valueContainer.className = 'input-control-value';
+
+  if (region.dataType === 'bool') {
+    // Boolean input - checkbox
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = inputValues[region.regionId] > 0;
+    checkbox.addEventListener('change', () => {
+      inputValues[region.regionId] = checkbox.checked ? 1 : 0;
+    });
+    valueContainer.appendChild(checkbox);
+    valueContainer.appendChild(document.createTextNode(' ' + (checkbox.checked ? 'ON' : 'OFF')));
+  } else if (isPacked4) {
+    // Single wire with Packed4 encoding (signal strength) - slider + number input
+    const maxValue = (2 ** effectiveBitWidth) - 1; // e.g., 4 bits = 0-15
+
+    const sliderContainer = document.createElement('div');
+    sliderContainer.style.cssText = 'display: flex; gap: 8px; align-items: center; width: 100%;';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = maxValue.toString();
+    slider.value = inputValues[region.regionId].toString();
+    slider.style.cssText = 'flex: 1;';
+
+    const numberInput = document.createElement('input');
+    numberInput.type = 'number';
+    numberInput.min = '0';
+    numberInput.max = maxValue.toString();
+    numberInput.value = inputValues[region.regionId].toString();
+    numberInput.style.cssText = 'width: 60px;';
+
+    slider.addEventListener('input', () => {
+      const val = parseInt(slider.value) || 0;
+      inputValues[region.regionId] = val;
+      numberInput.value = val.toString();
+    });
+
+    numberInput.addEventListener('input', () => {
+      const val = Math.max(0, Math.min(maxValue, parseInt(numberInput.value) || 0));
+      inputValues[region.regionId] = val;
+      slider.value = val.toString();
+      numberInput.value = val.toString();
+    });
+
+    sliderContainer.appendChild(slider);
+    sliderContainer.appendChild(numberInput);
+    valueContainer.appendChild(sliderContainer);
+  } else {
+    // Multi-bit input - number input + bit toggles
+    const numberInput = document.createElement('input');
+    numberInput.type = 'number';
+    numberInput.value = inputValues[region.regionId].toString();
+    numberInput.min = region.dataType === 'signed' ? (-(2 ** (bitCount - 1))).toString() : '0';
+    numberInput.max = region.dataType === 'signed' ? ((2 ** (bitCount - 1)) - 1).toString() : ((2 ** bitCount) - 1).toString();
+    numberInput.addEventListener('input', () => {
+      const val = parseInt(numberInput.value) || 0;
+      inputValues[region.regionId] = val;
+      updateBitToggles();
+    });
+    valueContainer.appendChild(numberInput);
+
+    // Bit toggles
+    const bitGroup = document.createElement('div');
+    bitGroup.className = 'bit-toggle-group';
+    for (let i = bitCount - 1; i >= 0; i--) {
+      const bitToggle = document.createElement('div');
+      bitToggle.className = 'bit-toggle';
+      bitToggle.textContent = i.toString();
+      bitToggle.dataset.bit = i.toString();
+      bitToggle.dataset.regionId = region.regionId;
+
+      const isSet = (inputValues[region.regionId] & (1 << i)) !== 0;
+      if (isSet) bitToggle.classList.add('active');
+
+      bitToggle.addEventListener('click', () => {
+        inputValues[region.regionId] ^= (1 << i);
+        numberInput.value = inputValues[region.regionId].toString();
+        updateBitToggles();
+      });
+
+      bitGroup.appendChild(bitToggle);
+    }
+    valueContainer.appendChild(bitGroup);
+  }
+
+  control.appendChild(valueContainer);
+  return control;
+}
+
+function updateBitToggles() {
+  document.querySelectorAll('.bit-toggle').forEach(toggle => {
+    const bit = parseInt((toggle as HTMLElement).dataset.bit || '0');
+    const regionId = (toggle as HTMLElement).dataset.regionId || '';
+    const isSet = (inputValues[regionId] & (1 << bit)) !== 0;
+    toggle.classList.toggle('active', isSet);
+  });
+}
+
+// Create output display
+function createOutputDisplay(region: any): HTMLElement {
+  const display = document.createElement('div');
+  display.className = 'output-display';
+  display.dataset.regionId = region.regionId;
+
+  const displayName = region.regionId.replace(/^io\./, '');
+  const bitCount = region.positions.length;
+
+  display.innerHTML = `
+    <div class="output-display-header">
+      <span class="output-display-name">${displayName}</span>
+      <span class="output-display-type">${region.dataType} (${bitCount} bit${bitCount > 1 ? 's' : ''})</span>
+    </div>
+    <div class="output-display-value">-</div>
+  `;
+
+  // Add bit displays for multi-bit outputs
+  if (bitCount > 1) {
+    const bitContainer = document.createElement('div');
+    bitContainer.className = 'output-display-bits';
+    for (let i = bitCount - 1; i >= 0; i--) {
+      const bitDisplay = document.createElement('div');
+      bitDisplay.className = 'bit-display';
+      bitDisplay.textContent = i.toString();
+      bitDisplay.dataset.bit = i.toString();
+      bitContainer.appendChild(bitDisplay);
+    }
+    display.appendChild(bitContainer);
+  }
+
+  return display;
+}
+
+// Run simulation
+async function runSimulation() {
+  try {
+    runSimulationBtn.disabled = true;
+    runSimulationBtn.textContent = 'Running...';
+
+    const liveSync = liveSyncModeCheckbox.checked;
+
+    // Get the schematic (get first available schematic)
+    const schematics = renderer.schematicManager?.getAllSchematics();
+    const schematic = schematics && schematics.length > 0 ? schematics[0] : null;
+    if (!schematic) {
+      alert('No schematic loaded');
+      console.error('[Simulation] No schematic found. Available schematics:', schematics);
+      return;
+    }
+    console.log('[Simulation] Using schematic:', schematic.name);
+
+    // Import TypedCircuitExecutor and ExecutionMode from nucleation
+    const { TypedCircuitExecutorWrapper, ExecutionModeWrapper, SimulationOptionsWrapper } = await import('../../../src/nucleationExports');
+
+    // Debug: Check if signs can be extracted
+    const signs = schematic.schematicWrapper.extractSigns();
+    console.log('[Simulation] Extracted signs:', signs);
+    console.log('[Simulation] Sign details:');
+    for (const sign of signs) {
+      console.log(`  [${sign.pos[0]}, ${sign.pos[1]}, ${sign.pos[2]}]: ${sign.text.replace(/\n/g, ' | ')}`);
+    }
+
+    if (!signs || signs.length === 0) {
+      alert('No signs found in schematic. Cannot create executor.');
+      return;
+    }
+
+    // Debug: Check what the InsignIoManager found
+    console.log('[Simulation] InsignIoManager inputs:');
+    renderer.insignIoManager!.getAllInputs().forEach(region => {
+      console.log(`  ${region.regionId}: ${region.positions.length} positions`, region.positions);
+    });
+    console.log('[Simulation] InsignIoManager outputs:');
+    renderer.insignIoManager!.getAllOutputs().forEach(region => {
+      console.log(`  ${region.regionId}: ${region.positions.length} positions`, region.positions);
+    });
+
+    // Create executor from Insign (it extracts the Insign data from the schematic)
+    console.log('[Simulation] Creating TypedCircuitExecutor from Insign...');
+    let executor;
+    try {
+      if (liveSync) {
+        const simulationOptions = new SimulationOptionsWrapper();
+        simulationOptions.optimize = false;
+        executor = TypedCircuitExecutorWrapper.fromInsignWithOptions(
+          schematic.schematicWrapper,
+          simulationOptions
+        );
+        console.log('[Simulation] Created executor with visual (optimize=false) options for live sync');
+      } else {
+        executor = TypedCircuitExecutorWrapper.fromInsign(schematic.schematicWrapper);
+      }
+      console.log('[Simulation] Created TypedCircuitExecutor from Insign');
+    } catch (err) {
+      console.error('[Simulation] fromInsign error:', err);
+      alert('Failed to create executor from Insign: ' + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+
+    // Prepare inputs with correct types
+    const inputs: Record<string, any> = {};
+    renderer.insignIoManager!.getAllInputs().forEach(region => {
+      const name = region.regionId.replace(/^io\./, '');
+      const value = inputValues[region.regionId] || 0;
+
+      // Convert to boolean for bool data types, pass raw values for packed signal strength
+      if (region.dataType === 'bool') {
+        inputs[name] = value !== 0;
+      } else if (isSignalStrengthType(region.dataType)) {
+        // For signal strength types (nibble, signal, signal_strength), pass 0-15 directly
+        inputs[name] = Math.max(0, Math.min(15, value));
+      } else {
+        const explicitBitWidth = getDataTypeBitWidth(region.dataType);
+        const isPacked4 = region.positions.length === 1 && explicitBitWidth && explicitBitWidth > 1;
+
+        if (isPacked4) {
+          // For Packed4 encoding (e.g., unsigned:4 with 1 wire), pass the value directly (0-15)
+          const maxValue = (2 ** explicitBitWidth) - 1;
+          inputs[name] = Math.max(0, Math.min(maxValue, value));
+        } else {
+          inputs[name] = value;
+        }
+      }
+    });
+
+    console.log('[Simulation] Inputs:', inputs);
+
+    // Create execution mode (run for fixed number of ticks with generous headroom)
+    // Using a high tick count to ensure full propagation
+    const executionMode = ExecutionModeWrapper.fixedTicks(50);
+    console.log('[Simulation] Using fixedTicks execution mode (50 ticks)');
+
+    // Execute - pass inputs as object and execution mode
+    const executionResult = executor.execute(inputs, executionMode);
+    const outputs = executionResult.outputs;
+
+    console.log('[Simulation] Execution completed');
+    console.log('[Simulation] Outputs:', outputs);
+    console.log('[Simulation] Execution result:', executionResult);
+
+    // Update output displays
+    renderer.insignIoManager!.getAllOutputs().forEach(region => {
+      const name = region.regionId.replace(/^io\./, '');
+      const value = outputs[name];
+
+      const displayEl = document.querySelector(`.output-display[data-region-id="${region.regionId}"]`) as HTMLElement;
+      if (displayEl) {
+        const valueEl = displayEl.querySelector('.output-display-value') as HTMLElement;
+
+        // Format output based on data type
+        const isSignalStrength = isSignalStrengthType(region.dataType);
+        const explicitBitWidth = getDataTypeBitWidth(region.dataType);
+        const isPacked4 = (region.positions.length === 1 && explicitBitWidth && explicitBitWidth > 1) || isSignalStrength;
+
+        if (isPacked4) {
+          // Show signal strength value and also in hex format for Packed4 encoding
+          const numValue = typeof value === 'number' ? value : 0;
+          valueEl.textContent = `${numValue} (0x${numValue.toString(16).toUpperCase()})`;
+        } else {
+          valueEl.textContent = value !== undefined ? value.toString() : '-';
+        }
+
+        // Update bit displays for multi-bit outputs
+        const bitDisplays = displayEl.querySelectorAll('.bit-display');
+        if (bitDisplays.length > 0 && typeof value === 'number') {
+          bitDisplays.forEach((bitEl) => {
+            const bit = parseInt((bitEl as HTMLElement).dataset.bit || '0');
+            const isSet = (value & (1 << bit)) !== 0;
+            bitEl.classList.toggle('active', isSet);
+          });
+        }
+      }
+    });
+
+    // If live sync mode, update the renderer with the simulation state
+    if (liveSync) {
+      console.log('[Simulation] Syncing simulation state to renderer...');
+
+      // Debug: Check a sample block state BEFORE syncing
+      const dimensions = schematic.schematicWrapper.get_dimensions();
+      console.log('[Simulation] Schematic dimensions:', dimensions);
+
+      // Sample a few blocks to see their state before sync
+      console.log('[Simulation] Block states BEFORE sync:');
+      for (let y = 0; y < Math.min(5, dimensions[1]); y++) {
+        for (let z = 0; z < Math.min(5, dimensions[2]); z++) {
+          for (let x = 0; x < Math.min(5, dimensions[0]); x++) {
+            const blockString = schematic.schematicWrapper.get_block_string(x, y, z);
+            if (blockString && !blockString.includes('air')) {
+              console.log(`  [${x},${y},${z}] = ${blockString}`);
+            }
+          }
+        }
+      }
+
+      // Get the updated schematic from the executor (includes all block state changes)
+      console.log('[Simulation] Calling syncToSchematic()...');
+      const updatedSchematic = executor.syncToSchematic();
+      console.log('[Simulation] syncToSchematic() returned');
+
+      // Debug: Check block states AFTER syncing
+      console.log('[Simulation] Block states AFTER sync:');
+      for (let y = 0; y < Math.min(5, dimensions[1]); y++) {
+        for (let z = 0; z < Math.min(5, dimensions[2]); z++) {
+          for (let x = 0; x < Math.min(5, dimensions[0]); x++) {
+            const blockString = updatedSchematic.get_block_string(x, y, z);
+            if (blockString && !blockString.includes('air')) {
+              console.log(`  [${x},${y},${z}] = ${blockString}`);
+            }
+          }
+        }
+      }
+
+      // Replace the schematic's internal data with the updated one
+      schematic.schematicWrapper = updatedSchematic;
+
+      // Rebuild the mesh to show the updated state
+      console.log('[Simulation] Rebuilding mesh...');
+      await schematic.rebuildMesh();
+
+      console.log('[Simulation] ✓ Renderer synced with simulation state');
+    }
+
+  } catch (error) {
+    console.error('[Simulation] Error:', error);
+    alert('Simulation failed: ' + error);
+  } finally {
+    runSimulationBtn.disabled = false;
+    runSimulationBtn.textContent = 'Run Simulation';
+  }
+}
+
+// Event listeners for simulation
+if (runSimulationBtn) {
+  runSimulationBtn.addEventListener('click', runSimulation);
+}
+
+// ===== CIRCUIT BUILDER FUNCTIONALITY =====
+
+// Render IO regions list
+function renderIoRegionsList() {
+  ioRegionsList.innerHTML = '';
+
+  if (ioRegions.length === 0) {
+    ioRegionsList.innerHTML = '<div style="color: #666; font-size: 0.85em; padding: 8px;">No IO regions defined</div>';
+    return;
+  }
+
+  ioRegions.forEach((region, index) => {
+    const item = document.createElement('div');
+    item.className = 'io-region-item';
+
+    const typeColor = region.type === 'input' ? '#4499ff' : '#ff4466';
+
+    item.innerHTML = `
+      <div class="io-region-header">
+        <span class="io-region-name" style="color: ${typeColor}">${region.id}</span>
+        <button class="delete-btn" data-index="${index}">Delete</button>
+      </div>
+      
+      <label>Type</label>
+      <select data-index="${index}" data-field="type">
+        <option value="input" ${region.type === 'input' ? 'selected' : ''}>Input</option>
+        <option value="output" ${region.type === 'output' ? 'selected' : ''}>Output</option>
+      </select>
+      
+      <label>Data Type</label>
+      <select data-index="${index}" data-field="dataType">
+        <option value="bool" ${region.dataType === 'bool' ? 'selected' : ''}>bool</option>
+        <option value="u8" ${region.dataType === 'u8' ? 'selected' : ''}>u8</option>
+        <option value="u16" ${region.dataType === 'u16' ? 'selected' : ''}>u16</option>
+        <option value="u32" ${region.dataType === 'u32' ? 'selected' : ''}>u32</option>
+        <option value="i8" ${region.dataType === 'i8' ? 'selected' : ''}>i8</option>
+        <option value="i16" ${region.dataType === 'i16' ? 'selected' : ''}>i16</option>
+        <option value="i32" ${region.dataType === 'i32' ? 'selected' : ''}>i32</option>
+      </select>
+      
+      <label>Position [x, y, z]</label>
+      <div class="coord-input-group">
+        <input type="number" data-index="${index}" data-field="pos" data-coord="0" value="${region.pos[0]}" placeholder="X">
+        <input type="number" data-index="${index}" data-field="pos" data-coord="1" value="${region.pos[1]}" placeholder="Y">
+        <input type="number" data-index="${index}" data-field="pos" data-coord="2" value="${region.pos[2]}" placeholder="Z">
+      </div>
+      
+      <label>Region ID</label>
+      <input type="text" data-index="${index}" data-field="id" value="${region.id}" placeholder="io.name">
+    `;
+
+    ioRegionsList.appendChild(item);
+  });
+
+  // Add event listeners for changes
+  ioRegionsList.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement | HTMLSelectElement;
+      const index = parseInt(target.dataset.index || '0');
+      const field = target.dataset.field as keyof IoRegionDef;
+
+      if (field === 'pos') {
+        const coord = parseInt(target.dataset.coord || '0');
+        ioRegions[index].pos[coord] = parseInt((target as HTMLInputElement).value) || 0;
+      } else if (field === 'type' || field === 'dataType') {
+        ioRegions[index][field] = target.value as any;
+      } else if (field === 'id') {
+        ioRegions[index][field] = target.value;
+      }
+
+      // Re-render to update colors if type changed
+      if (field === 'type') {
+        renderIoRegionsList();
+      }
+    });
+  });
+
+  // Add event listeners for delete buttons
+  ioRegionsList.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt((e.target as HTMLButtonElement).dataset.index || '0');
+      ioRegions.splice(index, 1);
+      renderIoRegionsList();
+    });
+  });
+}
+
+// Add new IO region
+function addIoRegion() {
+  ioRegions.push({
+    id: `io.region_${ioRegions.length + 1}`,
+    pos: [0, 2, 0],
+    type: 'input',
+    dataType: 'bool'
+  });
+  renderIoRegionsList();
+}
+
+// Build circuit from template
+async function buildFromTemplate() {
+  const template = templateInput.value.trim();
+
+  if (!template) {
+    alert('Please enter a template');
+    return;
+  }
+
+  try {
+    console.log('[CircuitBuilder] Building circuit from template...');
+    buildFromTemplateBtn.disabled = true;
+    buildFromTemplateBtn.textContent = 'Building...';
+
+    const { SchematicBuilderWrapper } = await import("../../../src/nucleationExports");
+
+    // Build the schematic from template
+    const builder = SchematicBuilderWrapper.fromTemplate(template);
+    const builtSchematic = builder.build();
+
+    // Clear old IO highlights
+    if (renderer.insignIoManager) {
+      renderer.insignIoManager.clear();
+    }
+
+    // Remove existing schematic if any
+    const existingSchematic = renderer.schematicManager?.getSchematic();
+    if (existingSchematic) {
+      renderer.schematicManager?.removeSchematic(existingSchematic.name);
+    }
+
+    // Clear old Insign data
+    insignData = null;
+
+    // Load the schematic
+    await renderer.schematicManager?.loadSchematic("custom_circuit", builtSchematic);
+
+    // Get the loaded schematic to add IO annotations
+    const schematic = renderer.schematicManager?.getSchematic("custom_circuit");
+    if (!schematic) {
+      throw new Error('Failed to get loaded schematic');
+    }
+
+    console.log('[CircuitBuilder] Adding IO annotations...');
+
+    // Add all IO regions as signs
+    for (const region of ioRegions) {
+      schematic.setBlockWithNbt(region.pos, "minecraft:oak_sign[rotation=0]", {
+        Text1: `{"text":"@${region.id}=rc([0,-1,0],[0,-1,0])"}`,
+        Text2: `{"text":"#${region.id}:type=\\"${region.type}\\""}`,
+        Text3: `{"text":"#${region.id}:data_type=\\"${region.dataType}\\""}`,
+        Text4: '{"text":""}',
+      });
+    }
+
+    // Rebuild mesh
+    schematic.rebuildMesh();
+
+    // Focus camera
+    renderer.cameraManager.focusOnSchematics();
+
+    console.log('[CircuitBuilder] ✓ Circuit built successfully');
+
+    // Compile Insign after a short delay
+    setTimeout(() => {
+      tryCompileInsign();
+    }, 200);
+
+  } catch (error) {
+    console.error('[CircuitBuilder] Error:', error);
+    alert('Failed to build circuit: ' + error);
+  } finally {
+    buildFromTemplateBtn.disabled = false;
+    buildFromTemplateBtn.textContent = 'Build Circuit';
+  }
+}
+
+// Event listeners for circuit builder
+if (addIoBtn) {
+  addIoBtn.addEventListener('click', addIoRegion);
+}
+
+if (buildFromTemplateBtn) {
+  buildFromTemplateBtn.addEventListener('click', buildFromTemplate);
+}
+
+// Initialize IO regions list
+renderIoRegionsList();
+
+// Update the updateUI function to also build simulation UI
+const originalUpdateUI = updateUI;
+updateUI = function () {
+  originalUpdateUI();
+  buildSimulationUI();
+};
 
 console.log('[Insign] Test page initialized');
 
