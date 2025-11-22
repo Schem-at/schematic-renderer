@@ -11,6 +11,7 @@
 	],
 	"scripts": {
 		"start": "vite",
+		"test": "vitest",
 		"build": "tsc --project tsconfig.build.json && vite build",
 		"build-only": "vite build",
 		"prepare": "npm run build",
@@ -19,22 +20,24 @@
 	},
 	"devDependencies": {
 		"@esbuild-plugins/node-globals-polyfill": "^0.2.3",
-		"@esbuild/linux-x64": "^0.23.0",
 		"@originjs/vite-plugin-commonjs": "^1.0.3",
 		"@types/d3": "^7.4.3",
 		"@types/gzip-js": "^0.3.5",
 		"@types/lodash": "^4.17.13",
 		"@types/pako": "^2.0.3",
 		"@types/three": "^0.176.0",
+		"@vitest/ui": "^4.0.13",
 		"ajv": "^8.17.1",
 		"cors-anywhere": "^0.4.4",
 		"d3": "^7.9.0",
 		"express": "^4.19.2",
+		"happy-dom": "^20.0.10",
 		"request": "^2.88.2",
 		"typescript": "^5.4.5",
 		"vite": "^4.3.5",
 		"vite-plugin-dts": "^4.5.4",
-		"vite-plugin-node-polyfills": "^0.22.0"
+		"vite-plugin-node-polyfills": "^0.22.0",
+		"vitest": "^4.0.13"
 	},
 	"dependencies": {
 		"@ffmpeg/ffmpeg": "^0.12.15",

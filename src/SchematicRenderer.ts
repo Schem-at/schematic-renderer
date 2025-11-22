@@ -1,5 +1,8 @@
 import initializeNucleationWasm from "nucleation";
-await initializeNucleationWasm();
+// @ts-ignore
+import nucleationWasm from "nucleation-wasm";
+// Initialize with inlined WASM for single-file support
+await initializeNucleationWasm(nucleationWasm);
 
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
@@ -26,6 +29,9 @@ import {
 } from "./managers/ResourcePackManager";
 // @ts-ignore
 import init from "./wasm/minecraft_schematic_utils";
+// @ts-ignore
+import schematicUtilsWasm from "./wasm/minecraft_schematic_utils_bg.wasm";
+
 import { GizmoManager } from "./managers/GizmoManager";
 import {
 	SchematicRendererOptions,
@@ -392,7 +398,7 @@ export class SchematicRenderer {
 
 	private async initWasm(): Promise<void> {
 		try {
-			this.wasmModule = await init();
+			this.wasmModule = await init(schematicUtilsWasm);
 		} catch (error) {
 			console.error("Failed to initialize WASM module:", error);
 		}
