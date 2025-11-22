@@ -1,0 +1,19 @@
+
+import { SchematicWrapper, initSync } from "nucleation";
+// We can't easily run WASM in this environment without proper setup (it needs to load .wasm file).
+// But we can check if there are other methods exposed or check existing tests.
+
+// Instead of running a script (which might fail due to WASM loading in this shell),
+// I will assume the cache hypothesis is partially correct AND the schematic needs explicit bounds.
+
+// But wait, `SchematicObject` caches dimensions in `_cachedDimensions`.
+// If I clear that cache, maybe `getDimensions()` returns the correct value?
+// But `buildSchematicMeshes` doesn't use `_cachedDimensions`. It uses `chunkDimensions` (16x16x16) and asks `schematicWrapper` for an iterator.
+
+// If `iterator.total_chunks()` is 0, then `schematicWrapper` thinks it's empty.
+// This implies `set_block` failed or didn't expand the bounds.
+
+// Is there a `resize` or `setSize` I missed?
+// `SchematicWrapper` has `from_data(Uint8Array)`.
+// Maybe I need to construct a dummy schematic file in memory (Sponge format or Litematic) with the desired size and load it?
+// That seems like overkill but guaranteed to work.

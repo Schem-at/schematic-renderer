@@ -161,12 +161,12 @@ export class SchematicObject extends EventEmitter {
 		const tightDimensions = this.getTightDimensions();
 		console.log("Schematic dimensions (allocated):", schematicDimensions);
 		console.log("Schematic dimensions (tight bounds):", tightDimensions);
-		
+
 		// Use tight bounds for centering if available, otherwise fall back to allocated dimensions
 		const centeringDimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
 			? tightDimensions
 			: schematicDimensions;
-		
+
 		console.log("Centering schematic using dimensions:", centeringDimensions);
 		this.position = new THREE.Vector3(
 			-centeringDimensions[0] / 2 + 0.5, // Center the schematic
@@ -305,10 +305,12 @@ export class SchematicObject extends EventEmitter {
 		this.group.name = name;
 
 		// Build meshes and other initialization
+		this.updateTransform();
+		this.sceneManager.add(this.group);
+		this.group.visible = this.visible;
+
 		if (this.visible) {
 			this.meshesReady = this.buildMeshes();
-			this.updateTransform();
-			this.sceneManager.add(this.group);
 		} else {
 			this.meshesReady = Promise.resolve();
 		}
@@ -383,7 +385,7 @@ export class SchematicObject extends EventEmitter {
 		}
 		return this._cachedDimensions;
 	}
-	
+
 	/**
 	 * Get tight dimensions (actual block content, not pre-allocated space)
 	 * Returns [width, height, length] or [0, 0, 0] if no blocks exist
@@ -392,7 +394,7 @@ export class SchematicObject extends EventEmitter {
 		const dimensions = this.schematicWrapper.get_tight_dimensions();
 		return [dimensions[0], dimensions[1], dimensions[2]];
 	}
-	
+
 	/**
 	 * Get tight bounding box min coordinates [x, y, z]
 	 * Returns null if no non-air blocks have been placed
@@ -402,7 +404,7 @@ export class SchematicObject extends EventEmitter {
 		if (!min) return null;
 		return [min[0], min[1], min[2]];
 	}
-	
+
 	/**
 	 * Get tight bounding box max coordinates [x, y, z]
 	 * Returns null if no non-air blocks have been placed
@@ -910,7 +912,7 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	private async buildMeshes(): Promise<void> {
-		
+
 		if (!this.visible) {
 			return;
 		}
@@ -1048,7 +1050,7 @@ export class SchematicObject extends EventEmitter {
 				chunkCoords: [0, 0, 0],
 				processingTime:
 					performance.now() -
-						(performanceMonitor as any).getCurrentOperationStartTime?.() || 0,
+					(performanceMonitor as any).getCurrentOperationStartTime?.() || 0,
 				blockCount: result.meshes.length,
 				meshCount: result.meshes.length,
 				memoryUsed: memoryDelta,
@@ -1110,7 +1112,7 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		
+
 		const overallStartTime = performance.now();
 		const schematic = schematicObject.schematicWrapper;
 
@@ -1121,6 +1123,7 @@ export class SchematicObject extends EventEmitter {
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 
 		this.reportBuildProgress("Creating chunk iterator...", 0.1);
+		console.log(`[SchematicObject] Creating lazy chunk iterator for ${this.id}...`);
 
 		const iterator = schematic.create_lazy_chunk_iterator(
 			chunkDimensions.chunkWidth,
@@ -1133,8 +1136,10 @@ export class SchematicObject extends EventEmitter {
 		);
 
 		const totalChunks = iterator.total_chunks();
+		console.log(`[SchematicObject] Chunk iterator created. Total chunks: ${totalChunks}`);
+
 		if (totalChunks === 0) {
-			
+
 			this.reportBuildProgress(
 				"Schematic build complete (no chunks)",
 				1.0,
@@ -1144,7 +1149,7 @@ export class SchematicObject extends EventEmitter {
 			return { meshes: [], chunkMap: new Map() };
 		}
 
-		
+
 
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		const renderingBounds = schematicObject.renderingBounds?.enabled
@@ -1162,9 +1167,11 @@ export class SchematicObject extends EventEmitter {
 			0
 		);
 
+		console.log(`[SchematicObject] Processing ${totalChunks} chunks in immediate mode...`);
+
 		// STEP 3: TRUE lazy processing - no accumulation
 		console.log("🔥 Processing chunks with minimal memory footprint...");
-			// const chunkProcessingStartTime = performance.now();
+		// const chunkProcessingStartTime = performance.now();
 
 		while (iterator.has_next()) {
 			const chunkData = iterator.next();
@@ -1244,7 +1251,7 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		
+
 
 		this.reportBuildProgress(
 			"Finalizing scene...",
@@ -1256,7 +1263,7 @@ export class SchematicObject extends EventEmitter {
 		this.group.updateMatrixWorld(true);
 
 		const totalTime = performance.now() - overallStartTime;
-	
+
 
 		// Return meshes from scene graph (not from accumulator!)
 		const finalMeshes = Array.from(this.group.children);
@@ -1328,7 +1335,7 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		
+
 		const overallStartTime = performance.now();
 		const renderer = this.schematicRenderer.renderManager?.renderer;
 		const schematic = schematicObject.schematicWrapper;
@@ -1348,9 +1355,9 @@ export class SchematicObject extends EventEmitter {
 		);
 
 		const totalChunks = iterator.total_chunks();
-		
+
 		if (totalChunks === 0) {
-			
+
 			this.reportBuildProgress(
 				"Schematic build complete (no chunks)",
 				1.0,
@@ -1360,7 +1367,7 @@ export class SchematicObject extends EventEmitter {
 			return { meshes: [], chunkMap: new Map() };
 		}
 
-		
+
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		let totalMeshCount = 0;
 
@@ -1393,7 +1400,7 @@ export class SchematicObject extends EventEmitter {
 						if (
 							meshesAddedThisFrame > 0 &&
 							performance.now() - frameProcessingStartTime >=
-								currentFrameJsBudget
+							currentFrameJsBudget
 						) {
 							break;
 						}
@@ -1480,7 +1487,7 @@ export class SchematicObject extends EventEmitter {
 						frameCounterForLog % LOG_INTERVAL_FRAMES === 0 ||
 						!iterator.has_next()
 					) {
-					
+
 						const jsTimeThisFrame =
 							performance.now() - frameProcessingStartTime;
 						// Dynamic budget adjustment
@@ -1490,7 +1497,7 @@ export class SchematicObject extends EventEmitter {
 							currentFrameJsBudget > 4
 						) {
 							currentFrameJsBudget = Math.max(4, currentFrameJsBudget * 0.8);
-							
+
 						} else if (
 							combinedTime < TARGET_FRAME_TIME * 0.5 &&
 							currentFrameJsBudget < 16
@@ -1560,7 +1567,7 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		
+
 		const overallStartTime = performance.now();
 
 		// Initialize instanced rendering
@@ -1574,7 +1581,7 @@ export class SchematicObject extends EventEmitter {
 		await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
 
 		const totalTime = performance.now() - overallStartTime;
-		
+
 
 		// Return instanced meshes from scene graph
 		const instancedMeshes = Array.from(this.group.children);
@@ -1800,8 +1807,8 @@ export class SchematicObject extends EventEmitter {
 				mesh.material?.dispose();
 			}
 		});
-		
-		
+
+
 		// Also clear ALL children from the group (in case some were missed)
 		let removedCount = 0;
 		while (this.group.children.length > 0) {
@@ -1858,6 +1865,10 @@ export class SchematicObject extends EventEmitter {
 			position.z,
 			blockType
 		);
+
+		// Invalidate cached dimensions since we modified the schematic
+		this._cachedDimensions = null;
+
 		performanceMonitor.endOperation("setBlockNoRebuild");
 	}
 
@@ -2193,7 +2204,7 @@ export class SchematicObject extends EventEmitter {
 		const dimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
 			? tightDimensions
 			: this.getDimensions();
-		
+
 		return new THREE.Vector3(
 			this.position.x + Math.abs(dimensions[0] / 2),
 			this.position.y + Math.abs(dimensions[1] / 2),
@@ -2297,13 +2308,12 @@ export class SchematicObject extends EventEmitter {
 							chunk_x: Math.floor(x / this.chunkDimensions.chunkWidth),
 							chunk_y: Math.floor(y / this.chunkDimensions.chunkHeight),
 							chunk_z: Math.floor(z / this.chunkDimensions.chunkLength),
-							stateKey: `${blockName}${
-								Object.keys(properties).length > 0
-									? `[${Object.entries(properties)
-											.map(([k, v]) => `${k}=${v}`)
-											.join(",")}]`
-									: ""
-							}`, // Generate stateKey
+							stateKey: `${blockName}${Object.keys(properties).length > 0
+								? `[${Object.entries(properties)
+									.map(([k, v]) => `${k}=${v}`)
+									.join(",")}]`
+								: ""
+								}`, // Generate stateKey
 						};
 
 						// Apply filter if provided

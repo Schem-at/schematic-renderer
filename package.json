@@ -55,6 +55,7 @@
 		"nucleation": "^0.1.115",
 		"pako": "^2.1.0",
 		"postprocessing": "^6.35.4",
+		"simplex-noise": "^4.0.3",
 		"stats-js": "^1.0.1",
 		"three": "^0.176.0",
 		"three-creative-controls": "^1.0.1",

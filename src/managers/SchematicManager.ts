@@ -184,33 +184,33 @@ export class SchematicManager {
 			this.removeSchematic(name)
 		);
 		await Promise.all(promises);
-		
+
 		// After removing all schematics, perform comprehensive cleanup
 		this.performDeepCleanup();
 	}
-	
+
 	/**
 	 * Performs comprehensive memory cleanup after schematic operations
 	 * This should be called between test runs to prevent memory leaks
 	 */
 	public performDeepCleanup(): void {
 		console.log('🧹 Performing deep memory cleanup...');
-		
+
 		// Clear all caches and registries
 		clearAllCaches();
-		
+
 		// Dispose palette cache
 		this.worldMeshBuilder.dispose();
-		
+
 		// Clear buffer pool
 		GeometryBufferPool.clear();
-		
+
 		// Clear all performance monitoring sessions
 		performanceMonitor.clearAllSessions();
-		
+
 		// Force single garbage collection
 		forceGarbageCollection();
-		
+
 		console.log('✅ Deep cleanup completed');
 	}
 
@@ -570,7 +570,7 @@ export class SchematicManager {
 		}
 		return maxDimensions;
 	}
-	
+
 	/**
 	 * Get maximum tight dimensions across all schematics
 	 * Uses actual block content, not pre-allocated space
@@ -619,12 +619,19 @@ export class SchematicManager {
 		);
 	}
 
-	public createEmptySchematic(name: string): SchematicObject {
+	public createEmptySchematic(
+		name: string,
+		options?: Partial<{
+			visible: boolean;
+			position: THREE.Vector3 | number[];
+		}>
+	): SchematicObject {
 		const schematicWrapper = new SchematicWrapper();
 		const schematicObject = new SchematicObject(
 			this.schematicRenderer,
 			name,
-			schematicWrapper
+			schematicWrapper,
+			options
 		);
 		this.addSchematic(schematicObject);
 		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();

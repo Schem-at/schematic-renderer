@@ -32,7 +32,7 @@ export class PerformanceVisualizer {
 
         this.setupContainer();
         this.createCharts();
-        
+
         if (this.config.showLiveFPS) {
             this.startFPSMonitoring();
         }
@@ -45,22 +45,22 @@ export class PerformanceVisualizer {
         // Create main layout
         const header = document.createElement('div');
         header.className = 'flex justify-between items-center mb-5 pb-3 border-b-2 border-gray-700';
-        
+
         const title = document.createElement('h2');
         title.textContent = 'Performance Monitor';
         title.className = 'm-0 text-white text-xl font-bold';
-        
+
         const controls = document.createElement('div');
         controls.className = 'flex items-center gap-3';
-        
+
         // Mesh Mode Controls
         const meshModeGroup = document.createElement('div');
         meshModeGroup.className = 'flex items-center gap-2 mr-4 pr-4 border-r border-gray-600';
-        
+
         const meshModeLabel = document.createElement('span');
         meshModeLabel.textContent = 'Mesh Mode:';
         meshModeLabel.className = 'text-xs text-gray-300 whitespace-nowrap';
-        
+
         const meshModeSelect = document.createElement('select');
         meshModeSelect.className = 'bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-xs cursor-pointer';
         meshModeSelect.innerHTML = `
@@ -69,35 +69,35 @@ export class PerformanceVisualizer {
             <option value="instanced">Instanced</option>
         `;
         meshModeSelect.value = 'incremental';
-        
+
         meshModeSelect.onchange = () => {
             const selectedMode = meshModeSelect.value as 'immediate' | 'incremental' | 'instanced';
             if (this.onMeshModeChange) {
                 this.onMeshModeChange(selectedMode);
             }
         };
-        
+
         meshModeGroup.appendChild(meshModeLabel);
         meshModeGroup.appendChild(meshModeSelect);
-        
+
         // Export button
         const exportBtn = document.createElement('button');
         exportBtn.textContent = 'Export Data';
         exportBtn.className = 'bg-green-600 text-white border-none px-4 py-2 rounded cursor-pointer text-xs hover:bg-green-700';
         exportBtn.onclick = () => this.exportData();
-        
+
         // Clear button
         const clearBtn = document.createElement('button');
         clearBtn.textContent = 'Clear Data';
         clearBtn.className = 'bg-red-600 text-white border-none px-4 py-2 rounded cursor-pointer text-xs hover:bg-red-700';
         clearBtn.onclick = () => this.clearData();
-        
+
         controls.appendChild(meshModeGroup);
         controls.appendChild(exportBtn);
         controls.appendChild(clearBtn);
         header.appendChild(title);
         header.appendChild(controls);
-        
+
         this.container.appendChild(header);
 
         // Create grid layout for charts
@@ -109,7 +109,7 @@ export class PerformanceVisualizer {
 
     private createCharts(): void {
         const grid = this.container.querySelector('#performance-grid') as HTMLElement;
-        
+
         // Operation Timing Chart
         const timingChart = new TimingChart(this.config.theme);
         this.charts.set('timing', timingChart);
@@ -119,12 +119,28 @@ export class PerformanceVisualizer {
         const chunkChart = new ChunkProcessingChart(this.config.theme);
         this.charts.set('chunks', chunkChart);
         grid.appendChild(chunkChart.getContainer());
+
+        // Frame Time Chart (New)
+        const frameTimeChart = new FrameTimeChart(this.config.theme);
+        this.charts.set('frametime', frameTimeChart);
+        grid.appendChild(frameTimeChart.getContainer());
+
+        // Renderer Stats Chart (New)
+        const rendererChart = new RendererStatsChart(this.config.theme);
+        this.charts.set('renderer', rendererChart);
+        grid.appendChild(rendererChart.getContainer());
+
+        // FPS Chart
+        const fpsChart = new FPSChart(this.config.theme);
+        this.charts.set('fps', fpsChart);
+        grid.appendChild(fpsChart.getContainer());
     }
 
     private startFPSMonitoring(): void {
-        // Update FPS chart regularly using the actual PerformanceMonitor FPS data
+        // Update charts regularly using the actual PerformanceMonitor data
         setInterval(() => {
             if (this.isVisible) {
+                // Update FPS Chart
                 const fpsChart = this.charts.get('fps') as FPSChart;
                 if (fpsChart) {
                     const currentFPS = performanceMonitor.getCurrentFPS();
@@ -132,6 +148,21 @@ export class PerformanceVisualizer {
                         fpsChart.updateData({
                             timestamp: Date.now(),
                             fps: currentFPS
+                        });
+                    }
+                }
+
+                // Update Frame Time Chart
+                const frameTimeChart = this.charts.get('frametime') as FrameTimeChart;
+                if (frameTimeChart) {
+                    // We need to get recent history from monitor, but visualizing live stream
+                    // might be heavy. Let's just update with LATEST frame time for now?
+                    // Or better, pull the session history if available.
+                    const currentFrameTime = performanceMonitor.getCurrentFrameTime();
+                    if (currentFrameTime > 0) {
+                        frameTimeChart.updateData({
+                            timestamp: Date.now(),
+                            duration: currentFrameTime
                         });
                     }
                 }
@@ -162,17 +193,22 @@ export class PerformanceVisualizer {
         if (!this.isVisible) return;
 
         const sessions = performanceMonitor.getAllSessions();
-        
-        // Update timing chart
-        const timingChart = this.charts.get('timing') as TimingChart;
-        if (timingChart) {
-            timingChart.updateData(sessions);
-        }
 
-        // Update chunk processing chart
-        const chunkChart = this.charts.get('chunks') as ChunkProcessingChart;
-        if (chunkChart) {
-            chunkChart.updateData(sessions);
+        // Update all charts with session data
+        this.charts.forEach(chart => {
+            // FPS chart is special (live), others use session data
+            if (!(chart instanceof FPSChart) && !(chart instanceof FrameTimeChart)) {
+                chart.updateData(sessions);
+            }
+        });
+
+        // Specifically update frame time chart from session history if available
+        // This allows seeing the history of the run, not just live
+        const frameTimeChart = this.charts.get('frametime') as FrameTimeChart;
+        if (frameTimeChart && sessions.length > 0) {
+            // Pass full session frame history if we want detailed review
+            // But Chart.updateData expects generic input. Let's adapt.
+            frameTimeChart.updateSessionData(sessions);
         }
     }
 
@@ -184,7 +220,7 @@ export class PerformanceVisualizer {
             allSessions,
             exportTime: new Date().toISOString()
         };
-        
+
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -195,7 +231,15 @@ export class PerformanceVisualizer {
     }
 
     private clearData(): void {
-        performanceMonitor.clearSessions();
+        performanceMonitor.clearAllSessions(); // Clear everything
+
+        // Clear local chart buffers
+        this.charts.forEach(chart => {
+            if (chart instanceof FPSChart || chart instanceof FrameTimeChart) {
+                (chart as any).clear();
+            }
+        });
+
         this.updateCharts();
     }
 
@@ -222,27 +266,29 @@ abstract class Chart {
     protected height: number = 300;
     protected margin = { top: 30, right: 30, bottom: 60, left: 80 };
     protected tooltip: d3.Selection<HTMLDivElement, unknown, null, undefined>;
-    
+    protected titleText: string;
+
     // Responsive sizing
     protected minWidth = 300;
     protected minHeight = 200;
 
     constructor(theme: 'light' | 'dark', title: string) {
         this.theme = theme;
+        this.titleText = title;
         this.container = this.createContainer(title);
-        
+
         // Calculate proper dimensions based on container
         const containerRect = this.container.getBoundingClientRect();
         this.width = Math.max(this.minWidth, containerRect.width - 30);
         this.height = Math.max(this.minHeight, containerRect.height - 60);
-        
+
         this.svg = this.createSVG();
         this.tooltip = this.createTooltip();
-        
+
         // Setup responsive behavior
         this.setupResponsive();
     }
-    
+
     protected createTooltip(): d3.Selection<HTMLDivElement, unknown, null, undefined> {
         return d3.select('body')
             .append('div')
@@ -259,7 +305,7 @@ abstract class Chart {
             .style('opacity', 0)
             .style('z-index', '10000') as unknown as d3.Selection<HTMLDivElement, unknown, null, undefined>;
     }
-    
+
     protected setupResponsive(): void {
         // Add resize observer if available
         if (typeof ResizeObserver !== 'undefined') {
@@ -269,30 +315,30 @@ abstract class Chart {
             });
             resizeObserver.observe(this.container);
         }
-        
+
         // Fallback to window resize for older browsers
         window.addEventListener('resize', () => {
             this.onResize();
         });
     }
-    
+
     protected onResize(containerWidth?: number, containerHeight?: number): void {
         const containerRect = this.container.getBoundingClientRect();
         const newWidth = Math.max(this.minWidth, containerWidth || containerRect.width - 30);
         const newHeight = Math.max(this.minHeight, containerHeight || containerRect.height - 60);
-        
+
         if (newWidth !== this.width || newHeight !== this.height) {
             this.width = newWidth;
             this.height = newHeight;
             this.svg.attr('width', this.width).attr('height', this.height);
-            
+
             // Trigger data update to redraw with new dimensions
             this.redraw();
         }
     }
-    
+
     protected abstract redraw(): void;
-    
+
     protected showTooltip(content: string, event: MouseEvent): void {
         this.tooltip
             .style('opacity', 1)
@@ -300,7 +346,7 @@ abstract class Chart {
             .style('left', `${event.pageX + 10}px`)
             .style('top', `${event.pageY - 10}px`);
     }
-    
+
     protected hideTooltip(): void {
         this.tooltip.style('opacity', 0);
     }
@@ -345,6 +391,238 @@ abstract class Chart {
 
     public destroy(): void {
         this.container.remove();
+        if (this.tooltip) this.tooltip.remove();
+    }
+}
+
+// Frame Time Chart (New)
+class FrameTimeChart extends Chart {
+    private frameData: Array<{ timestamp: number; duration: number }> = [];
+    private maxDataPoints = 200;
+    private xScale!: d3.ScaleTime<number, number>;
+    private yScale!: d3.ScaleLinear<number, number>;
+
+    constructor(theme: 'light' | 'dark') {
+        super(theme, 'Frame Time (ms)');
+        this.setupScales();
+    }
+
+    private setupScales(): void {
+        this.xScale = d3.scaleTime()
+            .range([this.margin.left, this.width - this.margin.right]);
+
+        this.yScale = d3.scaleLinear()
+            .range([this.height - this.margin.bottom, this.margin.top]);
+    }
+
+    updateData(newData: { timestamp: number; duration: number }): void {
+        this.frameData.push(newData);
+        if (this.frameData.length > this.maxDataPoints) {
+            this.frameData.shift();
+        }
+        this.redraw();
+    }
+
+    updateSessionData(sessions: any[]): void {
+        // If full session data is provided, prioritize it over live stream
+        if (sessions.length > 0) {
+            const latestSession = sessions[sessions.length - 1];
+            if (latestSession.frameHistory && latestSession.frameHistory.length > 0) {
+                this.frameData = latestSession.frameHistory.slice(-this.maxDataPoints);
+                this.redraw();
+            }
+        }
+    }
+
+    clear(): void {
+        this.frameData = [];
+        this.redraw();
+    }
+
+    protected redraw(): void {
+        this.svg.selectAll('*').remove();
+        if (!this.frameData.length) return;
+
+        this.setupScales();
+
+        // Domains
+        const extent = d3.extent(this.frameData, d => d.timestamp);
+        if (extent[0] && extent[1]) {
+            this.xScale.domain([new Date(extent[0]), new Date(extent[1])]);
+        }
+
+        const maxDuration = d3.max(this.frameData, d => d.duration) || 16;
+        this.yScale.domain([0, Math.max(33, maxDuration * 1.1)]); // Ensure at least 33ms (30fps) scale
+
+        // Axes
+        this.svg.append('g')
+            .attr('transform', `translate(0,${this.height - this.margin.bottom})`)
+            .call(d3.axisBottom(this.xScale).tickFormat((d: any) => d3.timeFormat('%H:%M:%S')(d)));
+
+        this.svg.append('g')
+            .attr('transform', `translate(${this.margin.left},0)`)
+            .call(d3.axisLeft(this.yScale).ticks(5));
+
+        // Reference lines (16.6ms = 60fps, 33.3ms = 30fps)
+        const refLines = [16.66, 33.33];
+        refLines.forEach(val => {
+            this.svg.append('line')
+                .attr('x1', this.margin.left)
+                .attr('x2', this.width - this.margin.right)
+                .attr('y1', this.yScale(val))
+                .attr('y2', this.yScale(val))
+                .attr('stroke', val === 16.66 ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 152, 0, 0.5)')
+                .attr('stroke-dasharray', '4,4');
+
+            this.svg.append('text')
+                .attr('x', this.width - this.margin.right + 5)
+                .attr('y', this.yScale(val) + 3)
+                .attr('font-size', '10px')
+                .attr('fill', this.theme === 'dark' ? '#ccc' : '#666')
+                .text(val === 16.66 ? '60fps' : '30fps');
+        });
+
+        // Bars
+        const barWidth = Math.max(2, (this.width - this.margin.left - this.margin.right) / this.frameData.length - 1);
+
+        this.svg.selectAll('.bar')
+            .data(this.frameData)
+            .enter()
+            .append('rect')
+            .attr('x', d => this.xScale(d.timestamp) - barWidth / 2)
+            .attr('y', d => this.yScale(d.duration))
+            .attr('width', barWidth)
+            .attr('height', d => this.height - this.margin.bottom - this.yScale(d.duration))
+            .attr('fill', d => {
+                if (d.duration > 33.33) return '#FF5252'; // < 30fps (red)
+                if (d.duration > 16.66) return '#FFC107'; // < 60fps (yellow)
+                return '#4CAF50'; // 60fps+ (green)
+            })
+            .on('mouseover', (event: MouseEvent, d: any) => {
+                const tooltip = `
+                    <strong>Duration:</strong> ${d.duration.toFixed(1)}ms<br>
+                    <strong>Est FPS:</strong> ${(1000 / d.duration).toFixed(0)}
+                `;
+                this.showTooltip(tooltip, event);
+            })
+            .on('mouseout', () => this.hideTooltip());
+
+        // Axes Style
+        this.svg.selectAll('text').attr('fill', this.theme === 'dark' ? '#fff' : '#333');
+        this.svg.selectAll('path, line').attr('stroke', this.theme === 'dark' ? '#666' : '#333');
+    }
+}
+
+// Renderer Stats Chart (New)
+class RendererStatsChart extends Chart {
+    constructor(theme: 'light' | 'dark') {
+        super(theme, 'Renderer Load (Triangles & Draw Calls)');
+    }
+
+    updateData(sessions: any[]): void {
+        this.redraw(sessions);
+    }
+
+    protected redraw(sessions: any[] = []): void {
+        this.svg.selectAll('*').remove();
+
+        // Get stats history from latest session
+        const session = sessions[sessions.length - 1];
+        if (!session || !session.rendererStatsHistory || session.rendererStatsHistory.length === 0) {
+            this.showEmptyState();
+            return;
+        }
+
+        const data = session.rendererStatsHistory;
+
+        // Scales
+        const extent = d3.extent(data, (d: any) => d.timestamp);
+        const xDomain: [Date, Date] = [
+            new Date(extent[0] !== undefined ? extent[0] : Date.now()),
+            new Date(extent[1] !== undefined ? extent[1] : Date.now())
+        ];
+
+        const xScale = d3.scaleTime()
+            .domain(xDomain)
+            .range([this.margin.left, this.width - this.margin.right]);
+
+        // Left Axis: Triangles (Log scale might be better?)
+        const maxTriangles = d3.max(data, (d: any) => Number(d.triangles)) || 100;
+        const yScaleTris = d3.scaleLinear()
+            .domain([0, maxTriangles])
+            .range([this.height - this.margin.bottom, this.margin.top]);
+
+        // Right Axis: Draw Calls
+        const maxCalls = d3.max(data, (d: any) => Number(d.drawCalls)) || 10;
+        const yScaleCalls = d3.scaleLinear()
+            .domain([0, maxCalls])
+            .range([this.height - this.margin.bottom, this.margin.top]);
+
+        // Axis Drawing
+        this.svg.append('g')
+            .attr('transform', `translate(0,${this.height - this.margin.bottom})`)
+            .call(d3.axisBottom(xScale).ticks(5).tickFormat((d: any) => d3.timeFormat('%H:%M:%S')(d)));
+
+        // Left Y (Triangles)
+        this.svg.append('g')
+            .attr('transform', `translate(${this.margin.left},0)`)
+            .call(d3.axisLeft(yScaleTris).ticks(5).tickFormat((d: any) => Number(d) >= 1000 ? `${Number(d) / 1000}k` : `${d}`))
+            .call(g => g.select('.domain').attr('stroke', '#2196F3'))
+            .call(g => g.selectAll('text').attr('fill', '#2196F3'));
+
+        // Right Y (Calls)
+        this.svg.append('g')
+            .attr('transform', `translate(${this.width - this.margin.right},0)`)
+            .call(d3.axisRight(yScaleCalls).ticks(5))
+            .call(g => g.select('.domain').attr('stroke', '#FF9800'))
+            .call(g => g.selectAll('text').attr('fill', '#FF9800'));
+
+        // Lines
+        const lineTris = d3.line<any>()
+            .x(d => xScale(d.timestamp))
+            .y(d => yScaleTris(d.triangles));
+
+        const lineCalls = d3.line<any>()
+            .x(d => xScale(d.timestamp))
+            .y(d => yScaleCalls(d.drawCalls));
+
+        this.svg.append('path')
+            .datum(data)
+            .attr('fill', 'none')
+            .attr('stroke', '#2196F3')
+            .attr('stroke-width', 2)
+            .attr('d', lineTris);
+
+        this.svg.append('path')
+            .datum(data)
+            .attr('fill', 'none')
+            .attr('stroke', '#FF9800')
+            .attr('stroke-width', 2)
+            .attr('d', lineCalls);
+
+        // Legend
+        this.svg.append('text')
+            .attr('x', this.margin.left + 10)
+            .attr('y', this.margin.top)
+            .attr('fill', '#2196F3')
+            .attr('font-size', '12px')
+            .text('Triangles');
+
+        this.svg.append('text')
+            .attr('x', this.width - this.margin.right - 50)
+            .attr('y', this.margin.top)
+            .attr('fill', '#FF9800')
+            .attr('font-size', '12px')
+            .text('Draw Calls');
+    }
+
+    private showEmptyState(): void {
+        this.svg.append('text')
+            .attr('x', this.width / 2)
+            .attr('y', this.height / 2)
+            .attr('text-anchor', 'middle')
+            .attr('fill', this.theme === 'dark' ? '#888' : '#666')
+            .text('No renderer stats recorded');
     }
 }
 
@@ -418,7 +696,7 @@ class FPSChart extends Chart {
 
     updateData(newData: { timestamp: number; fps: number }): void {
         this.fpsData.push(newData);
-        
+
         // Keep only recent data points
         if (this.fpsData.length > this.maxDataPoints) {
             this.fpsData.shift();
@@ -426,29 +704,34 @@ class FPSChart extends Chart {
 
         this.redraw();
     }
-    
+
+    clear(): void {
+        this.fpsData = [];
+        this.redraw();
+    }
+
     protected redraw(): void {
         // Clear and rebuild
         this.svg.selectAll('*').remove();
-        
+
         if (!this.fpsData.length) return;
-        
+
         // Update scales with current data
         const extent = d3.extent(this.fpsData, d => d.timestamp);
         if (extent[0] && extent[1]) {
             this.xScale.domain([new Date(extent[0]), new Date(extent[1])]);
         }
-        
+
         // Update y scale based on data
         const fpsExtent = d3.extent(this.fpsData, d => d.fps);
         this.yScale.domain([0, Math.max(120, (fpsExtent[1] || 60) * 1.1)]);
-        
+
         // Recreate scales with current dimensions
         this.setupScales();
-        
+
         // Recreate chart elements
         this.setupChart();
-        
+
         // Add interactive dots for tooltips
         this.svg.selectAll('.fps-dot')
             .data(this.fpsData)
@@ -472,7 +755,7 @@ class FPSChart extends Chart {
             .on('mouseout', () => {
                 this.hideTooltip();
             });
-            
+
         // Update line
         this.svg.select('.fps-line')
             .datum(this.fpsData)
@@ -487,205 +770,15 @@ class FPSChart extends Chart {
     }
 }
 
-/*
-// Memory Usage Chart (commented out as unused)
-class MemoryChart extends Chart {
-    private sessionData: any[] = [];
-    private xScale!: d3.ScaleTime<number, number>;
-    private yScale!: d3.ScaleLinear<number, number>;
-    private line!: d3.Line<any>;
-    
-    constructor(theme: 'light' | 'dark') {
-        super(theme, 'Memory Usage');
-        this.initializeScales();
-    }
-    
-    private initializeScales(): void {
-        this.xScale = d3.scaleTime()
-            .range([this.margin.left, this.width - this.margin.right]);
-            
-        this.yScale = d3.scaleLinear()
-            .range([this.height - this.margin.bottom, this.margin.top]);
-            
-        this.line = d3.line<any>()
-            .x(d => this.xScale(new Date(d.timestamp)))
-            .y(d => this.yScale(d.usedJSHeapSize))
-            .curve(d3.curveMonotoneX);
-    }
-
-    updateData(sessions: any[]): void {
-        this.sessionData = sessions;
-        this.redraw();
-    }
-    
-    protected redraw(): void {
-        this.svg.selectAll('*').remove();
-
-        if (!this.sessionData.length) {
-            this.showEmptyState();
-            return;
-        }
-
-        const latestSession = this.sessionData[this.sessionData.length - 1];
-        const memorySnapshots = latestSession.memorySnapshots || [];
-        
-        if (!memorySnapshots.length) {
-            this.showEmptyState();
-            return;
-        }
-
-        // Update scales with current dimensions and data
-        this.initializeScales();
-        
-        // Calculate dynamic Y domain with some padding
-        const memoryValues = memorySnapshots.map((d: any) => d.usedJSHeapSize);
-        const minMemory = Math.min(...memoryValues);
-        const maxMemory = Math.max(...memoryValues);
-        const padding = (maxMemory - minMemory) * 0.1; // 10% padding
-        
-        this.xScale.domain(d3.extent(memorySnapshots, (d: any) => new Date(d.timestamp)) as [Date, Date]);
-        this.yScale.domain([Math.max(0, minMemory - padding), maxMemory + padding]);
-
-        // Add axes with updated scales
-        this.svg.append('g')
-            .attr('class', 'x-axis')
-            .attr('transform', `translate(0,${this.height - this.margin.bottom})`)
-            .call(d3.axisBottom(this.xScale)
-                .tickFormat((d: any) => d3.timeFormat('%H:%M:%S')(d))
-                .ticks(6));
-
-        this.svg.append('g')
-            .attr('class', 'y-axis')
-            .attr('transform', `translate(${this.margin.left},0)`)
-            .call(d3.axisLeft(this.yScale)
-                .tickFormat((d: any) => `${(Number(d) / 1024 / 1024).toFixed(1)}MB`)
-                .ticks(6));
-
-        // Add grid lines for better readability
-        this.svg.append('g')
-            .attr('class', 'grid')
-            .attr('transform', `translate(${this.margin.left},0)`)
-            .call(d3.axisLeft(this.yScale)
-                .tickSize(-(this.width - this.margin.left - this.margin.right))
-                .tickFormat(() => '')
-                .ticks(6))
-            .selectAll('line')
-            .attr('stroke', this.theme === 'dark' ? '#333' : '#e0e0e0')
-            .attr('stroke-dasharray', '2,2');
-
-        // Add area under curve for better visual appeal
-        const area = d3.area<any>()
-            .x(d => this.xScale(new Date(d.timestamp)))
-            .y0(this.yScale.range()[0])
-            .y1(d => this.yScale(d.usedJSHeapSize))
-            .curve(d3.curveMonotoneX);
-            
-        this.svg.append('path')
-            .datum(memorySnapshots)
-            .attr('fill', '#FF9800')
-            .attr('fill-opacity', 0.2)
-            .attr('d', area);
-
-        // Add main line
-        this.svg.append('path')
-            .datum(memorySnapshots)
-            .attr('class', 'memory-line')
-            .attr('fill', 'none')
-            .attr('stroke', '#FF9800')
-            .attr('stroke-width', 3)
-            .attr('d', this.line);
-            
-        // Add interactive dots for tooltips
-        this.svg.selectAll('.memory-dot')
-            .data(memorySnapshots)
-            .enter()
-            .append('circle')
-            .attr('class', 'memory-dot')
-            .attr('cx', (d: any) => this.xScale(new Date(d.timestamp)))
-            .attr('cy', (d: any) => this.yScale(d.usedJSHeapSize))
-            .attr('r', 4)
-            .attr('fill', '#FF9800')
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 2)
-            .style('cursor', 'pointer')
-            .style('opacity', 0.8)
-            .on('mouseover', (event: MouseEvent, d: any) => {
-                const memoryMB = (d.usedJSHeapSize / 1024 / 1024).toFixed(2);
-                const timeStr = d3.timeFormat('%H:%M:%S')(new Date(d.timestamp));
-                const label = d.customData?.label || 'Memory snapshot';
-                const tooltipContent = `
-                    <strong>Memory:</strong> ${memoryMB} MB<br>
-                    <strong>Time:</strong> ${timeStr}<br>
-                    <strong>Label:</strong> ${label}<br>
-                    <strong>Geometries:</strong> ${d.geometryCount || 0}<br>
-                    <strong>Textures:</strong> ${d.textureCount || 0}<br>
-                    <strong>Buffer Est:</strong> ${(d.bufferMemoryEstimate / 1024 / 1024).toFixed(2)} MB
-                `;
-                this.showTooltip(tooltipContent, event);
-                
-                // Highlight the dot
-                d3.select(event.target as Element)
-                    .transition()
-                    .duration(150)
-                    .attr('r', 6)
-                    .style('opacity', 1);
-            })
-            .on('mouseout', (event: MouseEvent) => {
-                this.hideTooltip();
-                
-                // Reset the dot
-                d3.select(event.target as Element)
-                    .transition()
-                    .duration(150)
-                    .attr('r', 4)
-                    .style('opacity', 0.8);
-            });
-
-        // Style axes
-        this.svg.selectAll('.x-axis text, .y-axis text')
-            .attr('fill', this.theme === 'dark' ? '#fff' : '#333')
-            .attr('font-size', '11px');
-        
-        this.svg.selectAll('.x-axis path, .y-axis path, .x-axis line, .y-axis line')
-            .attr('stroke', this.theme === 'dark' ? '#666' : '#333');
-            
-        // Add current value indicator
-        if (memorySnapshots.length > 0) {
-            const latestValue = memorySnapshots[memorySnapshots.length - 1];
-            const latestMB = (latestValue.usedJSHeapSize / 1024 / 1024).toFixed(1);
-            
-            this.svg.append('text')
-                .attr('x', this.width - this.margin.right - 10)
-                .attr('y', this.margin.top + 20)
-                .attr('text-anchor', 'end')
-                .attr('fill', '#FF9800')
-                .attr('font-size', '14px')
-                .attr('font-weight', 'bold')
-                .text(`${latestMB} MB`);
-        }
-    }
-    
-    private showEmptyState(): void {
-        this.svg.append('text')
-            .attr('x', this.width / 2)
-            .attr('y', this.height / 2)
-            .attr('text-anchor', 'middle')
-            .attr('fill', this.theme === 'dark' ? '#888' : '#666')
-            .attr('font-size', '14px')
-            .text('No memory data available');
-    }
-}
-*/
-
 // Operation Timing Chart
 class TimingChart extends Chart {
     private pieData: any[] = [];
     private totalTime: number = 0;
-    
+
     constructor(theme: 'light' | 'dark') {
         super(theme, 'Operation Time Distribution');
     }
-    
+
     protected redraw(): void {
         this.drawPieChart();
     }
@@ -700,7 +793,7 @@ class TimingChart extends Chart {
 
         const latestSession = sessions[sessions.length - 1];
         const timingData = latestSession.timingData || [];
-        
+
         if (!timingData.length) {
             this.showEmptyState();
             return;
@@ -714,7 +807,7 @@ class TimingChart extends Chart {
             const count = values.length;
             const minDuration = d3.min(values, (d: any) => d.duration) || 0;
             const maxDuration = d3.max(values, (d: any) => d.duration) || 0;
-            
+
             return {
                 operation,
                 totalDuration,
@@ -727,7 +820,7 @@ class TimingChart extends Chart {
         }).sort((a, b) => b.totalDuration - a.totalDuration);
 
         this.totalTime = d3.sum(operationStats, d => d.totalDuration);
-        
+
         // Calculate percentages
         operationStats.forEach(d => {
             d.percentage = (d.totalDuration / this.totalTime) * 100;
@@ -736,48 +829,48 @@ class TimingChart extends Chart {
         this.pieData = operationStats;
         this.drawPieChart();
     }
-    
+
     private drawPieChart(): void {
         if (!this.pieData.length) return;
-        
+
         // Calculate pie chart dimensions
         const centerX = this.width / 2;
         const centerY = (this.height - 40) / 2; // Leave space for legend
         const radius = Math.min(centerX - 80, centerY - 40);
-        
+
         // Color scale
         const colorScale = d3.scaleOrdinal()
             .domain(this.pieData.map(d => d.operation))
             .range([
-                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', 
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
                 '#FF9FF3', '#54A0FF', '#5F27CD', '#00D2D3', '#FF9F43',
                 '#C8D6E5', '#222F3E', '#26DE81', '#FC5C65', '#FD79A8'
             ]);
-        
+
         // Create pie generator
         const pie = d3.pie<any>()
             .value(d => d.totalDuration)
             .sort(null);
-            
+
         // Create arc generator
         const arc = d3.arc<any>()
             .innerRadius(0)
             .outerRadius(radius);
-            
+
         const labelArc = d3.arc<any>()
             .innerRadius(radius * 0.7)
             .outerRadius(radius * 0.7);
-        
+
         // Create pie slices
         const g = this.svg.append('g')
             .attr('transform', `translate(${centerX}, ${centerY})`);
-            
+
         const slices = g.selectAll('.slice')
             .data(pie(this.pieData))
             .enter()
             .append('g')
             .attr('class', 'slice');
-            
+
         // Add pie slices
         slices.append('path')
             .attr('d', arc)
@@ -793,7 +886,7 @@ class TimingChart extends Chart {
                     .duration(200)
                     .style('opacity', 1)
                     .attr('transform', 'scale(1.05)');
-                    
+
                 // Show detailed tooltip
                 const tooltipContent = `
                     <strong>${d.data.operation}</strong><br>
@@ -813,10 +906,10 @@ class TimingChart extends Chart {
                     .duration(200)
                     .style('opacity', 0.8)
                     .attr('transform', 'scale(1)');
-                    
+
                 this.hideTooltip();
             });
-            
+
         // Add percentage labels for significant slices (>5%)
         slices.filter(d => d.data.percentage > 5)
             .append('text')
@@ -826,7 +919,7 @@ class TimingChart extends Chart {
             .attr('font-weight', 'bold')
             .attr('fill', this.theme === 'dark' ? '#fff' : '#333')
             .text(d => `${d.data.percentage.toFixed(1)}%`);
-            
+
         // Add center label with total time
         g.append('text')
             .attr('text-anchor', 'middle')
@@ -835,7 +928,7 @@ class TimingChart extends Chart {
             .attr('font-weight', 'bold')
             .attr('fill', this.theme === 'dark' ? '#fff' : '#333')
             .text('Total Time');
-            
+
         g.append('text')
             .attr('text-anchor', 'middle')
             .attr('y', 15)
@@ -843,24 +936,24 @@ class TimingChart extends Chart {
             .attr('font-weight', 'bold')
             .attr('fill', '#4ECDC4')
             .text(`${this.totalTime.toFixed(1)}ms`);
-        
+
         // Add legend
         this.drawLegend(colorScale);
     }
-    
+
     private drawLegend(colorScale: d3.ScaleOrdinal<string, unknown>): void {
         const legendY = this.height - 35;
         const legendItemWidth = 120;
         const legendItemHeight = 15;
         const itemsPerRow = Math.floor((this.width - 40) / legendItemWidth);
-        
+
         // Show only top operations (up to 10) to avoid clutter
         const topOperations = this.pieData.slice(0, Math.min(10, this.pieData.length));
-        
+
         const legend = this.svg.append('g')
             .attr('class', 'legend')
             .attr('transform', `translate(20, ${legendY})`);
-            
+
         const legendItems = legend.selectAll('.legend-item')
             .data(topOperations)
             .enter()
@@ -871,12 +964,12 @@ class TimingChart extends Chart {
                 const col = i % itemsPerRow;
                 return `translate(${col * legendItemWidth}, ${row * legendItemHeight})`;
             });
-            
+
         legendItems.append('rect')
             .attr('width', 10)
             .attr('height', 10)
             .attr('fill', d => colorScale(d.operation) as string);
-            
+
         legendItems.append('text')
             .attr('x', 15)
             .attr('y', 8)
@@ -884,12 +977,12 @@ class TimingChart extends Chart {
             .attr('fill', this.theme === 'dark' ? '#fff' : '#333')
             .text(d => {
                 const maxLength = 12;
-                return d.operation.length > maxLength ? 
-                    d.operation.substring(0, maxLength) + '...' : 
+                return d.operation.length > maxLength ?
+                    d.operation.substring(0, maxLength) + '...' :
                     d.operation;
             });
     }
-    
+
     private showEmptyState(): void {
         this.svg.append('text')
             .attr('x', this.width / 2)
@@ -904,12 +997,12 @@ class TimingChart extends Chart {
 // Chunk Processing Chart
 class ChunkProcessingChart extends Chart {
     private currentView: 'overview' | 'blocks' | 'memory' = 'overview';
-    
+
     constructor(theme: 'light' | 'dark') {
         super(theme, 'Chunk Processing Analysis');
         this.addViewControls();
     }
-    
+
     private addViewControls(): void {
         const controlsDiv = document.createElement('div');
         controlsDiv.style.cssText = `
@@ -920,14 +1013,14 @@ class ChunkProcessingChart extends Chart {
             gap: 5px;
             z-index: 1000;
         `;
-        
+
         const buttons = [
             { key: 'overview', label: 'Overview' },
             { key: 'blocks', label: 'Block Distribution' },
             { key: 'memory', label: 'Memory Usage' }
         ];
-        
-        buttons.forEach(({key, label}) => {
+
+        buttons.forEach(({ key, label }) => {
             const btn = document.createElement('button');
             btn.textContent = label;
             btn.style.cssText = `
@@ -946,15 +1039,15 @@ class ChunkProcessingChart extends Chart {
             };
             controlsDiv.appendChild(btn);
         });
-        
+
         this.container.style.position = 'relative';
         this.container.appendChild(controlsDiv);
     }
-    
+
     private updateViewControls(): void {
         const buttons = this.container.querySelectorAll('button');
         const buttonLabels = ['overview', 'blocks', 'memory'];
-        
+
         buttons.forEach((btn, index) => {
             const isActive = buttonLabels[index] === this.currentView;
             (btn as HTMLElement).style.background = isActive ? '#4ECDC4' : (this.theme === 'dark' ? '#333' : '#f5f5f5');
@@ -965,7 +1058,7 @@ class ChunkProcessingChart extends Chart {
     updateData(_sessions: any[]): void {
         this.redraw();
     }
-    
+
     protected redraw(): void {
         this.svg.selectAll('*').remove();
 
@@ -977,12 +1070,12 @@ class ChunkProcessingChart extends Chart {
 
         const latestSession = sessions[sessions.length - 1];
         const chunkData = latestSession.chunkProcessingData || [];
-        
+
         if (!chunkData.length) {
             this.showEmptyState();
             return;
         }
-        
+
         switch (this.currentView) {
             case 'overview':
                 this.drawOverview(chunkData);
@@ -995,14 +1088,14 @@ class ChunkProcessingChart extends Chart {
                 break;
         }
     }
-    
+
     private getLatestSessionData(): any[] {
         return performanceMonitor.getAllSessions();
     }
-    
+
     private drawOverview(chunkData: any[]): void {
         const stats = this.calculateOverviewStats(chunkData);
-        
+
         // Create a summary view with key metrics
         const metrics = [
             { label: 'Total Chunks', value: stats.totalChunks.toLocaleString(), color: '#4ECDC4' },
@@ -1012,21 +1105,21 @@ class ChunkProcessingChart extends Chart {
             { label: 'Peak Vertices', value: stats.peakVertices.toLocaleString(), color: '#9C27B0' },
             { label: 'Slowest Chunk', value: `${stats.slowestChunkTime.toFixed(2)}ms`, color: '#FF9F43' }
         ];
-        
+
         const cardWidth = 120;
         const cardHeight = 60;
         const cols = 3;
         const rows = Math.ceil(metrics.length / cols);
-        
+
         const offsetX = (this.width - (cols * cardWidth + (cols - 1) * 20)) / 2;
         const offsetY = (this.height - (rows * cardHeight + (rows - 1) * 20)) / 2;
-        
+
         metrics.forEach((metric, index) => {
             const col = index % cols;
             const row = Math.floor(index / cols);
             const x = offsetX + col * (cardWidth + 20);
             const y = offsetY + row * (cardHeight + 20);
-            
+
             // Background card
             this.svg.append('rect')
                 .attr('x', x)
@@ -1037,7 +1130,7 @@ class ChunkProcessingChart extends Chart {
                 .attr('stroke', metric.color)
                 .attr('stroke-width', 2)
                 .attr('rx', 8);
-                
+
             // Value
             this.svg.append('text')
                 .attr('x', x + cardWidth / 2)
@@ -1047,7 +1140,7 @@ class ChunkProcessingChart extends Chart {
                 .attr('font-weight', 'bold')
                 .attr('fill', metric.color)
                 .text(metric.value);
-                
+
             // Label
             this.svg.append('text')
                 .attr('x', x + cardWidth / 2)
@@ -1058,7 +1151,7 @@ class ChunkProcessingChart extends Chart {
                 .text(metric.label);
         });
     }
-    
+
     private drawBlockDistribution(chunkData: any[]): void {
         const blockCounts = chunkData.map((d: any) => d.blockCount);
         const bins = d3.histogram()
@@ -1106,7 +1199,7 @@ class ChunkProcessingChart extends Chart {
             .on('mouseout', () => {
                 this.hideTooltip();
             });
-            
+
         // Add axis labels
         this.svg.append('text')
             .attr('x', this.width / 2)
@@ -1115,7 +1208,7 @@ class ChunkProcessingChart extends Chart {
             .attr('font-size', '12px')
             .attr('fill', this.theme === 'dark' ? '#ccc' : '#666')
             .text('Blocks per Chunk');
-            
+
         this.svg.append('text')
             .attr('transform', 'rotate(-90)')
             .attr('x', -this.height / 2)
@@ -1128,11 +1221,11 @@ class ChunkProcessingChart extends Chart {
         // Style axes
         this.svg.selectAll('text')
             .attr('fill', this.theme === 'dark' ? '#fff' : '#333');
-        
+
         this.svg.selectAll('path, line')
             .attr('stroke', this.theme === 'dark' ? '#666' : '#333');
     }
-    
+
     private drawMemoryUsage(chunkData: any[]): void {
         // Create a scatter plot of memory usage vs block count
         const xScale = d3.scaleLinear()
@@ -1151,7 +1244,7 @@ class ChunkProcessingChart extends Chart {
         this.svg.append('g')
             .attr('transform', `translate(${this.margin.left},0)`)
             .call(d3.axisLeft(yScale).tickFormat(d => `${(Number(d) / 1024).toFixed(0)}KB`));
-            
+
         // Add scatter points
         this.svg.selectAll('.memory-point')
             .data(chunkData)
@@ -1174,7 +1267,7 @@ class ChunkProcessingChart extends Chart {
                     <strong>Processing Time:</strong> ${d.processingTime.toFixed(2)}ms
                 `;
                 this.showTooltip(tooltipContent, event);
-                
+
                 d3.select(event.target as Element)
                     .transition()
                     .duration(150)
@@ -1183,14 +1276,14 @@ class ChunkProcessingChart extends Chart {
             })
             .on('mouseout', (event: MouseEvent) => {
                 this.hideTooltip();
-                
+
                 d3.select(event.target as Element)
                     .transition()
                     .duration(150)
                     .attr('r', 4)
                     .style('opacity', 0.7);
             });
-            
+
         // Add trend line
         const correlation = this.calculateCorrelation(chunkData, 'blockCount', 'memoryUsed');
         if (Math.abs(correlation) > 0.1) {
@@ -1200,11 +1293,11 @@ class ChunkProcessingChart extends Chart {
                 { x: xDomain[0], y: regression.slope * xDomain[0] + regression.intercept },
                 { x: xDomain[1], y: regression.slope * xDomain[1] + regression.intercept }
             ];
-            
+
             const line = d3.line<any>()
                 .x(d => xScale(d.x))
                 .y(d => yScale(d.y));
-                
+
             this.svg.append('path')
                 .datum(lineData)
                 .attr('d', line)
@@ -1212,7 +1305,7 @@ class ChunkProcessingChart extends Chart {
                 .attr('stroke-width', 2)
                 .attr('stroke-dasharray', '5,5')
                 .attr('fill', 'none');
-                
+
             // Add correlation text
             this.svg.append('text')
                 .attr('x', this.width - this.margin.right - 10)
@@ -1226,11 +1319,11 @@ class ChunkProcessingChart extends Chart {
         // Style axes
         this.svg.selectAll('text')
             .attr('fill', this.theme === 'dark' ? '#fff' : '#333');
-        
+
         this.svg.selectAll('path, line')
             .attr('stroke', this.theme === 'dark' ? '#666' : '#333');
     }
-    
+
     private calculateOverviewStats(chunkData: any[]): any {
         return {
             totalChunks: chunkData.length,
@@ -1241,18 +1334,18 @@ class ChunkProcessingChart extends Chart {
             slowestChunkTime: d3.max(chunkData, d => d.processingTime) || 0
         };
     }
-    
+
     private calculateCorrelation(data: any[], xKey: string, yKey: string): number {
         const n = data.length;
         if (n < 2) return 0;
-        
+
         const xMean = d3.mean(data, d => d[xKey]) || 0;
         const yMean = d3.mean(data, d => d[yKey]) || 0;
-        
+
         let numerator = 0;
         let xSumSq = 0;
         let ySumSq = 0;
-        
+
         for (const point of data) {
             const xDiff = point[xKey] - xMean;
             const yDiff = point[yKey] - yMean;
@@ -1260,31 +1353,31 @@ class ChunkProcessingChart extends Chart {
             xSumSq += xDiff * xDiff;
             ySumSq += yDiff * yDiff;
         }
-        
+
         const denominator = Math.sqrt(xSumSq * ySumSq);
         return denominator === 0 ? 0 : numerator / denominator;
     }
-    
+
     private calculateLinearRegression(data: any[], xKey: string, yKey: string): { slope: number; intercept: number } {
         const xMean = d3.mean(data, d => d[xKey]) || 0;
         const yMean = d3.mean(data, d => d[yKey]) || 0;
-        
+
         let numerator = 0;
         let denominator = 0;
-        
+
         for (const point of data) {
             const xDiff = point[xKey] - xMean;
             const yDiff = point[yKey] - yMean;
             numerator += xDiff * yDiff;
             denominator += xDiff * xDiff;
         }
-        
+
         const slope = denominator === 0 ? 0 : numerator / denominator;
         const intercept = yMean - slope * xMean;
-        
+
         return { slope, intercept };
     }
-    
+
     private showEmptyState(): void {
         this.svg.append('text')
             .attr('x', this.width / 2)

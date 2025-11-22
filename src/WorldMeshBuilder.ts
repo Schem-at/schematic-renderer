@@ -201,6 +201,7 @@ export class WorldMeshBuilder {
 
 	public async precomputePaletteGeometries(palette: any[]): Promise<void> {
 		performanceMonitor.startOperation("precomputePaletteGeometries");
+		console.log(`[WorldMeshBuilder] Precomputing geometry for ${palette.length} palette entries...`);
 
 		// Ensure worker is initialized
 		this.initializeWorker();
@@ -222,6 +223,7 @@ export class WorldMeshBuilder {
 
 			try {
 				// Get geometry from Cubane (Main Thread)
+				// console.log(`[WorldMeshBuilder] Processing block ${index}/${palette.length}: ${blockString}`);
 				const cubaneObj = await this.cubane.getBlockMesh(
 					blockString,
 					biome,
@@ -324,6 +326,7 @@ export class WorldMeshBuilder {
 			paletteData: paletteGeometryData,
 		});
 
+		console.log("[WorldMeshBuilder] Palette precomputation complete.");
 		performanceMonitor.endOperation("precomputePaletteGeometries");
 	}
 
@@ -419,7 +422,25 @@ export class WorldMeshBuilder {
 				this.initializeWorker();
 			}
 
-			this.pendingRequests.set(chunkId, { resolve, reject });
+			// Add timeout to prevent hanging
+			const timeoutId = setTimeout(() => {
+				if (this.pendingRequests.has(chunkId)) {
+					this.pendingRequests.delete(chunkId);
+					reject(new Error(`Chunk build timeout for ${chunkId}`));
+				}
+			}, 30000); // 30 seconds timeout
+
+			this.pendingRequests.set(chunkId, {
+				resolve: (data) => {
+					clearTimeout(timeoutId);
+					resolve(data);
+				},
+				reject: (err) => {
+					clearTimeout(timeoutId);
+					reject(err);
+				}
+			});
+
 			this.worker!.postMessage({
 				type: "buildChunk",
 				chunkId,
@@ -738,6 +759,12 @@ export class WorldMeshBuilder {
 	}
 
 	public dispose(): void {
+		// Reject any pending requests before destroying worker
+		this.pendingRequests.forEach((request, chunkId) => {
+			request.reject(new Error(`Worker terminated before processing chunk ${chunkId}`));
+		});
+		this.pendingRequests.clear();
+
 		if (this.paletteCache) {
 			this.paletteCache.blockData.forEach((blockData) => {
 				blockData.materialGroups.forEach((group) => {
