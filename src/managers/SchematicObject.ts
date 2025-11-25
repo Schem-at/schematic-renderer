@@ -793,7 +793,7 @@ export class SchematicObject extends EventEmitter {
 			chunkHeight: 16,
 			chunkLength: 16,
 		},
-		buildMode: "immediate" | "incremental" | "instanced" = this
+		buildMode: "immediate" | "incremental" | "instanced" | "batched" = this
 			.schematicRenderer.options.meshBuildingMode || "incremental"
 	) {
 
@@ -836,9 +836,16 @@ export class SchematicObject extends EventEmitter {
 				case "instanced":
 					result = await this.buildSchematicMeshesInstanced(schematicObject);
 					break;
+				case "batched":
+					// New high-performance batch mode - merges all chunks into a few meshes
+					result = await this.buildSchematicMeshesBatched(
+						schematicObject,
+						chunkDimensions
+					);
+					break;
 				default:
 					throw new Error(
-						`Invalid build mode: ${buildMode}. Use 'imediate' or 'incremental'.`
+						`Invalid build mode: ${buildMode}. Use 'immediate', 'incremental', 'instanced', or 'batched'.`
 					);
 			}
 
@@ -1402,6 +1409,167 @@ export class SchematicObject extends EventEmitter {
 
 			requestAnimationFrame(processNextFrame);
 		});
+	}
+
+	/**
+	 * High-performance batched build mode
+	 * 
+	 * Processes all chunks through a single worker that accumulates geometry,
+	 * then returns just a few merged meshes (one per category: solid, transparent, etc.)
+	 * 
+	 * Benefits:
+	 * - Creates only 2-3 THREE.Mesh objects instead of hundreds
+	 * - Drastically reduces main thread work
+	 * - Best for large schematics where mesh count is the bottleneck
+	 */
+	public async buildSchematicMeshesBatched(
+		schematicObject: SchematicObject,
+		chunkDimensions: any = {
+			chunkWidth: 16,
+			chunkHeight: 16,
+			chunkLength: 16,
+		}
+	): Promise<{
+		meshes: THREE.Object3D[];
+		chunkMap: Map<string, THREE.Object3D[]>;
+	}> {
+		const overallStartTime = performance.now();
+		const schematic = schematicObject.schematicWrapper;
+
+		// STEP 1: Initialize pipeline
+		this.reportBuildProgress("Initializing batched pipeline...", 0.05);
+
+		const palettes = schematic.get_all_palettes();
+		const paletteStart = performance.now();
+		performanceMonitor.startOperation("Palette Precomputation");
+		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
+		performanceMonitor.endOperation("Palette Precomputation");
+		console.log(`[SchematicObject] Palette prep took ${(performance.now() - paletteStart).toFixed(2)}ms`);
+
+		// STEP 2: Create chunk iterator
+		this.reportBuildProgress("Creating chunk iterator...", 0.1);
+		console.log(`[SchematicObject] Creating lazy chunk iterator for BATCHED mode...`);
+
+		performanceMonitor.startOperation("Chunk Iterator Creation");
+		const iterator = schematic.create_lazy_chunk_iterator(
+			chunkDimensions.chunkWidth,
+			chunkDimensions.chunkHeight,
+			chunkDimensions.chunkLength,
+			"bottom_up",
+			0,
+			0,
+			0
+		);
+		performanceMonitor.endOperation("Chunk Iterator Creation");
+
+		const totalChunks = iterator.total_chunks();
+		console.log(`[SchematicObject] Total chunks to batch: ${totalChunks}`);
+
+		if (totalChunks === 0) {
+			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
+			return { meshes: [], chunkMap: new Map() };
+		}
+
+		// STEP 3: Collect all chunk data
+		this.reportBuildProgress("Collecting chunk data...", 0.15, totalChunks, 0);
+
+		const allChunks: Array<{
+			blocks: Int32Array;
+			chunk_x: number;
+			chunk_y: number;
+			chunk_z: number;
+		}> = [];
+
+		while (iterator.has_next()) {
+			const chunkData = iterator.next();
+			if (!chunkData || chunkData.blocks.length === 0) continue;
+
+			// Convert blocks to Int32Array
+			const blocks = chunkData.blocks;
+			let blocksArray: Int32Array;
+
+			if (blocks instanceof Int32Array) {
+				blocksArray = blocks;
+			} else {
+				blocksArray = new Int32Array(blocks.length * 4);
+				for (let i = 0; i < blocks.length; i++) {
+					const block = blocks[i];
+					blocksArray[i * 4] = block[0];
+					blocksArray[i * 4 + 1] = block[1];
+					blocksArray[i * 4 + 2] = block[2];
+					blocksArray[i * 4 + 3] = block[3];
+				}
+			}
+
+			allChunks.push({
+				blocks: blocksArray,
+				chunk_x: chunkData.chunk_x,
+				chunk_y: chunkData.chunk_y,
+				chunk_z: chunkData.chunk_z
+			});
+		}
+
+		console.log(`[SchematicObject] Collected ${allChunks.length} chunks for batch processing`);
+
+		// STEP 4: Process all chunks in batch mode
+		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);
+		performanceMonitor.startOperation("Process All Chunks");
+
+		let processedCount = 0;
+		const batchedMeshes = await this.worldMeshBuilder.processChunksBatched(
+			allChunks,
+			(processed, total) => {
+				processedCount = processed;
+				const progress = 0.2 + (processed / total) * 0.7;
+				this.reportBuildProgress(
+					`Batch processing chunks...`,
+					progress,
+					total,
+					processed
+				);
+			}
+		);
+
+		performanceMonitor.endOperation("Process All Chunks");
+
+		// STEP 5: Add meshes to scene
+		this.reportBuildProgress("Adding batched meshes to scene...", 0.95, totalChunks, processedCount);
+
+		for (const mesh of batchedMeshes) {
+			this.group.add(mesh);
+		}
+
+		this.group.updateMatrixWorld(true);
+
+		const totalTime = performance.now() - overallStartTime;
+		console.log(`[SchematicObject] BATCHED build complete: ${batchedMeshes.length} meshes in ${totalTime.toFixed(0)}ms`);
+
+		this.reportBuildProgress("Build complete!", 1.0, totalChunks, processedCount);
+
+		// Dispatch completion event
+		if (typeof window !== "undefined") {
+			setTimeout(() => {
+				window.dispatchEvent(
+					new CustomEvent("schematicRenderComplete", {
+						detail: {
+							schematicId: this.id,
+							schematicName: this.name,
+							totalChunks,
+							processedChunks: processedCount,
+							buildTimeMs: totalTime,
+							meshCount: batchedMeshes.length,
+							optimized: true,
+							batched: true,
+						},
+					})
+				);
+			}, 100);
+		}
+
+		return {
+			meshes: batchedMeshes,
+			chunkMap: new Map([["batched", batchedMeshes]])
+		};
 	}
 
 	public async buildSchematicMeshesInstanced(

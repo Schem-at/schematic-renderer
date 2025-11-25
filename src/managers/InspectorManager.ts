@@ -327,7 +327,7 @@ export class InspectorManager {
 				}
 			});
 
-		folder.add(this.state, 'meshBuildingMode', ['immediate', 'incremental', 'instanced'])
+		folder.add(this.state, 'meshBuildingMode', ['immediate', 'incremental', 'instanced', 'batched'])
 			.name('Build Mode')
 			.onChange((value: string) => {
 				console.log(`[Inspector] Mesh building mode: ${value}`);

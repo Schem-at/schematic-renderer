@@ -206,6 +206,11 @@ export class WorldMeshBuilder {
 		};
 	}
 
+	// Batch mode state
+	private batchPendingChunks: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
+	private batchFinishResolve: ((data: any) => void) | null = null;
+	private batchFinishReject: ((err: any) => void) | null = null;
+
 	private handleWorkerMessage(worker: Worker, event: MessageEvent) {
 		const { type, chunkId, error, timings, ...data } = event.data;
 
@@ -230,6 +235,22 @@ export class WorldMeshBuilder {
 
 				// Return worker to pool
 				this.returnWorker(worker);
+			}
+		} else if (type === "chunkAccumulated") {
+			// Batch mode: chunk was accumulated, not returned
+			const request = this.batchPendingChunks.get(chunkId);
+			if (request) {
+				request.resolve();
+				this.batchPendingChunks.delete(chunkId);
+				// Return worker to pool for next chunk
+				this.returnWorker(worker);
+			}
+		} else if (type === "batchFinished") {
+			// Batch mode complete - return accumulated meshes
+			if (this.batchFinishResolve) {
+				this.batchFinishResolve(data);
+				this.batchFinishResolve = null;
+				this.batchFinishReject = null;
 			}
 		} else if (type === "error") {
 			if (chunkId) {
@@ -572,6 +593,161 @@ export class WorldMeshBuilder {
 		return new Promise<Worker>(resolve => {
 			this.workerQueue.push(resolve);
 		});
+	}
+
+	/**
+	 * Process all chunks in batch mode - returns just a few merged meshes
+	 * instead of one mesh per chunk. This reduces main thread work significantly.
+	 * 
+	 * @param allChunks - Iterator or array of chunk data
+	 * @param onProgress - Optional progress callback
+	 * @returns Promise with merged meshes
+	 */
+	public async processChunksBatched(
+		allChunks: Array<{ blocks: Int32Array | number[][]; chunk_x: number; chunk_y: number; chunk_z: number }>,
+		onProgress?: (processed: number, total: number) => void
+	): Promise<THREE.Mesh[]> {
+		if (!this.paletteCache?.isReady) {
+			throw new Error("Palette cache not ready. Call precomputePaletteGeometries() first.");
+		}
+
+		if (this.workers.length === 0) {
+			this.initializeWorkers();
+		}
+
+		const startTime = performance.now();
+		const totalChunks = allChunks.length;
+		let processedCount = 0;
+
+		console.log(`[WorldMeshBuilder] Starting BATCH mode for ${totalChunks} chunks...`);
+
+		// Use a single dedicated worker for accumulation
+		const batchWorker = this.workers[0];
+
+		// Start batch mode on worker
+		batchWorker.postMessage({ type: "startBatch" });
+
+		// Process all chunks through the batch worker
+		for (const chunkData of allChunks) {
+			const chunkId = `batch_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`;
+
+			// Convert blocks to Int32Array if needed
+			let blocksArray: Int32Array;
+			if (chunkData.blocks instanceof Int32Array) {
+				blocksArray = chunkData.blocks;
+			} else {
+				blocksArray = new Int32Array(chunkData.blocks.length * 4);
+				for (let i = 0; i < chunkData.blocks.length; i++) {
+					const block = chunkData.blocks[i];
+					blocksArray[i * 4] = block[0];
+					blocksArray[i * 4 + 1] = block[1];
+					blocksArray[i * 4 + 2] = block[2];
+					blocksArray[i * 4 + 3] = block[3];
+				}
+			}
+
+			// Calculate origin
+			let minX = Infinity, minY = Infinity, minZ = Infinity;
+			for (let i = 0; i < blocksArray.length; i += 4) {
+				minX = Math.min(minX, blocksArray[i]);
+				minY = Math.min(minY, blocksArray[i + 1]);
+				minZ = Math.min(minZ, blocksArray[i + 2]);
+			}
+			const originX = isFinite(minX) ? minX : 0;
+			const originY = isFinite(minY) ? minY : 0;
+			const originZ = isFinite(minZ) ? minZ : 0;
+
+			// Wait for chunk to be accumulated
+			await new Promise<void>((resolve, reject) => {
+				this.batchPendingChunks.set(chunkId, { resolve, reject });
+
+				// Use SharedArrayBuffer if available
+				if (this.useSharedMemory && this.sharedMemoryPool) {
+					const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
+						chunkId,
+						blocksArray,
+						originX,
+						originY,
+						originZ
+					);
+					batchWorker.postMessage({
+						type: "buildChunkBatched",
+						chunkId,
+						sharedInputBuffer: sharedBuffer,
+						chunkOrigin: [originX, originY, originZ]
+					});
+				} else {
+					batchWorker.postMessage({
+						type: "buildChunkBatched",
+						chunkId,
+						blocks: blocksArray,
+						chunkOrigin: [originX, originY, originZ]
+					}, [blocksArray.buffer]);
+				}
+			});
+
+			processedCount++;
+			if (onProgress) {
+				onProgress(processedCount, totalChunks);
+			}
+		}
+
+		// Finish batch and get merged results
+		const batchResult = await new Promise<any>((resolve, reject) => {
+			this.batchFinishResolve = resolve;
+			this.batchFinishReject = reject;
+			batchWorker.postMessage({ type: "finishBatch" });
+		});
+
+		const elapsed = performance.now() - startTime;
+		console.log(`[WorldMeshBuilder] BATCH mode complete: ${batchResult.meshes.length} merged meshes from ${totalChunks} chunks in ${elapsed.toFixed(0)}ms`);
+
+		// Create Three.js meshes from merged data
+		const resultMeshes: THREE.Mesh[] = [];
+
+		for (const meshData of batchResult.meshes) {
+			const geometry = new THREE.BufferGeometry();
+
+			if (meshData.positions) {
+				// Batch mode returns Float32 world coordinates (already de-quantized)
+				const posAttr = new THREE.BufferAttribute(meshData.positions, 3);
+				geometry.setAttribute("position", posAttr);
+			}
+
+			if (meshData.normals) {
+				const normAttr = new THREE.Int8BufferAttribute(meshData.normals, 3);
+				normAttr.normalized = true;
+				geometry.setAttribute("normal", normAttr);
+			}
+
+			if (meshData.uvs) {
+				const uvAttr = new THREE.BufferAttribute(meshData.uvs, 2);
+				geometry.setAttribute("uv", uvAttr);
+			}
+
+			if (meshData.indices) {
+				geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+			}
+
+			if (meshData.groups) {
+				for (const group of meshData.groups) {
+					geometry.addGroup(group.start, group.count, group.materialIndex);
+				}
+			}
+
+			const mesh = new THREE.Mesh(geometry, this.paletteCache.globalMaterials);
+			mesh.name = `batched_${meshData.category}`;
+
+			// NO scale needed - batch mode returns Float32 world coordinates
+			// (already de-quantized in worker)
+
+			this.configureMeshForCategory(mesh, meshData.category as keyof ChunkMeshes);
+			resultMeshes.push(mesh);
+		}
+
+		console.log(`[WorldMeshBuilder] Created ${resultMeshes.length} THREE.Mesh objects (was ${totalChunks} without batching)`);
+
+		return resultMeshes;
 	}
 
 	public async getChunkGeometries(

@@ -107,7 +107,7 @@ export interface SchematicRendererOptions {
 	ffmpeg?: any;
 	gamma?: number;
 	chunkSideLength?: number; // Length of each chunk side in blocks
-	meshBuildingMode?: "immediate" | "incremental" | "instanced"; // How meshes are built
+	meshBuildingMode?: "immediate" | "incremental" | "instanced" | "batched"; // How meshes are built
 	// Global toggles for enabling/disabling functionalities
 	enableInteraction?: boolean;
 	enableDragAndDrop?: boolean;

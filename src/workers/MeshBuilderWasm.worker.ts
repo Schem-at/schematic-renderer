@@ -40,6 +40,18 @@ let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 let useSharedMemory = false;
 
+// Batch mode state - accumulates all chunks before returning
+// Uses Float32 for positions to avoid Int16 overflow with world coordinates
+let batchMode = false;
+let batchAccumulators: Map<string, {
+    positions: number[];  // Will become Float32Array (world coordinates, not quantized)
+    normals: number[];    // Will become Int8Array
+    uvs: number[];        // Will become Float32Array
+    indices: number[];
+    groups: Array<{ start: number; count: number; materialIndex: number }>;
+    vertexOffset: number;
+}> = new Map();
+
 // Performance tracking
 let buildCount = 0;
 let totalBuildTime = 0;
@@ -101,6 +113,15 @@ self.onmessage = async (event: MessageEvent) => {
             case "buildChunk":
                 buildChunk(payload as unknown as ChunkBuildRequest);
                 break;
+            case "startBatch":
+                startBatch();
+                break;
+            case "finishBatch":
+                finishBatch();
+                break;
+            case "buildChunkBatched":
+                buildChunkBatched(payload as unknown as ChunkBuildRequest);
+                break;
             default:
                 console.warn(`[MeshBuilderWasm Worker] Unknown message type: ${type}`);
         }
@@ -113,6 +134,197 @@ self.onmessage = async (event: MessageEvent) => {
         });
     }
 };
+
+/**
+ * Start batch mode - chunks will be accumulated instead of returned
+ */
+function startBatch() {
+    batchMode = true;
+    batchAccumulators.clear();
+    self.postMessage({ type: "batchStarted" });
+}
+
+/**
+ * Finish batch mode - return all accumulated geometry as merged buffers
+ * Uses Float32 for positions (no quantization) to support world-space coordinates
+ */
+function finishBatch() {
+    const startTime = performance.now();
+    const meshes: any[] = [];
+    const transferables: Transferable[] = [];
+
+    for (const [category, acc] of batchAccumulators) {
+        if (acc.vertexOffset === 0) continue;
+
+        // Convert accumulated arrays to typed arrays
+        // Positions are Float32 (world coordinates, not quantized)
+        const positions = new Float32Array(acc.positions);
+        const normals = new Int8Array(acc.normals);
+        const uvs = new Float32Array(acc.uvs);
+        const indices = acc.vertexOffset > 65535
+            ? new Uint32Array(acc.indices)
+            : new Uint16Array(acc.indices);
+
+        meshes.push({
+            category,
+            positions,
+            normals,
+            uvs,
+            indices,
+            groups: acc.groups,
+            vertexCount: acc.vertexOffset,
+            isFloat32Positions: true  // Flag to tell main thread not to de-quantize
+        });
+
+        transferables.push(positions.buffer);
+        transferables.push(normals.buffer);
+        transferables.push(uvs.buffer);
+        transferables.push(indices.buffer);
+    }
+
+    const elapsed = performance.now() - startTime;
+    console.log(`[MeshBuilderWasm Worker] Batch finished: ${meshes.length} meshes in ${elapsed.toFixed(2)}ms`);
+
+    batchMode = false;
+    batchAccumulators.clear();
+
+    self.postMessage({
+        type: "batchFinished",
+        meshes,
+        origin: [0, 0, 0],
+        timings: { finalize: elapsed }
+    }, transferables);
+}
+
+/**
+ * Build chunk in batch mode - accumulates results instead of returning
+ */
+function buildChunkBatched(request: ChunkBuildRequest) {
+    if (!meshBuilder) {
+        throw new Error("WASM MeshBuilder not initialized");
+    }
+
+    const { chunkId, blocks, chunkOrigin, sharedInputBuffer } = request;
+    const startTime = performance.now();
+
+    let blocksArray: Int32Array;
+    let originX: number;
+    let originY: number;
+    let originZ: number;
+
+    // Get blocks data (same logic as buildChunk)
+    if (sharedInputBuffer) {
+        const view = new DataView(sharedInputBuffer);
+        const blockCount = view.getUint32(0, true);
+        originX = view.getInt32(4, true);
+        originY = view.getInt32(8, true);
+        originZ = view.getInt32(12, true);
+        blocksArray = new Int32Array(sharedInputBuffer, CHUNK_INPUT_HEADER_SIZE, blockCount * 4);
+    } else if (blocks instanceof Int32Array) {
+        blocksArray = blocks;
+        originX = chunkOrigin?.[0] ?? 0;
+        originY = chunkOrigin?.[1] ?? 0;
+        originZ = chunkOrigin?.[2] ?? 0;
+    } else {
+        // Acknowledge even empty chunks in batch mode
+        self.postMessage({ type: "chunkAccumulated", chunkId });
+        return;
+    }
+
+    if (blocksArray.length === 0) {
+        self.postMessage({ type: "chunkAccumulated", chunkId });
+        return;
+    }
+
+    // Build chunk with WASM - use chunk's min position as origin
+    const result = meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
+
+    // The WASM returns quantized Int16 positions relative to the origin we passed
+    // We need to de-quantize and convert to world Float32 coordinates
+    const POSITION_SCALE = 1024;
+    const invScale = 1.0 / POSITION_SCALE;
+
+    // Accumulate results into batch buffers
+    const meshes = result.meshes || [];
+    for (const mesh of meshes) {
+        const category = mesh.category || 'solid';
+
+        // Get or create accumulator for this category
+        let acc = batchAccumulators.get(category);
+        if (!acc) {
+            acc = {
+                positions: [],
+                normals: [],
+                uvs: [],
+                indices: [],
+                groups: [],
+                vertexOffset: 0
+            };
+            batchAccumulators.set(category, acc);
+        }
+
+        const baseVertex = acc.vertexOffset;
+
+        // Accumulate positions - de-quantize and add chunk origin for world coordinates
+        // Result is Float32 world positions
+        if (mesh.positions) {
+            for (let i = 0; i < mesh.positions.length; i += 3) {
+                // De-quantize (Int16 / 1024) and add chunk origin to get world position
+                const worldX = (mesh.positions[i] * invScale) + originX;
+                const worldY = (mesh.positions[i + 1] * invScale) + originY;
+                const worldZ = (mesh.positions[i + 2] * invScale) + originZ;
+                acc.positions.push(worldX, worldY, worldZ);
+            }
+        }
+
+        // Accumulate normals (Int8Array) - no offset needed
+        if (mesh.normals) {
+            for (let i = 0; i < mesh.normals.length; i++) {
+                acc.normals.push(mesh.normals[i]);
+            }
+        }
+
+        // Accumulate UVs (Float32Array) - no offset needed
+        if (mesh.uvs) {
+            for (let i = 0; i < mesh.uvs.length; i++) {
+                acc.uvs.push(mesh.uvs[i]);
+            }
+        }
+
+        // Accumulate indices with vertex offset
+        if (mesh.indices) {
+            const indexStart = acc.indices.length;
+            for (let i = 0; i < mesh.indices.length; i++) {
+                acc.indices.push(mesh.indices[i] + baseVertex);
+            }
+
+            // Accumulate groups with adjusted start
+            if (mesh.groups) {
+                for (const group of mesh.groups) {
+                    acc.groups.push({
+                        start: indexStart + group.start,
+                        count: group.count,
+                        materialIndex: group.materialIndex
+                    });
+                }
+            }
+        }
+
+        // Update vertex offset
+        acc.vertexOffset += mesh.positions ? mesh.positions.length / 3 : 0;
+    }
+
+    const elapsed = performance.now() - startTime;
+    buildCount++;
+    totalBuildTime += elapsed;
+
+    // Acknowledge chunk processed (no data returned in batch mode)
+    self.postMessage({
+        type: "chunkAccumulated",
+        chunkId,
+        timings: { total: elapsed }
+    });
+}
 
 /**
  * Update palette geometry data in WASM

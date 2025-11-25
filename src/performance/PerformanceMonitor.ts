@@ -187,7 +187,7 @@ export class PerformanceMonitor {
         this.renderer = renderer;
     }
 
-    public startSession(schematicId: string, renderMode: 'immediate' | 'incremental' | 'instanced'): string {
+    public startSession(schematicId: string, renderMode: 'immediate' | 'incremental' | 'instanced' | 'batched'): string {
         const sessionId = `${schematicId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         this.currentSession = {

@@ -174,7 +174,8 @@
 									x-model="config.meshBuildingMode"
 									class="bg-gray-800/90 text-gray-100 border border-gray-600/50 rounded-md px-3 py-2 text-sm cursor-pointer w-full hover:border-gray-500 focus:border-gray-400 focus:outline-none transition-colors"
 								>
-									<option value="incremental">Incremental (Recommended)</option>
+									<option value="batched">⚡ Batched (Fastest)</option>
+									<option value="incremental">Incremental</option>
 									<option value="immediate">Immediate</option>
 									<option value="instanced">Instanced</option>
 								</select>
@@ -369,7 +370,7 @@
 						schematicType: "terrain",
 						schematicSize: "huge",
 						blockDensity: "medium",
-						meshBuildingMode: "incremental",
+						meshBuildingMode: "batched",
 						numberOfRuns: 1,
 					},
 

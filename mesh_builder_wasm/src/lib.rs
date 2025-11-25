@@ -69,6 +69,9 @@ impl PaletteEntry {
 #[wasm_bindgen]
 pub struct MeshBuilder {
     palette: Vec<Option<PaletteEntryData>>,
+    // Accumulators for batch mode - one per category
+    accumulators: std::collections::HashMap<String, GeometryAccumulator>,
+    batch_mode: bool,
 }
 
 /// Internal palette entry data (not exposed to JS)
@@ -86,13 +89,111 @@ struct GeometryData {
     material_index: u32,
 }
 
+/// Accumulator for batch mode - collects geometry across multiple chunks
+struct GeometryAccumulator {
+    positions: Vec<i16>,
+    normals: Vec<i8>,
+    uvs: Vec<f32>,
+    indices: Vec<u32>,
+    groups: Vec<(u32, u32, u32)>, // (start, count, materialIndex)
+    vertex_count: u32,
+    index_count: u32,
+}
+
 #[wasm_bindgen]
 impl MeshBuilder {
     #[wasm_bindgen(constructor)]
     pub fn new() -> MeshBuilder {
         MeshBuilder {
             palette: Vec::new(),
+            accumulators: std::collections::HashMap::new(),
+            batch_mode: false,
         }
+    }
+    
+    /// Enable batch mode - chunks will be accumulated instead of returned immediately
+    #[wasm_bindgen]
+    pub fn start_batch(&mut self) {
+        self.batch_mode = true;
+        self.accumulators.clear();
+    }
+    
+    /// Disable batch mode and return all accumulated geometry
+    #[wasm_bindgen]
+    pub fn finish_batch(&mut self) -> Result<JsValue, JsValue> {
+        self.batch_mode = false;
+        
+        let results = Array::new();
+        
+        for (category, acc) in &self.accumulators {
+            if acc.vertex_count == 0 {
+                continue;
+            }
+            
+            // Create JS typed arrays
+            let positions_arr = Int16Array::new_with_length(acc.positions.len() as u32);
+            positions_arr.copy_from(&acc.positions);
+            
+            let normals_arr = Int8Array::new_with_length(acc.normals.len() as u32);
+            normals_arr.copy_from(&acc.normals);
+            
+            let uvs_arr = Float32Array::new_with_length(acc.uvs.len() as u32);
+            uvs_arr.copy_from(&acc.uvs);
+            
+            // Use 32-bit indices for large batches
+            let indices_arr: JsValue = if acc.vertex_count > 65535 {
+                let arr = Uint32Array::new_with_length(acc.indices.len() as u32);
+                arr.copy_from(&acc.indices);
+                arr.into()
+            } else {
+                let arr = Uint16Array::new_with_length(acc.indices.len() as u32);
+                let indices_u16: Vec<u16> = acc.indices.iter().map(|&x| x as u16).collect();
+                arr.copy_from(&indices_u16);
+                arr.into()
+            };
+            
+            // Create groups array
+            let groups_arr = Array::new();
+            for (start, count, mat_index) in &acc.groups {
+                let group_obj = Object::new();
+                Reflect::set(&group_obj, &"start".into(), &JsValue::from(*start)).ok();
+                Reflect::set(&group_obj, &"count".into(), &JsValue::from(*count)).ok();
+                Reflect::set(&group_obj, &"materialIndex".into(), &JsValue::from(*mat_index)).ok();
+                groups_arr.push(&group_obj);
+            }
+            
+            let result = Object::new();
+            Reflect::set(&result, &"category".into(), &JsValue::from_str(category)).ok();
+            Reflect::set(&result, &"positions".into(), &positions_arr).ok();
+            Reflect::set(&result, &"normals".into(), &normals_arr).ok();
+            Reflect::set(&result, &"uvs".into(), &uvs_arr).ok();
+            Reflect::set(&result, &"indices".into(), &indices_arr).ok();
+            Reflect::set(&result, &"groups".into(), &groups_arr).ok();
+            Reflect::set(&result, &"vertexCount".into(), &JsValue::from(acc.vertex_count)).ok();
+            
+            results.push(&result);
+        }
+        
+        self.accumulators.clear();
+        
+        let output = Object::new();
+        Reflect::set(&output, &"meshes".into(), &results).ok();
+        Reflect::set(&output, &"origin".into(), &Array::of3(&0.into(), &0.into(), &0.into())).ok();
+        
+        Ok(output.into())
+    }
+    
+    /// Clear accumulators without returning data
+    #[wasm_bindgen]
+    pub fn clear_batch(&mut self) {
+        self.accumulators.clear();
+        self.batch_mode = false;
+    }
+    
+    /// Get batch mode status
+    #[wasm_bindgen]
+    pub fn is_batch_mode(&self) -> bool {
+        self.batch_mode
     }
 
     /// Update palette with geometry data from JavaScript
