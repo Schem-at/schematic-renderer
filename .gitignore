@@ -27,3 +27,8 @@ dist-ssr
 
 
 schematic-renderer-*.tgz
+
+# Rust/WASM build artifacts
+mesh_builder_wasm/target/
+mesh_builder_wasm/pkg/
+mesh_builder_wasm/Cargo.lock

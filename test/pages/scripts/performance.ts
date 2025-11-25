@@ -21,6 +21,8 @@ const renderer = new SchematicRenderer(
         },
     },
     { // Renderer options
+        // GPU compute is disabled - it's ~6x slower than workers due to GPU→CPU readback
+        // gpuComputeOptions: { enabled: true }, // DON'T USE - slower!
         enableInteraction: true,
         enableDragAndDrop: false,
         enableAdaptiveFPS: false,
@@ -167,7 +169,25 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
 // --- Global Helper Functions for Alpine.js ---
 
 (window as any).runSingleIteration = async (runNumber: number, config: any, renderer: SchematicRenderer, onProgress: (msg: string, pct: number) => void) => {
-    console.log(`⚡ Run ${runNumber}: Starting`);
+    // Log run start with ACTUAL performance mode
+    const gpuActuallyUsed = renderer.worldMeshBuilder?.isUsingGPUCompute() ?? false;
+    const wasmUsed = (renderer.worldMeshBuilder as any)?.isUsingWasmMeshBuilder?.() ?? false;
+    const sharedMemUsed = (renderer.worldMeshBuilder as any)?.isUsingSharedMemory?.() ?? false;
+    const gpuOptionEnabled = renderer.options.gpuComputeOptions?.enabled ?? false;
+
+    let perfMode: string;
+    if (gpuActuallyUsed) {
+        perfMode = '🟠 GPU Compute (Active - not recommended)';
+    } else if (wasmUsed && sharedMemUsed) {
+        perfMode = '🟢 WASM + SharedArrayBuffer (zero-copy)';
+    } else if (wasmUsed) {
+        perfMode = '🟡 WASM Workers (no SharedArrayBuffer)';
+    } else if (gpuOptionEnabled) {
+        perfMode = '🟡 GPU Requested but Fallback';
+    } else {
+        perfMode = '🔵 JavaScript Workers';
+    }
+    console.log(`⚡ Run ${runNumber}: Starting [${perfMode}]`);
 
     const timings = {
         start: performance.now(),
@@ -193,10 +213,10 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
     schematic.group.visible = true; // Force THREE.js group visibility immediately
 
     // We call the mesh builder directly via SchematicObject
-    // Ensure we use the configured mode
+    // Ensure we use the configured mode (pass undefined for default chunk dimensions)
     const { meshes, chunkMap } = await schematic.buildSchematicMeshes(
         schematic,
-        schematic.chunkDimensions, // default
+        undefined, // Use default chunk dimensions (16x16x16)
         config.meshBuildingMode
     );
 
@@ -215,7 +235,23 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
     const memoryUsedMB = (endMemory - startMemory) / 1024 / 1024;
     const peakMemoryMB = endMemory / 1024 / 1024;
 
-    console.log(`[Test] Run ${runNumber} Summary:`);
+    // Re-check state at end
+    const gpuUsedAtEnd = renderer.worldMeshBuilder?.isUsingGPUCompute() ?? false;
+    const wasmUsedAtEnd = (renderer.worldMeshBuilder as any)?.isUsingWasmMeshBuilder?.() ?? false;
+    const sharedMemAtEnd = (renderer.worldMeshBuilder as any)?.isUsingSharedMemory?.() ?? false;
+
+    let endPerfMode: string;
+    if (gpuUsedAtEnd) {
+        endPerfMode = '🟠 GPU Compute';
+    } else if (wasmUsedAtEnd && sharedMemAtEnd) {
+        endPerfMode = '🟢 WASM+SAB';
+    } else if (wasmUsedAtEnd) {
+        endPerfMode = '🟡 WASM';
+    } else {
+        endPerfMode = '🔵 JS Workers';
+    }
+
+    console.log(`[Test] Run ${runNumber} Summary [${endPerfMode}]:`);
     console.log(`  Total Time: ${Math.round(totalTime)}ms`);
     console.log(`  Generation: ${Math.round(timings.generation)}ms`);
     console.log(`  Mesh Build: ${Math.round(timings.build)}ms`);

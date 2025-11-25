@@ -76,6 +76,12 @@ const renderer = new SchematicRenderer(
 		gamma: 0.45,
 		enableAdaptiveFPS: false,
 
+		// Enable the debug inspector GUI (press ` to toggle)
+		debugOptions: {
+			enableInspector: true,
+			showOnStartup: true,
+		},
+
 		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,

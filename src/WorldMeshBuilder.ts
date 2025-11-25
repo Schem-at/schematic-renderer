@@ -14,8 +14,14 @@ import type {
 import { Cubane } from "cubane";
 import { InstancedBlockRenderer } from "./InstancedBlockRenderer";
 import { performanceMonitor } from "./performance/PerformanceMonitor";
+// Worker imports - Vite handles bundling
 // @ts-ignore
 import MeshBuilderWorker from "./workers/MeshBuilder.worker?worker&inline";
+// @ts-ignore
+import MeshBuilderWasmWorker from "./workers/MeshBuilderWasm.worker?worker&inline";
+import { GPUCapabilityManager } from "./gpu/GPUCapabilityManager";
+import { ComputeMeshBuilder } from "./gpu/ComputeMeshBuilder";
+import { getSharedMemoryPool, SharedMemoryPool, CHUNK_INPUT_HEADER_SIZE } from "./workers/SharedMemoryManager";
 
 export const INVISIBLE_BLOCKS = new Set([
 	"minecraft:air",
@@ -53,23 +59,132 @@ export class WorldMeshBuilder {
 	// Phase 2 optimizations configuration
 	private useQuantization: boolean = false;
 
+	// WebGPU Compute
+	private useGPUCompute: boolean = false;
+	private computeMeshBuilder: ComputeMeshBuilder | null = null;
+	private gpuInitPromise: Promise<boolean> | null = null;
+
+	// WASM Mesh Builder
+	private useWasmMeshBuilder: boolean = false;
+
+	// SharedArrayBuffer for zero-copy transfers
+	private sharedMemoryPool: SharedMemoryPool | null = null;
+	private useSharedMemory: boolean = false;
+
 	constructor(schematicRenderer: SchematicRenderer, cubane: Cubane) {
 		this.cubane = cubane;
 		this.schematicRenderer = schematicRenderer;
-		this.initializeWorkers();
+		// Check WASM option (enabled by default)
+		this.useWasmMeshBuilder = schematicRenderer.options.wasmMeshBuilderOptions?.enabled ?? true;
+		// Try GPU compute first, fall back to workers
+		this.initializeGPUCompute();
+	}
+
+	/**
+	 * Initialize WebGPU compute for mesh building
+	 * Falls back to workers if WebGPU is not available
+	 */
+	private async initializeGPUCompute(): Promise<boolean> {
+		if (this.gpuInitPromise) {
+			return this.gpuInitPromise;
+		}
+
+		this.gpuInitPromise = this._doInitializeGPU();
+		return this.gpuInitPromise;
+	}
+
+	private async _doInitializeGPU(): Promise<boolean> {
+		try {
+			// Check if GPU compute is enabled in options
+			const gpuOptions = this.schematicRenderer.options.gpuComputeOptions;
+			if (!gpuOptions?.enabled) {
+				console.log('%c[WorldMeshBuilder] GPU Compute: DISABLED', 'color: #ff9800; font-weight: bold');
+				console.log('  → Using Web Worker fallback (12 workers parallel)');
+				console.log('  → To enable GPU compute: set gpuComputeOptions.enabled = true');
+				console.log('  → Note: GPU compute is experimental and may have texture issues');
+				this.initializeWorkers();
+				return false;
+			}
+
+			// Check if WebGPU is available
+			const isAvailable = await GPUCapabilityManager.isWebGPUAvailable();
+			if (!isAvailable) {
+				console.log('[WorldMeshBuilder] WebGPU not available, using worker fallback');
+				this.initializeWorkers();
+				return false;
+			}
+
+			// Initialize compute mesh builder
+			this.computeMeshBuilder = new ComputeMeshBuilder();
+			const success = await this.computeMeshBuilder.initialize();
+
+			if (success) {
+				this.useGPUCompute = true;
+				console.log('%c[WorldMeshBuilder] GPU Compute: ENABLED', 'color: #ff9800; font-weight: bold');
+				console.warn('  ⚠️ WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!');
+				console.warn('  ⚠️ Textures will not render correctly (wireframe only).');
+				console.warn('  ⚠️ Set gpuComputeOptions.enabled = false for better performance.');
+				return true;
+			} else {
+				console.warn('[WorldMeshBuilder] GPU compute init failed, using worker fallback');
+				this.computeMeshBuilder = null;
+				this.initializeWorkers();
+				return false;
+			}
+		} catch (error) {
+			console.warn('[WorldMeshBuilder] GPU compute error, using worker fallback:', error);
+			this.computeMeshBuilder = null;
+			this.initializeWorkers();
+			return false;
+		}
+	}
+
+	/**
+	 * Check if GPU compute is being used
+	 */
+	public isUsingGPUCompute(): boolean {
+		return this.useGPUCompute && this.computeMeshBuilder !== null;
 	}
 
 	private initializeWorkers() {
 		if (this.workers.length > 0) return;
 
-		console.log(`[WorldMeshBuilder] Initializing worker pool with ${this.maxWorkers} workers`);
+		const workerType = this.useWasmMeshBuilder ? 'WASM' : 'JavaScript';
+		console.log(`[WorldMeshBuilder] Initializing ${workerType} worker pool with ${this.maxWorkers} workers`);
+
+		// Initialize shared memory pool for zero-copy transfers
+		this.sharedMemoryPool = getSharedMemoryPool();
+		this.useSharedMemory = this.sharedMemoryPool.usingSharedMemory();
+
+		if (this.useSharedMemory) {
+			console.log('%c[WorldMeshBuilder] SharedArrayBuffer enabled - zero-copy transfers active', 'color: #4caf50');
+		} else {
+			console.log('[WorldMeshBuilder] SharedArrayBuffer not available - using standard transfers');
+		}
 
 		for (let i = 0; i < this.maxWorkers; i++) {
-			const worker = new MeshBuilderWorker();
+			// Use WASM worker if enabled, otherwise use JavaScript worker
+			const worker = this.useWasmMeshBuilder
+				? new MeshBuilderWasmWorker()
+				: new MeshBuilderWorker();
 			worker.onmessage = (event: MessageEvent) => this.handleWorkerMessage(worker, event);
 			this.workers.push(worker);
 			this.freeWorkers.push(worker);
 		}
+	}
+
+	/**
+	 * Check if using WASM mesh builder
+	 */
+	public isUsingWasmMeshBuilder(): boolean {
+		return this.useWasmMeshBuilder && this.workers.length > 0;
+	}
+
+	/**
+	 * Check if using SharedArrayBuffer
+	 */
+	public isUsingSharedMemory(): boolean {
+		return this.useSharedMemory && this.sharedMemoryPool !== null;
 	}
 
 	// Static stats collector
@@ -282,8 +397,20 @@ export class WorldMeshBuilder {
 		WorldMeshBuilder.resetStats();
 		console.log(`[WorldMeshBuilder] Precomputing geometry for ${palette.length} palette entries...`);
 
-		// Ensure workers are initialized
-		this.initializeWorkers();
+		// Re-initialize GPU compute if it was disposed (e.g., during cleanup between runs)
+		// This must happen BEFORE worker initialization to allow GPU to take precedence
+		if (!this.gpuInitPromise && this.schematicRenderer.options.gpuComputeOptions?.enabled) {
+			console.log('[WorldMeshBuilder] Re-initializing GPU compute (was disposed)...');
+			this.gpuInitPromise = this._doInitializeGPU();
+		}
+
+		// Wait for GPU init if in progress - GPU init will create workers as fallback if needed
+		if (this.gpuInitPromise) {
+			await this.gpuInitPromise;
+		} else {
+			// Only initialize workers if GPU is not being used
+			this.initializeWorkers();
+		}
 
 		const paletteBlockData: PaletteBlockData[] = new Array(palette.length);
 		const globalMaterialMap = new Map<string, THREE.Material>();
@@ -399,18 +526,40 @@ export class WorldMeshBuilder {
 			isReady: true,
 		};
 
-		// Broadcast geometry data to ALL workers
-		console.log(`[WorldMeshBuilder] Broadcasting palette to ${this.workers.length} workers...`);
-		this.workers.forEach(worker => {
-			worker.postMessage({
-				type: "updatePalette",
-				paletteData: paletteGeometryData,
+		// Wait for GPU init to complete
+		if (this.gpuInitPromise) {
+			await this.gpuInitPromise;
+		}
+
+		// Upload to GPU if using GPU compute, otherwise broadcast to workers
+		if (this.useGPUCompute && this.computeMeshBuilder) {
+			console.log(`[WorldMeshBuilder] Uploading palette to GPU...`);
+			await this.computeMeshBuilder.uploadPaletteData(this.paletteCache);
+		} else {
+			// Broadcast geometry data to ALL workers (fallback path)
+			console.log(`[WorldMeshBuilder] Broadcasting palette to ${this.workers.length} workers...`);
+			this.workers.forEach(worker => {
+				worker.postMessage({
+					type: "updatePalette",
+					paletteData: paletteGeometryData,
+				});
 			});
-		});
+		}
 
 		console.log("[WorldMeshBuilder] Palette precomputation complete.");
 		console.timeEnd("precomputePaletteGeometries");
 		performanceMonitor.endOperation("precomputePaletteGeometries");
+
+		// Log summary of build mode
+		if (this.useGPUCompute) {
+			console.log('%c[Performance Mode] GPU Compute (NOT RECOMMENDED - slower)', 'background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px');
+		} else if (this.useWasmMeshBuilder && this.useSharedMemory) {
+			console.log(`%c[Performance Mode] WASM + SharedArrayBuffer (${this.workers.length}x parallel, zero-copy) ✓✓ OPTIMAL`, 'background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px');
+		} else if (this.useWasmMeshBuilder) {
+			console.log(`%c[Performance Mode] WASM Workers (${this.workers.length}x parallel)`, 'background: #8bc34a; color: white; padding: 2px 6px; border-radius: 3px');
+		} else {
+			console.log(`%c[Performance Mode] JavaScript Workers (${this.workers.length}x parallel)`, 'background: #2196f3; color: white; padding: 2px 6px; border-radius: 3px');
+		}
 	}
 
 	// Helper to acquire a worker
@@ -489,11 +638,33 @@ export class WorldMeshBuilder {
 
 		if (blocksToProcess.length === 0) return { geometries: [], origin: [0, 0, 0] };
 
-		// Worker processing
-		const workerBlocks = blocksToProcess;
 		const originX = chunkData.chunk_x * this.chunkSize;
 		const originY = chunkData.chunk_y * this.chunkSize;
 		const originZ = chunkData.chunk_z * this.chunkSize;
+
+		// GPU Compute path
+		if (this.useGPUCompute && this.computeMeshBuilder?.isReady) {
+			try {
+				const gpuResult = await this.computeMeshBuilder.buildChunk(
+					blocksToProcess as Int32Array,
+					[originX, originY, originZ],
+					chunkId
+				);
+
+				if (gpuResult) {
+					return {
+						geometries: gpuResult.geometries,
+						origin: gpuResult.origin
+					};
+				}
+			} catch (error) {
+				console.warn('[WorldMeshBuilder] GPU compute failed, falling back to workers:', error);
+				// Fall through to worker path
+			}
+		}
+
+		// Worker fallback path
+		const workerBlocks = blocksToProcess;
 
 		const workerPromise = new Promise<any>(async (resolve, reject) => {
 			if (workerBlocks.length === 0) {
@@ -525,26 +696,54 @@ export class WorldMeshBuilder {
 			this.pendingRequests.set(chunkId, {
 				resolve: (data) => {
 					clearTimeout(timeoutId);
+					// Clean up shared memory buffer if used
+					if (this.sharedMemoryPool) {
+						this.sharedMemoryPool.releaseBuffers(chunkId);
+					}
 					resolve(data);
 				},
 				reject: (err) => {
 					clearTimeout(timeoutId);
+					// Clean up shared memory buffer if used
+					if (this.sharedMemoryPool) {
+						this.sharedMemoryPool.releaseBuffers(chunkId);
+					}
 					reject(err);
 				},
 				worker: worker
 			});
 
-			const transferList: Transferable[] = [];
-			if (workerBlocks instanceof Int32Array) {
-				transferList.push(workerBlocks.buffer);
-			}
+			// Use SharedArrayBuffer for zero-copy transfer if available
+			if (this.useSharedMemory && this.sharedMemoryPool && workerBlocks instanceof Int32Array) {
+				// Write data to shared memory - worker reads directly, no copy!
+				const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
+					chunkId,
+					workerBlocks,
+					originX,
+					originY,
+					originZ
+				);
 
-			worker.postMessage({
-				type: "buildChunk",
-				chunkId,
-				blocks: workerBlocks,
-				chunkOrigin: [originX, originY, originZ]
-			}, transferList);
+				worker.postMessage({
+					type: "buildChunk",
+					chunkId,
+					sharedInputBuffer: sharedBuffer, // Worker reads from this directly
+					chunkOrigin: [originX, originY, originZ]
+				});
+			} else {
+				// Fallback: transfer via postMessage (copies data)
+				const transferList: Transferable[] = [];
+				if (workerBlocks instanceof Int32Array) {
+					transferList.push(workerBlocks.buffer);
+				}
+
+				worker.postMessage({
+					type: "buildChunk",
+					chunkId,
+					blocks: workerBlocks,
+					chunkOrigin: [originX, originY, originZ]
+				}, transferList);
+			}
 		});
 
 		try {
@@ -731,71 +930,130 @@ export class WorldMeshBuilder {
 			}
 		}
 
-		// Send regular blocks to worker
-		const workerPromise = new Promise<any>(async (resolve, reject) => {
-			if (workerBlocks.length === 0) {
-				resolve({ meshes: [] });
-				return;
-			}
-
-			// Ensure workers exist
-			if (this.workers.length === 0) {
-				this.initializeWorkers();
-			}
-
-			// Get a free worker
-			const worker = await this.getFreeWorker();
-
-			// Determine chunk origin for relative quantization
-			// We use the first block's coordinates or chunk alignment
-			// Ideally aligned to chunk grid:
-			const originX = chunkData.chunk_x * this.chunkSize;
-			const originY = chunkData.chunk_y * this.chunkSize;
-			const originZ = chunkData.chunk_z * this.chunkSize;
-
-			// Add timeout to prevent hanging
-			const timeoutId = setTimeout(() => {
-				if (this.pendingRequests.has(chunkId)) {
-					const req = this.pendingRequests.get(chunkId);
-					this.pendingRequests.delete(chunkId);
-					// Release worker even on timeout
-					if (req) {
-						this.returnWorker(req.worker);
-					}
-					reject(new Error(`Chunk build timeout for ${chunkId}`));
-				}
-			}, 30000); // 30 seconds timeout
-
-			this.pendingRequests.set(chunkId, {
-				resolve: (data) => {
-					clearTimeout(timeoutId);
-					resolve(data);
-				},
-				reject: (err) => {
-					clearTimeout(timeoutId);
-					reject(err);
-				},
-				worker: worker
-			});
-
-			const transferList: Transferable[] = [];
-			if (workerBlocks instanceof Int32Array) {
-				transferList.push(workerBlocks.buffer);
-			}
-
-			worker.postMessage({
-				type: "buildChunk",
-				chunkId,
-				blocks: workerBlocks,
-				chunkOrigin: [originX, originY, originZ]
-			}, transferList);
-		});
+		// Determine chunk origin
+		const originX = chunkData.chunk_x * this.chunkSize;
+		const originY = chunkData.chunk_y * this.chunkSize;
+		const originZ = chunkData.chunk_z * this.chunkSize;
 
 		const resultMeshes: THREE.Object3D[] = [];
 
+		// Try GPU compute first, then fall back to workers
+		let buildResult: { meshes: any[], origin: number[] } | null = null;
+
+		// GPU Compute path
+		if (this.useGPUCompute && this.computeMeshBuilder?.isReady) {
+			try {
+				const gpuResult = await this.computeMeshBuilder.buildChunk(
+					workerBlocks as Int32Array,
+					[originX, originY, originZ],
+					chunkId
+				);
+
+				if (gpuResult) {
+					buildResult = {
+						meshes: gpuResult.geometries,
+						origin: gpuResult.origin
+					};
+				}
+			} catch (error) {
+				console.warn('[WorldMeshBuilder] GPU compute failed, falling back to workers:', error);
+				// Fall through to worker path
+			}
+		}
+
+		// Worker fallback path
+		if (!buildResult) {
+			const workerPromise = new Promise<any>(async (resolve, reject) => {
+				if (workerBlocks.length === 0) {
+					resolve({ meshes: [] });
+					return;
+				}
+
+				// Ensure workers exist
+				if (this.workers.length === 0) {
+					this.initializeWorkers();
+				}
+
+				// Get a free worker
+				const worker = await this.getFreeWorker();
+
+				// Add timeout to prevent hanging
+				const timeoutId = setTimeout(() => {
+					if (this.pendingRequests.has(chunkId)) {
+						const req = this.pendingRequests.get(chunkId);
+						this.pendingRequests.delete(chunkId);
+						// Release worker even on timeout
+						if (req) {
+							this.returnWorker(req.worker);
+						}
+						reject(new Error(`Chunk build timeout for ${chunkId}`));
+					}
+				}, 30000); // 30 seconds timeout
+
+				this.pendingRequests.set(chunkId, {
+					resolve: (data) => {
+						clearTimeout(timeoutId);
+						// Clean up shared memory buffer if used
+						if (this.sharedMemoryPool) {
+							this.sharedMemoryPool.releaseBuffers(chunkId);
+						}
+						resolve(data);
+					},
+					reject: (err) => {
+						clearTimeout(timeoutId);
+						// Clean up shared memory buffer if used
+						if (this.sharedMemoryPool) {
+							this.sharedMemoryPool.releaseBuffers(chunkId);
+						}
+						reject(err);
+					},
+					worker: worker
+				});
+
+				// Use SharedArrayBuffer for zero-copy transfer if available
+				if (this.useSharedMemory && this.sharedMemoryPool && workerBlocks instanceof Int32Array) {
+					// Write data to shared memory - worker reads directly, no copy!
+					const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
+						chunkId,
+						workerBlocks,
+						originX,
+						originY,
+						originZ
+					);
+
+					worker.postMessage({
+						type: "buildChunk",
+						chunkId,
+						sharedInputBuffer: sharedBuffer,
+						chunkOrigin: [originX, originY, originZ]
+					});
+				} else {
+					// Fallback: transfer via postMessage (copies data)
+					const transferList: Transferable[] = [];
+					if (workerBlocks instanceof Int32Array) {
+						transferList.push(workerBlocks.buffer);
+					}
+
+					worker.postMessage({
+						type: "buildChunk",
+						chunkId,
+						blocks: workerBlocks,
+						chunkOrigin: [originX, originY, originZ]
+					}, transferList);
+				}
+			});
+
+			buildResult = await workerPromise;
+		}
+
 		try {
-			// Wait for worker result
-			const workerResult = await workerPromise;
+			// Process build result (same for GPU and worker)
+			const workerResult = buildResult;
+
+			if (!workerResult) {
+				console.warn('[WorldMeshBuilder] No build result available');
+				return resultMeshes;
+			}
 
 			// Reconstruct meshes from worker buffers
 			if (workerResult.meshes) {
@@ -1162,11 +1420,19 @@ export class WorldMeshBuilder {
 			this.paletteCache = null;
 		}
 
+		// Dispose GPU compute resources
+		if (this.computeMeshBuilder) {
+			this.computeMeshBuilder.dispose();
+			this.computeMeshBuilder = null;
+		}
+		this.useGPUCompute = false;
+		this.gpuInitPromise = null;
+
 		// Terminate all workers
 		this.workers.forEach(w => w.terminate());
 		this.workers = [];
 		this.freeWorkers = [];
 
-		console.log("[OptWMB] Disposed palette cache and workers.");
+		console.log("[WorldMeshBuilder] Disposed palette cache, GPU compute, and workers.");
 	}
 }

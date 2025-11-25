@@ -46,6 +46,7 @@ import { CreativeControls } from "three-creative-controls";
 import { Cubane } from "cubane";
 import { performanceDashboard } from "./ui/PerformanceDashboard";
 import { KeyboardControls } from "./managers/KeyboardControls";
+import { InspectorManager } from "./managers/InspectorManager";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
@@ -68,6 +69,7 @@ export class SchematicRenderer {
 	public insignIoManager: InsignIoManager | undefined;
 	public overlayManager: OverlayManager | undefined;
 	public keyboardControls: KeyboardControls | undefined;
+	public inspectorManager: InspectorManager | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
@@ -181,6 +183,45 @@ export class SchematicRenderer {
 		return newState;
 	}
 
+	/**
+	 * Enable or create the inspector GUI
+	 * Can be called at any time to show the debug panel
+	 */
+	public enableInspector(): InspectorManager {
+		if (!this.inspectorManager) {
+			this.inspectorManager = new InspectorManager(this, {
+				enableInspector: true,
+				showOnStartup: true,
+				...this.options.debugOptions
+			});
+		} else {
+			this.inspectorManager.show();
+		}
+		return this.inspectorManager;
+	}
+
+	/**
+	 * Disable/hide the inspector GUI
+	 */
+	public disableInspector(): void {
+		if (this.inspectorManager) {
+			this.inspectorManager.hide();
+		}
+	}
+
+	/**
+	 * Toggle the inspector GUI visibility
+	 * Creates the inspector if it doesn't exist
+	 */
+	public toggleInspector(): boolean {
+		if (!this.inspectorManager) {
+			this.enableInspector();
+			return true;
+		}
+		this.inspectorManager.toggle();
+		return this.inspectorManager.visible;
+	}
+
 	private async initialize(
 		schematicData: { [key: string]: () => Promise<ArrayBuffer> },
 		defaultResourcePacks: Record<string, DefaultPackCallback>
@@ -243,6 +284,11 @@ export class SchematicRenderer {
 
 			// Start rendering
 			this.animate();
+
+			// Initialize inspector if enabled
+			if (this.options.debugOptions?.enableInspector) {
+				this.inspectorManager = new InspectorManager(this, this.options.debugOptions);
+			}
 
 			// Trigger callbacks and events
 			this.options.callbacks?.onRendererInitialized?.(this);
@@ -1049,6 +1095,12 @@ export class SchematicRenderer {
 		if (this.keyboardControls) {
 			this.keyboardControls.dispose();
 			this.keyboardControls = undefined;
+		}
+
+		// Dispose inspector
+		if (this.inspectorManager) {
+			this.inspectorManager.dispose();
+			this.inspectorManager = undefined;
 		}
 
 		if (!this.renderManager) {

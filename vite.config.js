@@ -29,6 +29,12 @@ export default defineConfig({
   server: {
     port: 4000,
     open: true,
+    // Required headers for SharedArrayBuffer support
+    // Using 'credentialless' instead of 'require-corp' to allow CDN resources
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+    },
   },
   root: './test/pages',
   publicDir: '../public',

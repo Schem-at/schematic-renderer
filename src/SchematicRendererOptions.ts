@@ -47,6 +47,59 @@ export interface KeyboardControlsOptions {
 	};
 }
 
+export interface DebugOptions {
+	// Enable the debug GUI panel (lil-gui)
+	enableInspector?: boolean;
+	// Show the GUI on startup (can be toggled with keyboard shortcut)
+	showOnStartup?: boolean;
+	// Custom panels to add to the GUI
+	customPanels?: Array<{
+		name: string;
+		controls: Array<{
+			name: string;
+			type: 'number' | 'boolean' | 'color' | 'button' | 'select';
+			value?: any;
+			min?: number;
+			max?: number;
+			step?: number;
+			options?: string[] | Record<string, any>;
+			onChange?: (value: any) => void;
+		}>;
+	}>;
+}
+
+export interface GPUComputeOptions {
+	/**
+	 * Enable WebGPU compute for mesh building
+	 * 
+	 * ⚠️ WARNING: GPU compute is currently SLOWER than workers due to GPU→CPU
+	 * readback overhead (~6x slower, ~10x more memory). Additionally, textures
+	 * don't render correctly (wireframe only).
+	 * 
+	 * The Web Worker path with WASM is the recommended and default approach.
+	 * Keep this disabled unless you're developing/testing the GPU path.
+	 * 
+	 * @default false
+	 * @deprecated Use default worker path instead
+	 */
+	enabled?: boolean;
+	/** @deprecated GPU compute is not recommended */
+	preferGPU?: boolean;
+}
+
+export interface WasmMeshBuilderOptions {
+	/**
+	 * Use WASM-based mesh builder for high-performance geometry merging.
+	 * 
+	 * The WASM mesh builder is written in Rust and provides significantly
+	 * better performance than the pure JavaScript implementation for the
+	 * geometry merging and face culling operations.
+	 * 
+	 * @default true (recommended)
+	 */
+	enabled?: boolean;
+}
+
 export interface SchematicRendererOptions {
 	backgroundColor?: number | string; // Accepts hex color or CSS color string
 	hdri?: string;
@@ -88,6 +141,12 @@ export interface SchematicRendererOptions {
 	simulationOptions?: SimulationOptions;
 	// Keyboard controls options
 	keyboardControlsOptions?: KeyboardControlsOptions;
+	// Debug/Inspector options
+	debugOptions?: DebugOptions;
+	// GPU compute options (experimental)
+	gpuComputeOptions?: GPUComputeOptions;
+	// WASM mesh builder options (recommended for best performance)
+	wasmMeshBuilderOptions?: WasmMeshBuilderOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -157,6 +216,17 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 			down: 'Shift', // Shift
 			sprint: 'Shift', // Shift for sprint
 		},
+	},
+	debugOptions: {
+		enableInspector: false,
+		showOnStartup: true,
+	},
+	gpuComputeOptions: {
+		enabled: false, // Disabled by default - experimental and slower
+		preferGPU: true,
+	},
+	wasmMeshBuilderOptions: {
+		enabled: true, // Enabled by default - recommended for best performance
 	},
 	resourcePackBlobs: {},
 };

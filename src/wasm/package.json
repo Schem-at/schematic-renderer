@@ -1,13 +1,18 @@
 {
-  "name": "minecraft_schematic_utils",
+  "name": "mesh_builder_wasm",
+  "type": "module",
+  "collaborators": [
+    "Harrison"
+  ],
+  "description": "High-performance WASM mesh builder for voxel geometry merging",
   "version": "0.1.0",
   "files": [
-    "minecraft_schematic_utils_bg.wasm",
-    "minecraft_schematic_utils.js",
-    "minecraft_schematic_utils.d.ts"
+    "mesh_builder_wasm_bg.wasm",
+    "mesh_builder_wasm.js",
+    "mesh_builder_wasm.d.ts"
   ],
-  "module": "minecraft_schematic_utils.js",
-  "types": "minecraft_schematic_utils.d.ts",
+  "main": "mesh_builder_wasm.js",
+  "types": "mesh_builder_wasm.d.ts",
   "sideEffects": [
     "./snippets/*"
   ]

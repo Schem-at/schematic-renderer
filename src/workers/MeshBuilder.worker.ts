@@ -113,12 +113,14 @@ function buildChunk(request: ChunkBuildRequest) {
         }
     }
 
-    // Intermediate storage: Category -> Map<PaletteIndex, List of blocks>
+    // Intermediate storage: Category -> Map<PaletteIndex, List of block indices (into original array)>
+    // OPTIMIZATION: Store indices instead of creating new arrays to reduce GC pressure
     const setupTime = performance.now() - startSetup;
     const startSort = performance.now();
-    const categoryBatches = new Map<string, Map<number, number[][]>>();
+    const categoryBatches = new Map<string, Map<number, number[]>>();
 
     // 1. Segregate blocks by category and palette index
+    // For Int32Array, store the starting index of each block (i) instead of creating new arrays
     if (blocks instanceof Int32Array) {
         for (let i = 0; i < blocks.length; i += 4) {
             const paletteIndex = blocks[i + 3];
@@ -138,12 +140,14 @@ function buildChunk(request: ChunkBuildRequest) {
                     pList = [];
                     catMap.set(paletteIndex, pList);
                 }
-                // Temporarily construct array for compatibility
-                pList.push([blocks[i], blocks[i + 1], blocks[i + 2], paletteIndex]);
+                // Store index into blocks array instead of creating new array
+                pList.push(i);
             }
         }
     } else {
-        for (const block of blocks) {
+        // Legacy path for array-of-arrays format
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
             const paletteIndex = block[3];
             const paletteItem = paletteGeometries.get(paletteIndex);
 
@@ -161,7 +165,7 @@ function buildChunk(request: ChunkBuildRequest) {
                     pList = [];
                     catMap.set(paletteIndex, pList);
                 }
-                pList.push(block);
+                pList.push(i);
             }
         }
     }
@@ -172,6 +176,9 @@ function buildChunk(request: ChunkBuildRequest) {
     let mergeTime = 0;
 
     // 2. Process each category
+    // OPTIMIZATION: Use typed references instead of destructuring
+    const isInt32 = blocks instanceof Int32Array;
+
     for (const [category, paletteMap] of categoryBatches) {
         const mergeStart = performance.now();
         const sortedIndices = Array.from(paletteMap.keys()).sort((a, b) => a - b);
@@ -182,10 +189,23 @@ function buildChunk(request: ChunkBuildRequest) {
 
         // Expand blocks into flat arrays in sorted order
         for (const pIdx of sortedIndices) {
-            const pBlocks = paletteMap.get(pIdx)!;
+            const blockIndices = paletteMap.get(pIdx)!;
             const paletteItem = paletteGeometries.get(pIdx)!;
 
-            for (const [x, y, z] of pBlocks) {
+            for (const blockIdx of blockIndices) {
+                // Extract x, y, z from original blocks array using stored index
+                let x: number, y: number, z: number;
+                if (isInt32) {
+                    x = (blocks as Int32Array)[blockIdx];
+                    y = (blocks as Int32Array)[blockIdx + 1];
+                    z = (blocks as Int32Array)[blockIdx + 2];
+                } else {
+                    const block = (blocks as number[][])[blockIdx];
+                    x = block[0];
+                    y = block[1];
+                    z = block[2];
+                }
+
                 for (const geom of paletteItem.geometries) {
                     positions.push(x, y, z);
                     geometryData.push(geom);

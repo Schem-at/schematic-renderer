@@ -325,6 +325,8 @@ export class SchematicObject extends EventEmitter {
 	 * Set up manual property watchers instead of using reactive proxy
 	 * This avoids interference with Three.js internal matrix properties
 	 */
+	private propertyWatcherTimer: ReturnType<typeof setTimeout> | null = null;
+
 	private setupPropertyWatchers(): void {
 		// Store original values for comparison
 		let lastPosition = this.position.clone();
@@ -370,12 +372,12 @@ export class SchematicObject extends EventEmitter {
 				this.emitPropertyChanged("visible", this.visible);
 			}
 
-			// Continue checking periodically
-			setTimeout(checkForChanges, 100); // Check every 100ms
+			// Continue checking periodically - use longer interval (250ms) to reduce overhead
+			this.propertyWatcherTimer = setTimeout(checkForChanges, 250);
 		};
 
 		// Start the change detection loop
-		checkForChanges();
+		this.propertyWatcherTimer = setTimeout(checkForChanges, 250);
 	}
 
 	// Helper method to get cached dimensions (allocated space)
@@ -1239,9 +1241,7 @@ export class SchematicObject extends EventEmitter {
 							break;
 						}
 
-						performanceMonitor.startOperation("Get Chunk Data (WASM)");
 						const chunkData = iterator.next();
-						performanceMonitor.endOperation("Get Chunk Data (WASM)");
 						if (!chunkData) break;
 
 						const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
@@ -1275,7 +1275,6 @@ export class SchematicObject extends EventEmitter {
 						}
 
 						// Process chunk and IMMEDIATELY add to scene
-						performanceMonitor.startOperation("Build Chunk Mesh (Worker)");
 						const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 							{
 								blocks: blocks,
@@ -1286,12 +1285,10 @@ export class SchematicObject extends EventEmitter {
 							schematicObject,
 							renderingBounds
 						);
-						performanceMonitor.endOperation("Build Chunk Mesh (Worker)");
 
 						processedChunkCount++;
 
 						if (chunkMeshes && chunkMeshes.length > 0) {
-							performanceMonitor.startOperation("Scene Update");
 							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
 							chunkMap.set(chunkKey, chunkMeshes);
 
@@ -1302,7 +1299,6 @@ export class SchematicObject extends EventEmitter {
 
 							meshesAddedThisFrame += chunkMeshes.length;
 							totalMeshCount += chunkMeshes.length;
-							performanceMonitor.endOperation("Scene Update");
 
 							// chunkMeshes can be GC'd after this point
 						}
