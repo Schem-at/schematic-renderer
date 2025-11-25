@@ -8,6 +8,7 @@ import type {
 	PaletteMaterialGroup,
 	PaletteBlockData,
 	PaletteCache,
+	ChunkGeometryData,
 } from "./types";
 // @ts-ignore
 import { Cubane } from "cubane";
@@ -25,8 +26,8 @@ export const INVISIBLE_BLOCKS = new Set([
 	"minecraft:barrier",
 ]);
 
-// Keywords that indicate a block is NOT a full opaque cube and should not occlude neighbors
-// const NON_OCCLUDING_KEYWORDS = [...]; // Removed as we now analyze geometry
+// Constants matching worker
+const POSITION_SCALE = 1024;
 
 export class WorldMeshBuilder {
 	// @ts-ignore
@@ -35,11 +36,16 @@ export class WorldMeshBuilder {
 	private paletteCache: PaletteCache | null = null;
 	private instancedRenderer: InstancedBlockRenderer | null = null;
 	private useInstancedRendering: boolean = false;
-	private worker: Worker | null = null;
+
+	// Worker Pool
+	private workers: Worker[] = [];
+	private freeWorkers: Worker[] = [];
+	private workerQueue: ((worker: Worker) => void)[] = []; // Queue for waiting tasks
 	private pendingRequests = new Map<
 		string,
-		{ resolve: (value: any) => void; reject: (reason?: any) => void }
+		{ resolve: (value: any) => void; reject: (reason?: any) => void; worker: Worker }
 	>();
+	private maxWorkers: number = navigator.hardwareConcurrency || 4;
 
 	// Chunk size configuration for buffer sizing
 	private chunkSize: number = 16; // Default Minecraft chunk size
@@ -50,37 +56,90 @@ export class WorldMeshBuilder {
 	constructor(schematicRenderer: SchematicRenderer, cubane: Cubane) {
 		this.cubane = cubane;
 		this.schematicRenderer = schematicRenderer;
-		this.initializeWorker();
+		this.initializeWorkers();
 	}
 
-	private initializeWorker() {
-		if (this.worker) return;
-		this.worker = new MeshBuilderWorker();
-		this.worker!.onmessage = this.handleWorkerMessage.bind(this);
+	private initializeWorkers() {
+		if (this.workers.length > 0) return;
+
+		console.log(`[WorldMeshBuilder] Initializing worker pool with ${this.maxWorkers} workers`);
+
+		for (let i = 0; i < this.maxWorkers; i++) {
+			const worker = new MeshBuilderWorker();
+			worker.onmessage = (event: MessageEvent) => this.handleWorkerMessage(worker, event);
+			this.workers.push(worker);
+			this.freeWorkers.push(worker);
+		}
 	}
 
-	private handleWorkerMessage(event: MessageEvent) {
-		const { type, chunkId, error, ...data } = event.data;
+	// Static stats collector
+	static stats = {
+		totalSetup: 0,
+		totalSort: 0,
+		totalMerge: 0,
+		totalWorkerTime: 0,
+		chunkCount: 0
+	};
+
+	static resetStats() {
+		this.stats = {
+			totalSetup: 0,
+			totalSort: 0,
+			totalMerge: 0,
+			totalWorkerTime: 0,
+			chunkCount: 0
+		};
+	}
+
+	private handleWorkerMessage(worker: Worker, event: MessageEvent) {
+		const { type, chunkId, error, timings, ...data } = event.data;
 
 		if (type === "chunkBuilt") {
+			if (timings) {
+				WorldMeshBuilder.stats.totalSetup += timings.setup;
+				WorldMeshBuilder.stats.totalSort += timings.sort;
+				WorldMeshBuilder.stats.totalMerge += timings.merge;
+				WorldMeshBuilder.stats.totalWorkerTime += timings.total;
+				WorldMeshBuilder.stats.chunkCount++;
+
+				if (WorldMeshBuilder.stats.chunkCount % 50 === 0) {
+					const avg = (val: number) => (val / WorldMeshBuilder.stats.chunkCount).toFixed(2);
+					console.log(`[WorkerStats] Avg (n=${WorldMeshBuilder.stats.chunkCount}): Setup ${avg(WorldMeshBuilder.stats.totalSetup)}ms, Sort ${avg(WorldMeshBuilder.stats.totalSort)}ms, Merge ${avg(WorldMeshBuilder.stats.totalMerge)}ms, Total ${avg(WorldMeshBuilder.stats.totalWorkerTime)}ms`);
+				}
+			}
+
 			const request = this.pendingRequests.get(chunkId);
 			if (request) {
 				request.resolve(data);
 				this.pendingRequests.delete(chunkId);
+
+				// Return worker to pool
+				this.returnWorker(worker);
 			}
 		} else if (type === "error") {
-			// If chunkId is present, reject specific request, else log global error
 			if (chunkId) {
 				const request = this.pendingRequests.get(chunkId);
 				if (request) {
 					request.reject(new Error(error));
 					this.pendingRequests.delete(chunkId);
+					this.returnWorker(worker);
 				}
 			} else {
 				console.error("[WorldMeshBuilder] Worker error:", error);
 			}
 		} else if (type === "paletteUpdated") {
 			// Optional: handle palette update confirmation
+		}
+	}
+
+	private returnWorker(worker: Worker) {
+		if (!this.workers.includes(worker)) return; // Worker might have been terminated
+
+		if (this.workerQueue.length > 0) {
+			const resolve = this.workerQueue.shift()!;
+			resolve(worker);
+		} else {
+			this.freeWorkers.push(worker);
 		}
 	}
 
@@ -121,7 +180,6 @@ export class WorldMeshBuilder {
 			const data = await this.cubane.getBlockOptimizationData(blockString, "plains", true);
 
 			if (!data || !data.cullableFaces) {
-				// console.warn(`[Occlusion] No optimization data for ${blockString}`);
 				return 0;
 			}
 
@@ -188,11 +246,6 @@ export class WorldMeshBuilder {
 				}
 			}
 
-			// Debug log for common blocks
-			if (blockString.includes("stone") || blockString.includes("dirt") || blockString.includes("grass_block")) {
-				// console.log(`[Occlusion] ${blockString} flags: ${flags.toString(2).padStart(6, '0')}`);
-			}
-
 			return flags;
 		} catch (e) {
 			return 0;
@@ -201,10 +254,36 @@ export class WorldMeshBuilder {
 
 	public async precomputePaletteGeometries(palette: any[]): Promise<void> {
 		performanceMonitor.startOperation("precomputePaletteGeometries");
+		console.time("precomputePaletteGeometries");
+
+		// Check if palette is effectively the same
+		if (this.paletteCache?.isReady && this.paletteCache.palette.length === palette.length) {
+			// Quick heuristic check: if length is same and first/last items match, assume same palette
+			// (Since palette order is usually deterministic from WASM)
+			const firstMatch = palette.length === 0 || (
+				palette[0].name === this.paletteCache.palette[0].name &&
+				JSON.stringify(palette[0].properties) === JSON.stringify(this.paletteCache.palette[0].properties)
+			);
+			const lastIdx = palette.length - 1;
+			const lastMatch = palette.length === 0 || (
+				palette[lastIdx].name === this.paletteCache.palette[lastIdx].name &&
+				JSON.stringify(palette[lastIdx].properties) === JSON.stringify(this.paletteCache.palette[lastIdx].properties)
+			);
+
+			if (firstMatch && lastMatch) {
+				console.log(`[WorldMeshBuilder] Palette cache hit (${palette.length} entries). Skipping precomputation.`);
+				console.timeEnd("precomputePaletteGeometries");
+				performanceMonitor.endOperation("precomputePaletteGeometries");
+				return;
+			}
+		}
+
+		// Reset stats on start
+		WorldMeshBuilder.resetStats();
 		console.log(`[WorldMeshBuilder] Precomputing geometry for ${palette.length} palette entries...`);
 
-		// Ensure worker is initialized
-		this.initializeWorker();
+		// Ensure workers are initialized
+		this.initializeWorkers();
 
 		const paletteBlockData: PaletteBlockData[] = new Array(palette.length);
 		const globalMaterialMap = new Map<string, THREE.Material>();
@@ -223,7 +302,6 @@ export class WorldMeshBuilder {
 
 			try {
 				// Get geometry from Cubane (Main Thread)
-				// console.log(`[WorldMeshBuilder] Processing block ${index}/${palette.length}: ${blockString}`);
 				const cubaneObj = await this.cubane.getBlockMesh(
 					blockString,
 					biome,
@@ -279,16 +357,17 @@ export class WorldMeshBuilder {
 
 				// Add to worker payload
 				if (geometryData.length > 0) {
+					const occlusionFlags = await this.computeOcclusionFlags(blockString);
 					paletteGeometryData.push({
 						index,
 						category: this.getBlockCategory(blockState.name),
-						occlusionFlags: await this.computeOcclusionFlags(blockString),
+						occlusionFlags: occlusionFlags,
+						isCubic: occlusionFlags === 63, // Optimization: All 6 faces are occluding = full cube
 						geometries: geometryData,
 					});
 				}
 			} catch (error) {
 				console.warn(`Error processing palette index ${index}:`, error);
-				// Fallback logic omitted for brevity, but should be similar
 			}
 		};
 
@@ -320,30 +399,45 @@ export class WorldMeshBuilder {
 			isReady: true,
 		};
 
-		// Send geometry data to worker
-		this.worker!.postMessage({
-			type: "updatePalette",
-			paletteData: paletteGeometryData,
+		// Broadcast geometry data to ALL workers
+		console.log(`[WorldMeshBuilder] Broadcasting palette to ${this.workers.length} workers...`);
+		this.workers.forEach(worker => {
+			worker.postMessage({
+				type: "updatePalette",
+				paletteData: paletteGeometryData,
+			});
 		});
 
 		console.log("[WorldMeshBuilder] Palette precomputation complete.");
+		console.timeEnd("precomputePaletteGeometries");
 		performanceMonitor.endOperation("precomputePaletteGeometries");
 	}
 
-	public async getChunkMesh(
+	// Helper to acquire a worker
+	private async getFreeWorker(): Promise<Worker> {
+		if (this.freeWorkers.length > 0) {
+			return this.freeWorkers.pop()!;
+		}
+
+		// Wait for a worker to become free
+		return new Promise<Worker>(resolve => {
+			this.workerQueue.push(resolve);
+		});
+	}
+
+	public async getChunkGeometries(
 		chunkData: {
-			blocks: Array<number[]>;
+			blocks: Array<number[]> | Int32Array;
 			chunk_x: number;
 			chunk_y: number;
 			chunk_z: number;
 		},
-		schematicObject: SchematicObject,
 		renderingBounds?: {
 			min: THREE.Vector3;
 			max: THREE.Vector3;
 			enabled?: boolean;
 		}
-	): Promise<THREE.Object3D[]> {
+	): Promise<{ geometries: ChunkGeometryData[], origin: number[] }> {
 		const chunkId = `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`;
 
 		if (!this.paletteCache?.isReady) {
@@ -352,80 +446,78 @@ export class WorldMeshBuilder {
 			);
 		}
 
-		if (chunkData.blocks.length === 0) return [];
+		if (chunkData.blocks.length === 0) return { geometries: [], origin: [0, 0, 0] };
 
-		// Filter blocks based on bounds (can also be done in worker, but cheap enough here)
-		// Actually, doing it in worker saves transfer time if bounds are tight.
-		// For now, let's stick to original logic or pass bounds to worker.
-		// Original logic filtered before creating meshes.
+		// Filter blocks based on bounds
 		let blocksToProcess = chunkData.blocks;
-		if (renderingBounds?.enabled) {
-			blocksToProcess = chunkData.blocks.filter((block) => {
-				const [x, y, z] = block;
-				return (
-					x >= renderingBounds.min.x &&
-					x < renderingBounds.max.x &&
-					y >= renderingBounds.min.y &&
-					y < renderingBounds.max.y &&
-					z >= renderingBounds.min.z &&
-					z < renderingBounds.max.z
-				);
-			});
-		}
+		const skipBoundsCheck = !renderingBounds?.enabled;
 
-		if (blocksToProcess.length === 0) return [];
-
-		// Identify tile entities separately (logic from original)
-		// We'll process tile entities on main thread as they are special/custom
-		// and regular blocks via worker.
-		const tileEntityBlocks: any[] = [];
-		const workerBlocks: number[][] = [];
-
-		// Get all block entities
-		const blockEntities =
-			schematicObject.schematicWrapper.get_all_block_entities() || [];
-		const blockEntityMap = new Map<string, any>();
-		for (const entity of blockEntities) {
-			if (
-				entity &&
-				entity.position &&
-				Array.isArray(entity.position) &&
-				entity.position.length === 3
-			) {
-				const [x, y, z] = entity.position;
-				blockEntityMap.set(`${x},${y},${z}`, entity);
-			}
-		}
-
-		for (const block of blocksToProcess) {
-			const [x, y, z, paletteIndex] = block;
-			const blockData = this.paletteCache.blockData[paletteIndex];
-			if (blockData && !INVISIBLE_BLOCKS.has(blockData.blockName)) {
-				const entity = blockEntityMap.get(`${x},${y},${z}`);
-				if (entity && blockData.blockName.includes("sign")) {
-					tileEntityBlocks.push({ x, y, z, paletteIndex, nbtData: entity });
-				} else {
-					workerBlocks.push(block);
+		if (!skipBoundsCheck) {
+			if (chunkData.blocks instanceof Int32Array) {
+				const filtered: number[] = [];
+				const blocks = chunkData.blocks;
+				for (let i = 0; i < blocks.length; i += 4) {
+					const x = blocks[i];
+					const y = blocks[i + 1];
+					const z = blocks[i + 2];
+					if (
+						x >= renderingBounds!.min.x &&
+						x < renderingBounds!.max.x &&
+						y >= renderingBounds!.min.y &&
+						y < renderingBounds!.max.y &&
+						z >= renderingBounds!.min.z &&
+						z < renderingBounds!.max.z
+					) {
+						filtered.push(x, y, z, blocks[i + 3]);
+					}
 				}
+				blocksToProcess = new Int32Array(filtered);
+			} else {
+				blocksToProcess = chunkData.blocks.filter((block) => {
+					const [x, y, z] = block;
+					return (
+						x >= renderingBounds!.min.x &&
+						x < renderingBounds!.max.x &&
+						y >= renderingBounds!.min.y &&
+						y < renderingBounds!.max.y &&
+						z >= renderingBounds!.min.z &&
+						z < renderingBounds!.max.z
+					);
+				});
 			}
 		}
 
-		// Send regular blocks to worker
-		const workerPromise = new Promise<any>((resolve, reject) => {
+		if (blocksToProcess.length === 0) return { geometries: [], origin: [0, 0, 0] };
+
+		// Worker processing
+		const workerBlocks = blocksToProcess;
+		const originX = chunkData.chunk_x * this.chunkSize;
+		const originY = chunkData.chunk_y * this.chunkSize;
+		const originZ = chunkData.chunk_z * this.chunkSize;
+
+		const workerPromise = new Promise<any>(async (resolve, reject) => {
 			if (workerBlocks.length === 0) {
 				resolve({ meshes: [] });
 				return;
 			}
 
-			// Double check worker exists
-			if (!this.worker) {
-				this.initializeWorker();
+			// Ensure workers exist
+			if (this.workers.length === 0) {
+				this.initializeWorkers();
 			}
+
+			// Get a free worker
+			const worker = await this.getFreeWorker();
 
 			// Add timeout to prevent hanging
 			const timeoutId = setTimeout(() => {
 				if (this.pendingRequests.has(chunkId)) {
+					const req = this.pendingRequests.get(chunkId);
 					this.pendingRequests.delete(chunkId);
+					// Release worker even on timeout
+					if (req) {
+						this.returnWorker(req.worker);
+					}
 					reject(new Error(`Chunk build timeout for ${chunkId}`));
 				}
 			}, 30000); // 30 seconds timeout
@@ -438,14 +530,265 @@ export class WorldMeshBuilder {
 				reject: (err) => {
 					clearTimeout(timeoutId);
 					reject(err);
-				}
+				},
+				worker: worker
 			});
 
-			this.worker!.postMessage({
+			const transferList: Transferable[] = [];
+			if (workerBlocks instanceof Int32Array) {
+				transferList.push(workerBlocks.buffer);
+			}
+
+			worker.postMessage({
 				type: "buildChunk",
 				chunkId,
 				blocks: workerBlocks,
+				chunkOrigin: [originX, originY, originZ]
+			}, transferList);
+		});
+
+		try {
+			const workerResult = await workerPromise;
+			return {
+				geometries: workerResult.meshes as ChunkGeometryData[],
+				origin: workerResult.origin || [originX, originY, originZ]
+			};
+		} catch (error) {
+			console.error("Error building chunk geometry:", error);
+			return { geometries: [], origin: [0, 0, 0] };
+		}
+	}
+
+	public async getChunkMesh(
+		chunkData: {
+			blocks: Array<number[]> | Int32Array;
+			chunk_x: number;
+			chunk_y: number;
+			chunk_z: number;
+		},
+		schematicObject: SchematicObject,
+		renderingBounds?: {
+			min: THREE.Vector3;
+			max: THREE.Vector3;
+			enabled?: boolean;
+		},
+		preFilteredEntities?: any[] // Optimization: entities already filtered by WASM
+	): Promise<THREE.Object3D[]> {
+		const chunkId = `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`;
+
+		if (!this.paletteCache?.isReady) {
+			throw new Error(
+				"Palette cache not ready. Call precomputePaletteGeometries() first."
+			);
+		}
+
+		if (chunkData.blocks.length === 0) return [];
+
+		// Filter blocks based on bounds
+		let blocksToProcess = chunkData.blocks;
+		// Optimization: Skip main-thread filtering if bounds are disabled or cover full chunk
+		const skipBoundsCheck = !renderingBounds?.enabled;
+
+		if (!skipBoundsCheck) {
+			if (chunkData.blocks instanceof Int32Array) {
+				const filtered: number[] = [];
+				const blocks = chunkData.blocks;
+				for (let i = 0; i < blocks.length; i += 4) {
+					const x = blocks[i];
+					const y = blocks[i + 1];
+					const z = blocks[i + 2];
+					if (
+						x >= renderingBounds!.min.x &&
+						x < renderingBounds!.max.x &&
+						y >= renderingBounds!.min.y &&
+						y < renderingBounds!.max.y &&
+						z >= renderingBounds!.min.z &&
+						z < renderingBounds!.max.z
+					) {
+						filtered.push(x, y, z, blocks[i + 3]);
+					}
+				}
+				blocksToProcess = new Int32Array(filtered);
+			} else {
+				blocksToProcess = chunkData.blocks.filter((block) => {
+					const [x, y, z] = block;
+					return (
+						x >= renderingBounds!.min.x &&
+						x < renderingBounds!.max.x &&
+						y >= renderingBounds!.min.y &&
+						y < renderingBounds!.max.y &&
+						z >= renderingBounds!.min.z &&
+						z < renderingBounds!.max.z
+					);
+				});
+			}
+		}
+
+		if (blocksToProcess.length === 0) return [];
+
+		// Identify tile entities separately - Optimized
+		const tileEntityBlocks: any[] = [];
+		// Optimization: Pass all blocks to worker directly. Worker filters invisible blocks.
+		const workerBlocks = blocksToProcess;
+
+		// Use cached map from SchematicObject instead of fetching all entities every chunk
+		// If preFilteredEntities is provided (WASM optimized path), use that directly
+
+		if (preFilteredEntities) {
+			for (const entity of preFilteredEntities) {
+				// With WASM getChunkData, we get entity ID but not the full block state string.
+				// However, the block at this position determines the visual appearance.
+				// We need to query the block state to handle rotation/variants properly.
+
+				// Note: entity.position from getChunkData is [x, y, z]
+				const pos = entity.position; // [x, y, z]
+
+				// Bounds checking is already done by WASM, but double check against renderingBounds if needed
+				// (WASM getChunkData cuts by chunk, but renderingBounds might be tighter)
+				if (renderingBounds?.enabled) {
+					if (
+						pos[0] < renderingBounds.min.x ||
+						pos[0] >= renderingBounds.max.x ||
+						pos[1] < renderingBounds.min.y ||
+						pos[1] >= renderingBounds.max.y ||
+						pos[2] < renderingBounds.min.z ||
+						pos[2] >= renderingBounds.max.z
+					) {
+						continue;
+					}
+				}
+
+				const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
+
+				if (blockName && (blockName.includes("sign") || blockName.includes("chest") || blockName.includes("banner"))) {
+					tileEntityBlocks.push({
+						x: pos[0],
+						y: pos[1],
+						z: pos[2],
+						paletteIndex: -1,
+						blockName: blockName,
+						nbtData: entity // The entity structure from WASM is compatible enough or we use it as is
+					});
+				}
+			}
+		} else {
+			// Fallback: JS-side filtering using cached map
+			const blockEntityMap = schematicObject.getBlockEntitiesMap();
+
+			// Only scan for entities if map is not empty
+			if (blockEntityMap.size > 0) {
+				// Iterate ENTITIES instead of blocks (sparse iteration)
+				// Find entities that fall within this chunk's bounds
+				const chunkMinX = chunkData.chunk_x * this.chunkSize;
+				const chunkMinY = chunkData.chunk_y * this.chunkSize;
+				const chunkMinZ = chunkData.chunk_z * this.chunkSize;
+				const chunkMaxX = chunkMinX + this.chunkSize;
+				const chunkMaxY = chunkMinY + this.chunkSize;
+				const chunkMaxZ = chunkMinZ + this.chunkSize;
+
+				// NOTE: Iterating the whole map might still be slow if map is huge.
+				// But usually tile entities are rare.
+				// Optimally we'd have a spatial index for entities, but iteration is O(E) vs O(Blocks)
+				for (const [, entity] of blockEntityMap) {
+					const pos = entity.position; // [x,y,z]
+					if (pos[0] >= chunkMinX && pos[0] < chunkMaxX &&
+						pos[1] >= chunkMinY && pos[1] < chunkMaxY &&
+						pos[2] >= chunkMinZ && pos[2] < chunkMaxZ) {
+
+						// It's in this chunk. We need the palette index to know block type.
+						// We have to look it up or assume we can just re-get it from schematic.
+						// But wait, we only need paletteIndex to check if it's a "sign" etc.
+						// Let's just query schematic wrapper for this single block type if needed.
+						// Actually, 'workerBlocks' has the data.
+						// Let's iterate workerBlocks ONLY if we found entities? No, that defeats the purpose.
+
+						// Let's do a quick lookup in the workerBlocks? No, that's O(N).
+						// Actually, we can just use schematic.get_block(x,y,z) since it's cached/fast?
+						// Or just use the entity data. Entity data usually doesn't have block type.
+
+						// Compromise: Since we stripped the main loop, we can't easily pair blocks with entities.
+						// BUT we only need to pair them to call `cubane.getBlockMesh`.
+						// `cubane.getBlockMesh` needs the block string (e.g. "minecraft:chest[facing=north]").
+
+						// We can look up the block state from the schematic wrapper for this specific position.
+						const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
+						// const paletteIndex = -1; // We don't strictly need index if we have name
+
+						// Check if valid tile entity type
+						if (blockName && (blockName.includes("sign") || blockName.includes("chest") || blockName.includes("banner"))) {
+							// Emulate the struct expected by tile processing
+							tileEntityBlocks.push({
+								x: pos[0],
+								y: pos[1],
+								z: pos[2],
+								paletteIndex: -1, // Special flag
+								blockName: blockName, // Pass name directly
+								nbtData: entity
+							});
+						}
+					}
+				}
+			}
+		}
+
+		// Send regular blocks to worker
+		const workerPromise = new Promise<any>(async (resolve, reject) => {
+			if (workerBlocks.length === 0) {
+				resolve({ meshes: [] });
+				return;
+			}
+
+			// Ensure workers exist
+			if (this.workers.length === 0) {
+				this.initializeWorkers();
+			}
+
+			// Get a free worker
+			const worker = await this.getFreeWorker();
+
+			// Determine chunk origin for relative quantization
+			// We use the first block's coordinates or chunk alignment
+			// Ideally aligned to chunk grid:
+			const originX = chunkData.chunk_x * this.chunkSize;
+			const originY = chunkData.chunk_y * this.chunkSize;
+			const originZ = chunkData.chunk_z * this.chunkSize;
+
+			// Add timeout to prevent hanging
+			const timeoutId = setTimeout(() => {
+				if (this.pendingRequests.has(chunkId)) {
+					const req = this.pendingRequests.get(chunkId);
+					this.pendingRequests.delete(chunkId);
+					// Release worker even on timeout
+					if (req) {
+						this.returnWorker(req.worker);
+					}
+					reject(new Error(`Chunk build timeout for ${chunkId}`));
+				}
+			}, 30000); // 30 seconds timeout
+
+			this.pendingRequests.set(chunkId, {
+				resolve: (data) => {
+					clearTimeout(timeoutId);
+					resolve(data);
+				},
+				reject: (err) => {
+					clearTimeout(timeoutId);
+					reject(err);
+				},
+				worker: worker
 			});
+
+			const transferList: Transferable[] = [];
+			if (workerBlocks instanceof Int32Array) {
+				transferList.push(workerBlocks.buffer);
+			}
+
+			worker.postMessage({
+				type: "buildChunk",
+				chunkId,
+				blocks: workerBlocks,
+				chunkOrigin: [originX, originY, originZ]
+			}, transferList);
 		});
 
 		const resultMeshes: THREE.Object3D[] = [];
@@ -458,22 +801,32 @@ export class WorldMeshBuilder {
 			if (workerResult.meshes) {
 				for (const meshData of workerResult.meshes) {
 					const geometry = new THREE.BufferGeometry();
-					geometry.setAttribute(
-						"position",
-						new THREE.BufferAttribute(meshData.positions, 3)
-					);
-					if (meshData.normals)
-						geometry.setAttribute(
-							"normal",
-							new THREE.BufferAttribute(meshData.normals, 3)
-						);
-					if (meshData.uvs)
-						geometry.setAttribute(
-							"uv",
-							new THREE.BufferAttribute(meshData.uvs, 2)
-						);
-					if (meshData.indices)
+
+					// Handle quantized positions
+					// Worker sends Int16Array, we load it as BufferAttribute
+					if (meshData.positions) {
+						// BufferAttribute(array, itemSize, normalized)
+						// Int16Array with normalized=false sends raw integer values to shader, which are cast to float
+						const posAttr = new THREE.BufferAttribute(meshData.positions, 3, false);
+						geometry.setAttribute("position", posAttr);
+					}
+
+					if (meshData.normals) {
+						// Int8Array, normalized=true maps [-128, 127] to [-1.0, 1.0]
+						const normAttr = new THREE.Int8BufferAttribute(meshData.normals, 3);
+						normAttr.normalized = true;
+						geometry.setAttribute("normal", normAttr);
+					}
+
+					if (meshData.uvs) {
+						// Float32Array for UVs to support tiling > 1.0
+						const uvAttr = new THREE.BufferAttribute(meshData.uvs, 2);
+						geometry.setAttribute("uv", uvAttr);
+					}
+
+					if (meshData.indices) {
 						geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+					}
 
 					// Groups
 					if (meshData.groups) {
@@ -491,6 +844,22 @@ export class WorldMeshBuilder {
 						this.paletteCache.globalMaterials
 					);
 					mesh.name = `${meshData.category}_chunk`;
+
+					// Apply de-quantization scale for position
+					// 1.0 / POSITION_SCALE
+					const scale = 1.0 / POSITION_SCALE;
+					mesh.scale.setScalar(scale);
+
+					// Apply chunk origin offset
+					// The worker produces geometry relative to this origin
+					if (workerResult.origin) {
+						mesh.position.set(
+							workerResult.origin[0],
+							workerResult.origin[1],
+							workerResult.origin[2]
+						);
+					}
+
 					this.configureMeshForCategory(
 						mesh,
 						meshData.category as keyof ChunkMeshes
@@ -501,15 +870,29 @@ export class WorldMeshBuilder {
 
 			// Process tile entities (Main Thread)
 			if (tileEntityBlocks.length > 0) {
-				const palette = this.paletteCache.palette;
+				// const palette = this.paletteCache.palette; // Not needed if we use blockName
 				for (const tileBlock of tileEntityBlocks) {
-					const { x, y, z, paletteIndex, nbtData } = tileBlock;
-					const blockState = palette[paletteIndex];
-					// ... (Rest of tile entity logic same as original)
-					if (blockState) {
+					const { x, y, z, paletteIndex, blockName, nbtData } = tileBlock;
+
+					// If we have direct blockName, use it. Otherwise look up via paletteIndex (legacy path)
+					let blockString = "";
+					if (blockName) {
+						blockString = blockName;
+						// Note: We might need properties. get_block returns just name?
+						// get_block returns full state string "minecraft:chest[facing=north]" usually? 
+						// Actually nucleation get_block returns just name or state?
+						// Let's assume we might need to fetch full state if get_block returns only "minecraft:chest"
+
+						// Optimization: If needed, we can assume 'blockName' from the loop above is sufficient
+						// or fetch properties if missing.
+					} else if (paletteIndex >= 0) {
+						const blockState = this.paletteCache.palette[paletteIndex];
+						blockString = this.createBlockStringFromPaletteEntry(blockState);
+					}
+
+					if (blockString) {
 						try {
-							const blockString =
-								this.createBlockStringFromPaletteEntry(blockState);
+							// const blockString = this.createBlockStringFromPaletteEntry(blockState);
 							const customMesh = await this.cubane.getBlockMesh(
 								blockString,
 								"plains",
@@ -523,7 +906,7 @@ export class WorldMeshBuilder {
 									y + currentOffset.y,
 									z + currentOffset.z
 								);
-								customMesh.name = `tile_entity_${blockState.name}_${x}_${y}_${z}`;
+								customMesh.name = `tile_entity_${blockString}_${x}_${y}_${z}`;
 								resultMeshes.push(customMesh);
 							}
 						} catch (e) {
@@ -759,11 +1142,14 @@ export class WorldMeshBuilder {
 	}
 
 	public dispose(): void {
-		// Reject any pending requests before destroying worker
+		// Reject any pending requests before destroying workers
 		this.pendingRequests.forEach((request, chunkId) => {
 			request.reject(new Error(`Worker terminated before processing chunk ${chunkId}`));
 		});
 		this.pendingRequests.clear();
+
+		// Clear worker queue
+		this.workerQueue = [];
 
 		if (this.paletteCache) {
 			this.paletteCache.blockData.forEach((blockData) => {
@@ -775,10 +1161,12 @@ export class WorldMeshBuilder {
 			});
 			this.paletteCache = null;
 		}
-		if (this.worker) {
-			this.worker.terminate();
-			this.worker = null;
-		}
-		console.log("[OptWMB] Disposed palette cache and worker.");
+
+		// Terminate all workers
+		this.workers.forEach(w => w.terminate());
+		this.workers = [];
+		this.freeWorkers = [];
+
+		console.log("[OptWMB] Disposed palette cache and workers.");
 	}
 }

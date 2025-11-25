@@ -127,6 +127,7 @@ export interface MeshBuildingSession {
     averageChunkProcessingTime: number;
     slowestOperations: TimingData[];
     memoryHotspots: string[];
+    breakdown?: { operationId: string; duration: number; memoryDelta: number }[]; // Add breakdown field
 
     // Three.js renderer stats
     rendererStats?: {
@@ -339,6 +340,11 @@ export class PerformanceMonitor {
         operation.endTime = performance.now();
         operation.duration = operation.endTime - operation.startTime;
 
+        // Debug log for major operations
+        // if (name.includes("schematic-build") || name.includes("Process")) {
+        //    console.log(`[PerfMonitor] Finished ${name}: ${operation.duration.toFixed(2)}ms`);
+        // }
+
         // Remove from stack
         this.timingStack.splice(operationIndex, 1);
 
@@ -472,6 +478,21 @@ export class PerformanceMonitor {
             const finalMemory = session.memorySnapshots[session.memorySnapshots.length - 1].usedJSHeapSize;
             session.memoryLeaks = finalMemory - initialMemory;
         }
+
+        // Generate breakdown from timing data
+        session.breakdown = session.timingData
+            .filter(op => op.duration !== undefined) // Include all completed operations
+            .sort((a, b) => (b.duration || 0) - (a.duration || 0)) // Sort by duration
+            .map(op => {
+                // Find memory delta if possible (this is rough as we don't snapshot for every op)
+                // But we can check if there are snapshots with matching customData labels?
+                // For now, just 0 or estimate
+                return {
+                    operationId: op.name,
+                    duration: op.duration || 0,
+                    memoryDelta: 0 // Placeholder, would need precise snapshots to calculate
+                };
+            });
     }
 
     private identifyMemoryHotspots(session: MeshBuildingSession): string[] {

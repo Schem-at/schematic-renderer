@@ -1,4 +1,4 @@
-import {Mesh, BufferGeometry, Material, Vector3} from "three"
+import { Mesh, BufferGeometry, Material, Vector3 } from "three"
 
 export interface BlockStateModelHolder {
 	model: string;
@@ -11,8 +11,8 @@ export interface BlockStateModelHolder {
 type BlockStateDefinitionModel =
 	| BlockStateModelHolder
 	| (BlockStateModelHolder & {
-			weight?: number;
-	  })[];
+		weight?: number;
+	})[];
 
 export interface MeshData {
 	positions: Float32Array;
@@ -160,13 +160,13 @@ export interface ChunkMeshes {
 }
 
 export interface ProcessedBlockGeometry {
-	geometry: BufferGeometry; 
+	geometry: BufferGeometry;
 	material: Material;
 }
 
 export interface PaletteBlockGeometry {
 	geometries: ProcessedBlockGeometry[];
-	blockName: string; 
+	blockName: string;
 }
 
 export interface PaletteGeometryCache {
@@ -175,21 +175,30 @@ export interface PaletteGeometryCache {
 }
 
 export interface PaletteMaterialGroup {
-    material: Material;
-    baseGeometry: BufferGeometry;
-    positions: Vector3[]; // Populated during chunk meshing
-    materialIndex: number; // Pre-assigned material index for final mesh
+	material: Material;
+	baseGeometry: BufferGeometry;
+	positions: Vector3[]; // Populated during chunk meshing
+	materialIndex: number; // Pre-assigned material index for final mesh
 }
 
 export interface PaletteBlockData {
-    blockName: string;
-    materialGroups: PaletteMaterialGroup[]; // All material groups for this block type
-    category: keyof ChunkMeshes; // Pre-computed category
+	blockName: string;
+	materialGroups: PaletteMaterialGroup[]; // All material groups for this block type
+	category: keyof ChunkMeshes; // Pre-computed category
 }
 
 export interface PaletteCache {
-    palette: any[]; // Original palette data
-    blockData: PaletteBlockData[]; // Direct array access by palette index
-    globalMaterials: Material[]; // All unique materials across palette
-    isReady: boolean;
+	palette: any[]; // Original palette data
+	blockData: PaletteBlockData[]; // Direct array access by palette index
+	globalMaterials: Material[]; // All unique materials across palette
+	isReady: boolean;
+}
+
+export interface ChunkGeometryData {
+	category: string;
+	positions: Int16Array | Float32Array;
+	normals: Int8Array | Float32Array;
+	uvs: Float32Array;
+	indices: Uint16Array | Uint32Array;
+	groups: { start: number; count: number; materialIndex: number }[];
 }

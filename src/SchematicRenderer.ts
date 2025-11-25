@@ -27,10 +27,6 @@ import {
 	ResourcePackManager,
 	DefaultPackCallback,
 } from "./managers/ResourcePackManager";
-// @ts-ignore
-import init from "./wasm/minecraft_schematic_utils";
-// @ts-ignore
-import schematicUtilsWasm from "./wasm/minecraft_schematic_utils_bg.wasm";
 
 import { GizmoManager } from "./managers/GizmoManager";
 import {
@@ -75,8 +71,6 @@ export class SchematicRenderer {
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
 	private resourcePackManager: ResourcePackManager;
-	// @ts-ignore
-	private wasmModule: any;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -201,7 +195,7 @@ export class SchematicRenderer {
 
 			// Step 1: Initialize WebAssembly module
 			showProgress("Loading WebAssembly module...", 0.15);
-			await this.initWasm();
+			// Wasm is already initialized at module level
 
 			// Step 2: Initialize resource packs
 			showProgress("Initializing resource packs...", 0.3);
@@ -393,14 +387,6 @@ export class SchematicRenderer {
 				this,
 				dragAndDropOptions
 			);
-		}
-	}
-
-	private async initWasm(): Promise<void> {
-		try {
-			this.wasmModule = await init(schematicUtilsWasm);
-		} catch (error) {
-			console.error("Failed to initialize WASM module:", error);
 		}
 	}
 

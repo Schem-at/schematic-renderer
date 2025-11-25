@@ -74,6 +74,8 @@ const renderer = new SchematicRenderer(
 		},
 		// enableAutoOrbit: true,
 		gamma: 0.45,
+		enableAdaptiveFPS: false,
+
 		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,
@@ -99,7 +101,7 @@ const renderer = new SchematicRenderer(
 				console.log("Schematic dropped successfully:", file);
 			},
 			onRendererInitialized: async (renderer: SchematicRenderer) => {
-				// renderer.uiManager?.hideEmptyState();
+				renderer.uiManager?.hideEmptyState();
 				// createDirtHouseSchematic(renderer, "dirtHouse");
 				// // renderer.schematicManager?.createEmptySchematic(
 				// // 	"testSchematic");
@@ -109,6 +111,60 @@ const renderer = new SchematicRenderer(
 				// // );
 				// // createFlowingWaterSchematic(renderer, "flowingWater");
 				// renderer.cameraManager.focusOnSchematics();
+
+				// Test case for bounds bug: blocks at +z direction should render correctly
+				// This tests the fix for the off-by-one error in get_chunk_blocks_indices
+				// renderer.schematicManager?.createEmptySchematic("testSchematic");
+
+				// const testLimit = 2; // Change this to test different values (2, 3, 4, 5, etc.)
+				// console.log(`🧪 Testing bounds fix with i < ${testLimit}`);
+
+				// for (let i = 0; i < testLimit; i++) {
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[i, 0, 0],
+				// 		"minecraft:red_concrete"
+				// 	);
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[-i, 0, 0],
+				// 		"minecraft:pink_concrete"
+				// 	);
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[0, i, 0],
+				// 		"minecraft:green_concrete"
+				// 	);
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[0, -i, 0],
+				// 		"minecraft:lime_concrete"
+				// 	);
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[0, 0, i],
+				// 		"minecraft:blue_concrete"
+				// 	);
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.setBlockNoRebuild(
+				// 		[0, 0, -i],
+				// 		"minecraft:cyan_concrete"
+				// 	);
+				// }
+
+				// 	// Verify blocks were set correctly
+				// 	const schematic = renderer.schematicManager?.getSchematic("testSchematic");
+				// if(schematic) {
+				// 	const blockCount = schematic.schematicWrapper.get_block_count();
+				// 	console.log(`✅ Set ${testLimit * 6} blocks (expected ${testLimit * 6}, got ${blockCount})`);
+
+				// 	// Check specific blocks exist
+				// 	for (let i = 0; i < testLimit; i++) {
+				// 		const blueBlock = schematic.schematicWrapper.get_block_with_properties(0, 0, i);
+				// 		if (blueBlock) {
+				// 			console.log(`✅ Blue block at [0, 0, ${i}] exists: ${blueBlock.name()}`);
+				// 		} else {
+				// 			console.error(`❌ Blue block at [0, 0, ${i}] MISSING!`);
+				// 		}
+				// 	}
+				// }
+
+				// 	renderer.schematicManager?.getSchematic("testSchematic")?.rebuildMesh();
+
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);

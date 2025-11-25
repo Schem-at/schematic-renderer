@@ -17,25 +17,25 @@ const CIRCUITS = {
   not_gate: {
     name: "NOT Gate (Buffer)",
     template: `# Base layer
-c·
-cc
-c·
+c
+c
+c
 
 # Logic layer
-│·
-▲─
-│·
+│
+▲
+│
 `,
     signs: [
-      { pos: [0, 2, 2], id: "io.back", type: "input", dataType: "nibble" },
-      { pos: [1, 2, 1], id: "io.side", type: "input", dataType: "nibble" },
-      { pos: [0, 2, 0], id: "io.out", type: "output", dataType: "nibble" },
+      { pos: [0, 2, 2], id: "io.in", type: "input", dataType: "bool" },
+      { pos: [0, 2, 0], id: "io.out", type: "output", dataType: "bool" },
     ],
-    description: "Signal strength inputs/outputs (0-15 using Packed4 encoding)"
+    description: "1x boolean input (in), 1x boolean output (out)"
   },
   xor: {
     name: "XOR Gate",
     template: `# Base layer
+cccc
 cccc
 cccc
 cccc
@@ -44,10 +44,11 @@ cccc
 ·│█·
 ┌▲▲┐
 ├┴┴┤
+│··│
 `,
     signs: [
-      { pos: [0, 2, 2], id: "io.a", type: "input", dataType: "bool" },
-      { pos: [3, 2, 2], id: "io.b", type: "input", dataType: "bool" },
+      { pos: [1, 2, 3], id: "io.a", type: "input", dataType: "bool" },
+      { pos: [2, 2, 3], id: "io.b", type: "input", dataType: "bool" },
       { pos: [1, 2, 0], id: "io.out", type: "output", dataType: "bool" },
     ],
     description: "2x boolean inputs (a, b), 1x boolean output (out)"
@@ -183,35 +184,11 @@ let selectedRegion: string | null = null;
 let inputValues: Record<string, number> = {}; // Store current input values
 
 // IO Region management
-/**
- * Nucleation Data Type System:
- * 
- * Valid dataType values:
- * - "bool"            : 1-bit boolean (requires 1 wire position, OneToOne layout)
- * - "nibble"          : 4-bit signal strength value (0-15 on 1 wire, Packed4 layout) ⭐ NEW!
- * - "signal"          : Alias for "nibble"
- * - "signal_strength" : Alias for "nibble"
- * - "unsigned"        : Unsigned int (bit width = position count, OneToOne layout)
- * - "signed"          : Signed int (bit width = position count, OneToOne layout)
- * - "unsigned:N"      : N-bit unsigned int (explicit bit width)
- * - "signed:N"        : N-bit signed int (explicit bit width)
- * - "float32"         : 32-bit float (requires 32 positions)
- * 
- * Layout Encoding (auto-selected based on bit width vs position count):
- * - OneToOne: Each bit = 1 wire (wire is 0=false or 15=true)
- *   Example: "unsigned" with 4 wires = 4-bit value (4 bits, 4 wires)
- *   Example: "bool" with 1 wire = boolean (ON=15, OFF=0)
- * 
- * - Packed4: 4 bits per wire using signal strength 0-15
- *   Example: "nibble" with 1 wire = signal strength 0-15 ⭐ RECOMMENDED!
- *   Example: "unsigned:4" with 1 wire = 4-bit value (4 bits in 1 wire)
- *   Example: "unsigned:8" with 2 wires = 8-bit value (2 nibbles)
- */
 interface IoRegionDef {
   id: string;
   pos: [number, number, number];
   type: "input" | "output";
-  dataType: "bool" | "nibble" | "signal" | "signal_strength" | "unsigned" | "signed" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
+  dataType: "bool" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
 }
 
 let ioRegions: IoRegionDef[] = [];
@@ -225,7 +202,7 @@ const renderer = new SchematicRenderer(canvas, {}, {
   },
 }, {
   logFPS: false,
-  enableAdaptiveFPS: true,
+  enableAdaptiveFPS: false,
   cameraOptions: {
     enableZoomInOnLoad: true,
   },
@@ -453,7 +430,7 @@ function updateUI() {
         <span class="region-color-badge" style="background: ${color};"></span>
         ${displayName}
       </div>
-      <div class="region-meta">${direction === 'input' ? 'Input' : 'Output'} | ${region.dataType} | ${region.positions.length} bit${region.positions.length > 1 ? 's' : ''}</div>
+      <div class="region-meta">${direction === 'input' ? '⬇️ Input' : '⬆️ Output'} | ${region.dataType} | ${region.positions.length} bit${region.positions.length > 1 ? 's' : ''}</div>
     `;
 
     item.appendChild(checkbox);
@@ -616,18 +593,6 @@ function buildSimulationUI() {
   });
 }
 
-// Helper to extract bit width from dataType (e.g., "unsigned:4" -> 4)
-function getDataTypeBitWidth(dataType: string): number | null {
-  const match = dataType.match(/^(unsigned|signed|uint|int):(\d+)$/);
-  return match ? parseInt(match[2]) : null;
-}
-
-// Helper to check if dataType is a signal strength type (nibble, signal, signal_strength)
-function isSignalStrengthType(dataType: string): boolean {
-  const lowerType = dataType.toLowerCase();
-  return lowerType === 'nibble' || lowerType === 'signal' || lowerType === 'signal_strength';
-}
-
 // Create input control based on data type
 function createInputControl(region: any): HTMLElement {
   const control = document.createElement('div');
@@ -635,29 +600,23 @@ function createInputControl(region: any): HTMLElement {
 
   const displayName = region.regionId.replace(/^io\./, '');
   const bitCount = region.positions.length;
-  const explicitBitWidth = getDataTypeBitWidth(region.dataType);
 
   // Initialize input value if not set
   if (!(region.regionId in inputValues)) {
     inputValues[region.regionId] = 0;
   }
 
-  // Determine the actual bit width (for display and max values)
-  const isSignalStrength = isSignalStrengthType(region.dataType);
-  const effectiveBitWidth = isSignalStrength ? 4 : (explicitBitWidth || bitCount);
-  const isPacked4 = (bitCount === 1 && explicitBitWidth && explicitBitWidth > 1) || isSignalStrength;
-
   control.innerHTML = `
     <div class="input-control-header">
       <span class="input-control-name">${displayName}</span>
-      <span class="input-control-type">${region.dataType} (${effectiveBitWidth} bit${effectiveBitWidth > 1 ? 's' : ''} in ${bitCount} wire${bitCount > 1 ? 's' : ''}${isSignalStrength ? ', signal strength 0-15' : ''})</span>
+      <span class="input-control-type">${region.dataType} (${bitCount} bit${bitCount > 1 ? 's' : ''})</span>
     </div>
   `;
 
   const valueContainer = document.createElement('div');
   valueContainer.className = 'input-control-value';
 
-  if (region.dataType === 'bool') {
+  if (region.dataType === 'bool' || bitCount === 1) {
     // Boolean input - checkbox
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -667,43 +626,6 @@ function createInputControl(region: any): HTMLElement {
     });
     valueContainer.appendChild(checkbox);
     valueContainer.appendChild(document.createTextNode(' ' + (checkbox.checked ? 'ON' : 'OFF')));
-  } else if (isPacked4) {
-    // Single wire with Packed4 encoding (signal strength) - slider + number input
-    const maxValue = (2 ** effectiveBitWidth) - 1; // e.g., 4 bits = 0-15
-
-    const sliderContainer = document.createElement('div');
-    sliderContainer.style.cssText = 'display: flex; gap: 8px; align-items: center; width: 100%;';
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = maxValue.toString();
-    slider.value = inputValues[region.regionId].toString();
-    slider.style.cssText = 'flex: 1;';
-
-    const numberInput = document.createElement('input');
-    numberInput.type = 'number';
-    numberInput.min = '0';
-    numberInput.max = maxValue.toString();
-    numberInput.value = inputValues[region.regionId].toString();
-    numberInput.style.cssText = 'width: 60px;';
-
-    slider.addEventListener('input', () => {
-      const val = parseInt(slider.value) || 0;
-      inputValues[region.regionId] = val;
-      numberInput.value = val.toString();
-    });
-
-    numberInput.addEventListener('input', () => {
-      const val = Math.max(0, Math.min(maxValue, parseInt(numberInput.value) || 0));
-      inputValues[region.regionId] = val;
-      slider.value = val.toString();
-      numberInput.value = val.toString();
-    });
-
-    sliderContainer.appendChild(slider);
-    sliderContainer.appendChild(numberInput);
-    valueContainer.appendChild(sliderContainer);
   } else {
     // Multi-bit input - number input + bit toggles
     const numberInput = document.createElement('input');
@@ -793,7 +715,7 @@ function createOutputDisplay(region: any): HTMLElement {
 async function runSimulation() {
   try {
     runSimulationBtn.disabled = true;
-    runSimulationBtn.textContent = 'Running...';
+    runSimulationBtn.textContent = '⏳ Running...';
 
     const liveSync = liveSyncModeCheckbox.checked;
 
@@ -808,7 +730,7 @@ async function runSimulation() {
     console.log('[Simulation] Using schematic:', schematic.name);
 
     // Import TypedCircuitExecutor and ExecutionMode from nucleation
-    const { TypedCircuitExecutorWrapper, ExecutionModeWrapper, SimulationOptionsWrapper } = await import('../../../src/nucleationExports');
+    const { TypedCircuitExecutorWrapper, ExecutionModeWrapper } = await import('../../../src/nucleationExports');
 
     // Debug: Check if signs can be extracted
     const signs = schematic.schematicWrapper.extractSigns();
@@ -837,17 +759,7 @@ async function runSimulation() {
     console.log('[Simulation] Creating TypedCircuitExecutor from Insign...');
     let executor;
     try {
-      if (liveSync) {
-        const simulationOptions = new SimulationOptionsWrapper();
-        simulationOptions.optimize = false;
-        executor = TypedCircuitExecutorWrapper.fromInsignWithOptions(
-          schematic.schematicWrapper,
-          simulationOptions
-        );
-        console.log('[Simulation] Created executor with visual (optimize=false) options for live sync');
-      } else {
-        executor = TypedCircuitExecutorWrapper.fromInsign(schematic.schematicWrapper);
-      }
+      executor = TypedCircuitExecutorWrapper.fromInsign(schematic.schematicWrapper);
       console.log('[Simulation] Created TypedCircuitExecutor from Insign');
     } catch (err) {
       console.error('[Simulation] fromInsign error:', err);
@@ -861,23 +773,11 @@ async function runSimulation() {
       const name = region.regionId.replace(/^io\./, '');
       const value = inputValues[region.regionId] || 0;
 
-      // Convert to boolean for bool data types, pass raw values for packed signal strength
+      // Convert to boolean for bool data types
       if (region.dataType === 'bool') {
         inputs[name] = value !== 0;
-      } else if (isSignalStrengthType(region.dataType)) {
-        // For signal strength types (nibble, signal, signal_strength), pass 0-15 directly
-        inputs[name] = Math.max(0, Math.min(15, value));
       } else {
-        const explicitBitWidth = getDataTypeBitWidth(region.dataType);
-        const isPacked4 = region.positions.length === 1 && explicitBitWidth && explicitBitWidth > 1;
-
-        if (isPacked4) {
-          // For Packed4 encoding (e.g., unsigned:4 with 1 wire), pass the value directly (0-15)
-          const maxValue = (2 ** explicitBitWidth) - 1;
-          inputs[name] = Math.max(0, Math.min(maxValue, value));
-        } else {
-          inputs[name] = value;
-        }
+        inputs[name] = value;
       }
     });
 
@@ -904,29 +804,15 @@ async function runSimulation() {
       const displayEl = document.querySelector(`.output-display[data-region-id="${region.regionId}"]`) as HTMLElement;
       if (displayEl) {
         const valueEl = displayEl.querySelector('.output-display-value') as HTMLElement;
+        valueEl.textContent = value !== undefined ? value.toString() : '-';
 
-        // Format output based on data type
-        const isSignalStrength = isSignalStrengthType(region.dataType);
-        const explicitBitWidth = getDataTypeBitWidth(region.dataType);
-        const isPacked4 = (region.positions.length === 1 && explicitBitWidth && explicitBitWidth > 1) || isSignalStrength;
-
-        if (isPacked4) {
-          // Show signal strength value and also in hex format for Packed4 encoding
-          const numValue = typeof value === 'number' ? value : 0;
-          valueEl.textContent = `${numValue} (0x${numValue.toString(16).toUpperCase()})`;
-        } else {
-          valueEl.textContent = value !== undefined ? value.toString() : '-';
-        }
-
-        // Update bit displays for multi-bit outputs
+        // Update bit displays
         const bitDisplays = displayEl.querySelectorAll('.bit-display');
-        if (bitDisplays.length > 0 && typeof value === 'number') {
-          bitDisplays.forEach((bitEl) => {
-            const bit = parseInt((bitEl as HTMLElement).dataset.bit || '0');
-            const isSet = (value & (1 << bit)) !== 0;
-            bitEl.classList.toggle('active', isSet);
-          });
-        }
+        bitDisplays.forEach((bitEl, idx) => {
+          const bit = parseInt((bitEl as HTMLElement).dataset.bit || '0');
+          const isSet = (value & (1 << bit)) !== 0;
+          bitEl.classList.toggle('active', isSet);
+        });
       }
     });
 
@@ -984,7 +870,7 @@ async function runSimulation() {
     alert('Simulation failed: ' + error);
   } finally {
     runSimulationBtn.disabled = false;
-    runSimulationBtn.textContent = 'Run Simulation';
+    runSimulationBtn.textContent = '▶️ Run Simulation';
   }
 }
 
@@ -1013,7 +899,7 @@ function renderIoRegionsList() {
     item.innerHTML = `
       <div class="io-region-header">
         <span class="io-region-name" style="color: ${typeColor}">${region.id}</span>
-        <button class="delete-btn" data-index="${index}">Delete</button>
+        <button class="delete-btn" data-index="${index}">🗑️ Delete</button>
       </div>
       
       <label>Type</label>
@@ -1103,7 +989,7 @@ async function buildFromTemplate() {
   try {
     console.log('[CircuitBuilder] Building circuit from template...');
     buildFromTemplateBtn.disabled = true;
-    buildFromTemplateBtn.textContent = 'Building...';
+    buildFromTemplateBtn.textContent = '⏳ Building...';
 
     const { SchematicBuilderWrapper } = await import("../../../src/nucleationExports");
 
@@ -1164,7 +1050,7 @@ async function buildFromTemplate() {
     alert('Failed to build circuit: ' + error);
   } finally {
     buildFromTemplateBtn.disabled = false;
-    buildFromTemplateBtn.textContent = 'Build Circuit';
+    buildFromTemplateBtn.textContent = '🏗️ Build Circuit';
   }
 }
 

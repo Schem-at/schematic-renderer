@@ -23,6 +23,7 @@ const renderer = new SchematicRenderer(
     { // Renderer options
         enableInteraction: true,
         enableDragAndDrop: false,
+        enableAdaptiveFPS: false,
         enableGizmos: false,
         singleSchematicMode: true,
         enableProgressBar: false, // We handle our own progress bar in UI
@@ -59,7 +60,7 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
         medium: { x: 32, y: 32, z: 32 },
         large: { x: 64, y: 64, z: 64 },
         huge: { x: 128, y: 128, z: 128 },
-        massive: { x: 256, y: 256, z: 64 }
+        massive: { x: 256, y: 64, z: 256 }
     };
 
     const densityMap = {
@@ -204,12 +205,6 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
     // 3. Finalize
     onProgress("Finalizing...", 0.9);
 
-    // Manually attach meshes to group if not done by buildSchematicMeshes (it usually returns them detached in some modes)
-    // But buildSchematicMeshesImmediate usually adds them?
-    // Let's check SchematicObject implementation.
-    // buildSchematicMeshes returns { meshes, chunkMap } but also sets them internally usually?
-    // Wait, in the updated code, buildSchematicMeshes* methods DO add to group.
-
     // Force scene update
     renderer.sceneManager.scene.updateMatrixWorld(true);
 
@@ -220,9 +215,16 @@ async function generateTestSchematic(renderer: SchematicRenderer, config: any) {
     const memoryUsedMB = (endMemory - startMemory) / 1024 / 1024;
     const peakMemoryMB = endMemory / 1024 / 1024;
 
+    console.log(`[Test] Run ${runNumber} Summary:`);
+    console.log(`  Total Time: ${Math.round(totalTime)}ms`);
+    console.log(`  Generation: ${Math.round(timings.generation)}ms`);
+    console.log(`  Mesh Build: ${Math.round(timings.build)}ms`);
+    console.log(`  Memory Used: ${Math.round(memoryUsedMB * 100) / 100}MB`);
+
     return {
         runNumber,
         buildTime: Math.round(totalTime),
+        meshBuildTime: Math.round(timings.build), // Explicit mesh build time
         timingBreakdown: {
             generation: Math.round(timings.generation),
             meshBuilding: Math.round(timings.build)

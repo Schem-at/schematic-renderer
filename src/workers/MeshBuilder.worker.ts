@@ -13,8 +13,13 @@ type PaletteGeometryData = {
 
 type ChunkBuildRequest = {
     chunkId: string;
-    blocks: number[][]; // [x, y, z, paletteIndex]
+    blocks: number[][] | Int32Array; // [x, y, z, paletteIndex] or flat array
+    chunkOrigin?: [number, number, number]; // [x, y, z] origin for relative coordinates
 };
+
+// Constants
+const POSITION_SCALE = 1024;
+const NORMAL_SCALE = 127;
 
 // State
 const paletteGeometries = new Map<number, PaletteGeometryData>();
@@ -45,27 +50,38 @@ function updatePalette(paletteData: PaletteGeometryData[]) {
 }
 
 function buildChunk(request: ChunkBuildRequest) {
-    const { chunkId, blocks } = request;
-
-    const categoryBatches = new Map<string, {
-        positions: number[]; // flattened x,y,z
-        geometryData: any[]; // reference to the geometry data from palette
-        occlusionFlags: number[]; // To track occlusion capability of each block
-    }>();
+    const { chunkId, blocks, chunkOrigin } = request;
 
     // Calculate bounds for voxel map
+    const startSetup = performance.now();
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
 
     if (blocks.length > 0) {
-        for (const [x, y, z] of blocks) {
-            minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
-            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+        if (blocks instanceof Int32Array) {
+            for (let i = 0; i < blocks.length; i += 4) {
+                const x = blocks[i];
+                const y = blocks[i + 1];
+                const z = blocks[i + 2];
+                minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+            }
+        } else {
+            for (const [x, y, z] of blocks) {
+                minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+            }
         }
     } else {
         (self as unknown as Worker).postMessage({ type: "chunkBuilt", chunkId, meshes: [] });
         return;
     }
+
+    // If chunkOrigin is provided, use it. Otherwise fallback to minX/minY/minZ (auto-detected origin)
+    // NOTE: For consistent meshing across sparse chunks, chunkOrigin SHOULD be provided by main thread
+    const originX = chunkOrigin ? chunkOrigin[0] : minX;
+    const originY = chunkOrigin ? chunkOrigin[1] : minY;
+    const originZ = chunkOrigin ? chunkOrigin[2] : minZ;
 
     const sizeX = maxX - minX + 1;
     const sizeY = maxY - minY + 1;
@@ -83,45 +99,112 @@ function buildChunk(request: ChunkBuildRequest) {
     };
 
     // Populate voxel map
-    for (const [x, y, z, paletteIndex] of blocks) {
-        voxelMap[getIndex(x, y, z)] = paletteIndex + 1; // Store index + 1 so 0 is empty
+    if (blocks instanceof Int32Array) {
+        for (let i = 0; i < blocks.length; i += 4) {
+            const x = blocks[i];
+            const y = blocks[i + 1];
+            const z = blocks[i + 2];
+            const paletteIndex = blocks[i + 3];
+            voxelMap[getIndex(x, y, z)] = paletteIndex + 1;
+        }
+    } else {
+        for (const [x, y, z, paletteIndex] of blocks) {
+            voxelMap[getIndex(x, y, z)] = paletteIndex + 1; // Store index + 1 so 0 is empty
+        }
     }
 
-    // 1. Collect all blocks into categories
-    for (const block of blocks) {
-        const [x, y, z, paletteIndex] = block;
-        const paletteItem = paletteGeometries.get(paletteIndex);
+    // Intermediate storage: Category -> Map<PaletteIndex, List of blocks>
+    const setupTime = performance.now() - startSetup;
+    const startSort = performance.now();
+    const categoryBatches = new Map<string, Map<number, number[][]>>();
 
-        if (paletteItem) {
-            const category = (paletteItem as any).category || 'solid';
+    // 1. Segregate blocks by category and palette index
+    if (blocks instanceof Int32Array) {
+        for (let i = 0; i < blocks.length; i += 4) {
+            const paletteIndex = blocks[i + 3];
+            const paletteItem = paletteGeometries.get(paletteIndex);
 
-            if (!categoryBatches.has(category)) {
-                categoryBatches.set(category, { positions: [], geometryData: [], occlusionFlags: [] });
+            if (paletteItem) {
+                const category = (paletteItem as any).category || 'solid';
+
+                let catMap = categoryBatches.get(category);
+                if (!catMap) {
+                    catMap = new Map();
+                    categoryBatches.set(category, catMap);
+                }
+
+                let pList = catMap.get(paletteIndex);
+                if (!pList) {
+                    pList = [];
+                    catMap.set(paletteIndex, pList);
+                }
+                // Temporarily construct array for compatibility
+                pList.push([blocks[i], blocks[i + 1], blocks[i + 2], paletteIndex]);
             }
+        }
+    } else {
+        for (const block of blocks) {
+            const paletteIndex = block[3];
+            const paletteItem = paletteGeometries.get(paletteIndex);
 
-            const batch = categoryBatches.get(category)!;
+            if (paletteItem) {
+                const category = (paletteItem as any).category || 'solid';
 
-            for (const geom of paletteItem.geometries) {
-                batch.positions.push(x, y, z);
-                batch.geometryData.push(geom);
-                batch.occlusionFlags.push(paletteItem.occlusionFlags || 0);
+                let catMap = categoryBatches.get(category);
+                if (!catMap) {
+                    catMap = new Map();
+                    categoryBatches.set(category, catMap);
+                }
+
+                let pList = catMap.get(paletteIndex);
+                if (!pList) {
+                    pList = [];
+                    catMap.set(paletteIndex, pList);
+                }
+                pList.push(block);
             }
         }
     }
 
     const results: any[] = [];
     const transferables: Transferable[] = [];
+    const sortTime = performance.now() - startSort;
+    let mergeTime = 0;
 
-    // 2. Merge each category with culling
-    for (const [category, batch] of categoryBatches) {
-        if (batch.positions.length === 0) continue;
+    // 2. Process each category
+    for (const [category, paletteMap] of categoryBatches) {
+        const mergeStart = performance.now();
+        const sortedIndices = Array.from(paletteMap.keys()).sort((a, b) => a - b);
+
+        const positions: number[] = [];
+        const geometryData: any[] = [];
+        const occlusionFlags: number[] = [];
+
+        // Expand blocks into flat arrays in sorted order
+        for (const pIdx of sortedIndices) {
+            const pBlocks = paletteMap.get(pIdx)!;
+            const paletteItem = paletteGeometries.get(pIdx)!;
+
+            for (const [x, y, z] of pBlocks) {
+                for (const geom of paletteItem.geometries) {
+                    positions.push(x, y, z);
+                    geometryData.push(geom);
+                    occlusionFlags.push(paletteItem.occlusionFlags || 0);
+                }
+            }
+        }
+
+        if (positions.length === 0) continue;
 
         const merged = mergeGeometriesWithCulling(
-            batch.geometryData,
-            batch.positions,
-            batch.occlusionFlags,
+            geometryData,
+            positions,
+            occlusionFlags,
             voxelMap,
-            getIndex
+            getIndex,
+            originX,
+            originY,
+            originZ
         );
 
         if (merged) {
@@ -134,12 +217,20 @@ function buildChunk(request: ChunkBuildRequest) {
             if (merged.uvs) transferables.push(merged.uvs.buffer);
             transferables.push(merged.indices.buffer);
         }
+        mergeTime += (performance.now() - mergeStart);
     }
 
     (self as unknown as Worker).postMessage({
         type: "chunkBuilt",
         chunkId,
-        meshes: results
+        meshes: results,
+        origin: [originX, originY, originZ],
+        timings: {
+            setup: setupTime,
+            sort: sortTime,
+            merge: mergeTime,
+            total: performance.now() - startSetup
+        }
     }, transferables);
 }
 
@@ -149,7 +240,10 @@ function mergeGeometriesWithCulling(
     // occlusionFlags: number[], // Unused directly in loop, but kept for signature if needed
     _occlusionFlags: number[],
     voxelMap: Int32Array,
-    getIndex: (x: number, y: number, z: number) => number
+    getIndex: (x: number, y: number, z: number) => number,
+    originX: number,
+    originY: number,
+    originZ: number
 ) {
     let totalVerts = 0;
     let totalIndices = 0;
@@ -161,8 +255,9 @@ function mergeGeometriesWithCulling(
 
     if (totalVerts === 0) return null;
 
-    const mergedPositions = new Float32Array(totalVerts * 3);
-    const mergedNormals = new Float32Array(totalVerts * 3);
+    // Use quantized types for memory optimization for positions/normals, but Float32 for UVs to avoid tiling issues
+    const mergedPositions = new Int16Array(totalVerts * 3);
+    const mergedNormals = new Int8Array(totalVerts * 3);
     const mergedUVs = new Float32Array(totalVerts * 2);
     const mergedIndices = totalVerts > 65535 ? new Uint32Array(totalIndices) : new Uint16Array(totalIndices);
 
@@ -199,10 +294,7 @@ function mergeGeometriesWithCulling(
                 const dy = Math.round(ny);
                 const dz = Math.round(nz);
 
-                // Only cull cardinal directions
                 if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) === 1) {
-
-                    // Check if the face is FLUSH with the block boundary
                     let isFlush = false;
                     const EPSILON = 0.01;
 
@@ -217,23 +309,22 @@ function mergeGeometriesWithCulling(
                     else if (dz === 1) isFlush = (Math.abs(v0z - 1.0) < EPSILON) || (Math.abs(v0z - 0.5) < EPSILON);
                     else if (dz === -1) isFlush = (Math.abs(v0z - 0.0) < EPSILON) || (Math.abs(v0z + 0.5) < EPSILON);
 
-                    // Only proceed with culling check if the face is flush
                     if (isFlush) {
                         const neighborIdx = getIndex(px + dx, py + dy, pz + dz);
                         const neighborVal = voxelMap[neighborIdx];
 
-                        if (neighborVal > 0) { // Neighbor exists
+                        if (neighborVal > 0) {
                             const neighborPaletteIdx = neighborVal - 1;
                             const neighborGeomData = paletteGeometries.get(neighborPaletteIdx);
 
                             if (neighborGeomData && neighborGeomData.occlusionFlags !== undefined) {
                                 let neighborFaceIndex = -1;
-                                if (dx === 1) neighborFaceIndex = 0; // Neighbor's West face
-                                else if (dx === -1) neighborFaceIndex = 1; // Neighbor's East face
-                                else if (dy === 1) neighborFaceIndex = 2; // Neighbor's Down face
-                                else if (dy === -1) neighborFaceIndex = 3; // Neighbor's Up face
-                                else if (dz === 1) neighborFaceIndex = 4; // Neighbor's North face
-                                else if (dz === -1) neighborFaceIndex = 5; // Neighbor's South face
+                                if (dx === 1) neighborFaceIndex = 0;
+                                else if (dx === -1) neighborFaceIndex = 1;
+                                else if (dy === 1) neighborFaceIndex = 2;
+                                else if (dy === -1) neighborFaceIndex = 3;
+                                else if (dz === 1) neighborFaceIndex = 4;
+                                else if (dz === -1) neighborFaceIndex = 5;
 
                                 if (neighborFaceIndex !== -1) {
                                     if ((neighborGeomData.occlusionFlags & (1 << neighborFaceIndex)) !== 0) {
@@ -254,14 +345,26 @@ function mergeGeometriesWithCulling(
         if (validLocalIndices.length === 0) continue;
 
         for (let v = 0; v < numLocalVerts; v++) {
-            mergedPositions[(vOffset + v) * 3] = geom.positions[v * 3] + px;
-            mergedPositions[(vOffset + v) * 3 + 1] = geom.positions[v * 3 + 1] + py;
-            mergedPositions[(vOffset + v) * 3 + 2] = geom.positions[v * 3 + 2] + pz;
+            // Quantize Positions RELATIVE TO CHUNK ORIGIN
+            // px, py, pz are absolute world coords. originX/Y/Z are chunk origin.
+            // Relative pos: (px - originX) + geom.pos
+            const rx = (px - originX) + geom.positions[v * 3];
+            const ry = (py - originY) + geom.positions[v * 3 + 1];
+            const rz = (pz - originZ) + geom.positions[v * 3 + 2];
+
+            // Multiply by POSITION_SCALE to preserve precision
+            const vx = rx * POSITION_SCALE;
+            const vy = ry * POSITION_SCALE;
+            const vz = rz * POSITION_SCALE;
+
+            mergedPositions[(vOffset + v) * 3] = vx;
+            mergedPositions[(vOffset + v) * 3 + 1] = vy;
+            mergedPositions[(vOffset + v) * 3 + 2] = vz;
 
             if (geom.normals) {
-                mergedNormals[(vOffset + v) * 3] = geom.normals[v * 3];
-                mergedNormals[(vOffset + v) * 3 + 1] = geom.normals[v * 3 + 1];
-                mergedNormals[(vOffset + v) * 3 + 2] = geom.normals[v * 3 + 2];
+                mergedNormals[(vOffset + v) * 3] = geom.normals[v * 3] * NORMAL_SCALE;
+                mergedNormals[(vOffset + v) * 3 + 1] = geom.normals[v * 3 + 1] * NORMAL_SCALE;
+                mergedNormals[(vOffset + v) * 3 + 2] = geom.normals[v * 3 + 2] * NORMAL_SCALE;
             }
 
             if (geom.uvs) {

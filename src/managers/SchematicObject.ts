@@ -61,6 +61,7 @@ export class SchematicObject extends EventEmitter {
 
 	// Cache for dimensions to avoid repeated calls
 	private _cachedDimensions: [number, number, number] | null = null;
+	private blockEntitiesMap: Map<string, any> | null = null;
 
 	constructor(
 		schematicRenderer: SchematicRenderer,
@@ -418,257 +419,57 @@ export class SchematicObject extends EventEmitter {
 	/**
 	 * Display detailed performance monitoring results
 	 */
-	private displayPerformanceResults(_sessionData: any): void {
-		// Performance monitoring disabled for cleaner logs - uncomment to re-enable
-		return;
-		/*
-		console.log(
-			"\n🎯 ================== PERFORMANCE MONITORING RESULTS =================="
-		);
-		console.log(`📊 Session: ${sessionData.sessionId}`);
-		console.log(`🚀 Build Mode: ${sessionData.renderMode}`);
-		console.log(
-			`⏱️ Total Duration: ${sessionData.totalDuration?.toFixed(2)}ms`
-		);
-		console.log(
-			`💾 Peak Memory: ${(sessionData.peakMemoryUsage / 1024 / 1024).toFixed(
-				2
-			)}MB`
-		);
-		console.log(`🎥 Average FPS: ${sessionData.averageFPS.toFixed(2)}`);
+	private displayPerformanceResults(sessionData: any): void {
+		if (!sessionData) {
+			console.warn("⚠️ displayPerformanceResults called with no data!");
+			return;
+		}
 
-		// Memory progression
-		if (sessionData.memorySnapshots.length > 0) {
-			console.log("\n📈 Memory Progression:");
-			sessionData.memorySnapshots.forEach((snapshot: any, index: number) => {
-				if (
-					index % 5 === 0 ||
-					index === sessionData.memorySnapshots.length - 1
-				) {
-					const timeOffset = (
-						(snapshot.timestamp - sessionData.startTime) /
-						1000
-					).toFixed(1);
-					const memoryMB = (snapshot.usedJSHeapSize / 1024 / 1024).toFixed(2);
-					console.log(
-						`  ${timeOffset}s: ${memoryMB}MB (${
-							snapshot.customData?.label || "snapshot"
-						})`
-					);
-				}
+		console.log(`📊 --- Performance Results: ${this.name} ---`);
+
+		const totalTime = sessionData.totalDuration || 0;
+		console.log(`⏱️ Total Time: ${totalTime.toFixed(2)}ms`);
+
+		// Debug log to check data presence
+		console.log(`Debug: Timing Data Length: ${sessionData.timingData?.length || 0}`);
+		console.log(`Debug: Breakdown Length: ${sessionData.breakdown?.length || 0}`);
+
+		// Aggregate metrics from chunk processing data
+		let blockCount = 0;
+		let meshCount = 0;
+		if (sessionData.chunkProcessingData) {
+			sessionData.chunkProcessingData.forEach((d: any) => {
+				blockCount += d.blockCount || 0;
+				meshCount += d.meshCount || 0;
 			});
 		}
 
-		// Operation timings
-		if (sessionData.timingData.length > 0) {
-			console.log("\n⏱️ Operation Timings:");
-			const operationStats = new Map();
-			sessionData.timingData.forEach((timing: any) => {
-				if (timing.duration !== undefined) {
-					const existing = operationStats.get(timing.name) || {
-						total: 0,
-						count: 0,
-						max: 0,
-					};
-					existing.total += timing.duration;
-					existing.count += 1;
-					existing.max = Math.max(existing.max, timing.duration);
-					operationStats.set(timing.name, existing);
-				}
-			});
+		console.log(`🧱 Block Count: ${blockCount}`);
+		console.log(`📦 Mesh Count: ${meshCount}`);
 
-			Array.from(operationStats.entries())
-				.sort((a, b) => b[1].total - a[1].total)
-				.forEach(([name, stats]) => {
-					const avgTime = (stats.total / stats.count).toFixed(2);
-					console.log(
-						`  ${name}: ${stats.total.toFixed(2)}ms total, ${avgTime}ms avg (${
-							stats.count
-						}x, max: ${stats.max.toFixed(2)}ms)`
-					);
-				});
+		// Memory delta
+		let memoryDelta = 0;
+		if (sessionData.memorySnapshots && sessionData.memorySnapshots.length >= 2) {
+			const start = sessionData.memorySnapshots[0].usedJSHeapSize;
+			const end = sessionData.memorySnapshots[sessionData.memorySnapshots.length - 1].usedJSHeapSize;
+			memoryDelta = end - start;
 		}
 
-		// Block processing stats
-		if (sessionData.blockProcessingData.length > 0) {
-			console.log("\n🧱 Block Processing Stats:");
-			const blockStats = new Map();
-			sessionData.blockProcessingData.forEach((data: any) => {
-				const existing = blockStats.get(data.blockType) || {
-					total: 0,
-					count: 0,
-					totalVertices: 0,
-					totalMemory: 0,
-				};
-				existing.total += data.processingTime;
-				existing.count += 1;
-				existing.totalVertices += data.geometryVertices;
-				existing.totalMemory += data.memoryUsed;
-				blockStats.set(data.blockType, existing);
+		console.log(`🧠 Memory Delta: ${(memoryDelta / 1024 / 1024).toFixed(2)} MB`);
+
+		if (sessionData.breakdown && sessionData.breakdown.length > 0) {
+			console.warn("📋 Detailed Breakdown:");
+			sessionData.breakdown.forEach((op: any) => {
+				console.warn(`  - ${op.operationId}: ${op.duration !== undefined ? op.duration.toFixed(2) : "0.00"}ms`);
 			});
-
-			Array.from(blockStats.entries())
-				.sort((a, b) => b[1].total - a[1].total)
-				.slice(0, 10) // Top 10 most expensive block types
-				.forEach(([blockType, stats]) => {
-					const avgTime = (stats.total / stats.count).toFixed(2);
-					const avgVertices = Math.round(stats.totalVertices / stats.count);
-					const avgMemory = (stats.totalMemory / stats.count / 1024).toFixed(1);
-					console.log(
-						`  ${blockType}: ${avgTime}ms avg, ${avgVertices} vertices, ${avgMemory}KB (${stats.count}x)`
-					);
-				});
-		}
-
-		// Chunk processing stats
-		if (sessionData.chunkProcessingData.length > 0) {
-			console.log("\n🗂️ Chunk Processing Stats:");
-			const totalChunks = sessionData.chunkProcessingData.length;
-			const totalBlocks = sessionData.chunkProcessingData.reduce(
-				(sum: number, chunk: any) => sum + chunk.blockCount,
-				0
-			);
-			const totalVertices = sessionData.chunkProcessingData.reduce(
-				(sum: number, chunk: any) => sum + chunk.totalVertices,
-				0
-			);
-			const totalMemory = sessionData.chunkProcessingData.reduce(
-				(sum: number, chunk: any) => sum + chunk.memoryUsed,
-				0
-			);
-
-			console.log(`  Total Chunks: ${totalChunks}`);
-			console.log(`  Total Blocks: ${totalBlocks.toLocaleString()}`);
-			console.log(`  Total Vertices: ${totalVertices.toLocaleString()}`);
-			console.log(
-				`  Total Memory: ${(totalMemory / 1024 / 1024).toFixed(2)}MB`
-			);
-			console.log(
-				`  Avg Chunk Time: ${sessionData.averageChunkProcessingTime.toFixed(
-					2
-				)}ms`
-			);
-			console.log(
-				`  Avg Block Time: ${sessionData.averageBlockProcessingTime.toFixed(
-					2
-				)}ms`
-			);
-
-			// Show slowest chunks
-			const slowestChunks = sessionData.chunkProcessingData
-				.sort((a: any, b: any) => b.processingTime - a.processingTime)
-				.slice(0, 5);
-
-			if (slowestChunks.length > 0) {
-				console.log("\n🐌 Slowest Chunks:");
-				slowestChunks.forEach((chunk: any, index: number) => {
-					const coords = chunk.chunkCoords.join(",");
-					console.log(
-						`  ${index + 1}. [${coords}]: ${chunk.processingTime.toFixed(
-							2
-						)}ms, ${chunk.blockCount} blocks, ${chunk.totalVertices} vertices`
-					);
-				});
+		} else {
+			console.warn("⚠️ No breakdown data available.");
+			if (sessionData.timingData) {
+				console.log("Raw timing data:", JSON.stringify(sessionData.timingData));
 			}
 		}
 
-		// getChunkMesh detailed breakdown
-		const getChunkMeshOperations = sessionData.timingData.filter(
-			(op: any) => op.name === "getChunkMesh"
-		);
-		if (getChunkMeshOperations.length > 0) {
-			console.log("\n🔍 getChunkMesh Detailed Analysis:");
-			const totalGetChunkMeshTime = getChunkMeshOperations.reduce(
-				(sum: number, op: any) => sum + (op.duration || 0),
-				0
-			);
-			const avgGetChunkMeshTime =
-				totalGetChunkMeshTime / getChunkMeshOperations.length;
-			console.log(
-				`  Total getChunkMesh calls: ${getChunkMeshOperations.length}`
-			);
-			console.log(
-				`  Total getChunkMesh time: ${totalGetChunkMeshTime.toFixed(2)}ms`
-			);
-			console.log(
-				`  Average getChunkMesh time: ${avgGetChunkMeshTime.toFixed(2)}ms`
-			);
-
-			// Show memory usage per chunk
-			const chunkMemoryDetails = sessionData.timingData.filter(
-				(op: any) => op.name === "getChunkMesh" && op.metadata?.memoryUsed
-			);
-			if (chunkMemoryDetails.length > 0) {
-				console.log("\n💾 Chunk Memory Analysis:");
-				const totalChunkMemory = chunkMemoryDetails.reduce(
-					(sum: number, op: any) => sum + (op.metadata?.memoryUsed || 0),
-					0
-				);
-				const avgChunkMemory = totalChunkMemory / chunkMemoryDetails.length;
-				console.log(
-					`  Total chunk memory: ${(totalChunkMemory / 1024 / 1024).toFixed(
-						2
-					)}MB`
-				);
-				console.log(
-					`  Average per chunk: ${(avgChunkMemory / 1024).toFixed(2)}KB`
-				);
-
-				// Show most memory-intensive chunks
-				const heaviestChunks = chunkMemoryDetails
-					.sort(
-						(a: any, b: any) =>
-							(b.metadata?.memoryUsed || 0) - (a.metadata?.memoryUsed || 0)
-					)
-					.slice(0, 5);
-
-				console.log("\n🏋️ Most Memory-Intensive Chunks:");
-				heaviestChunks.forEach((chunk: any, index: number) => {
-					const coords = chunk.metadata?.chunkCoords?.join(",") || "unknown";
-					const memoryMB = (chunk.metadata?.memoryUsed / 1024 / 1024).toFixed(
-						2
-					);
-					console.log(`  ${index + 1}. [${coords}]: ${memoryMB}MB`);
-				});
-			}
-		}
-
-		// Renderer stats
-		if (sessionData.rendererStats) {
-			console.log("\n🎨 Renderer Stats:");
-			console.log(`  Draw Calls: ${sessionData.rendererStats.drawCalls}`);
-			console.log(
-				`  Triangles: ${sessionData.rendererStats.triangles.toLocaleString()}`
-			);
-			console.log(`  Geometries: ${sessionData.rendererStats.geometries}`);
-			console.log(`  Textures: ${sessionData.rendererStats.textures}`);
-			console.log(`  Programs: ${sessionData.rendererStats.programs}`);
-		}
-
-		// Memory hotspots
-		if (sessionData.memoryHotspots.length > 0) {
-			console.log("\n🔥 Memory Hotspots:");
-			sessionData.memoryHotspots.forEach((hotspot: string) => {
-				console.log(`  - ${hotspot}`);
-			});
-		}
-
-		// Memory leaks
-		if (sessionData.memoryLeaks > 1024 * 1024) {
-			// > 1MB
-			console.log(
-				`\n⚠️ Potential Memory Leak: ${(
-					sessionData.memoryLeaks /
-					1024 /
-					1024
-				).toFixed(2)}MB increase`
-			);
-		}
-
-		console.log(
-			"🎯 ================================================================\n"
-		);
-		*/
+		console.log(`-------------------------------------------`);
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -1078,6 +879,9 @@ export class SchematicObject extends EventEmitter {
 
 			performanceMonitor.takeMemorySnapshot(`schematic-build-${buildMode}-end`);
 
+			// Ensure main operation is closed BEFORE ending session
+			performanceMonitor.endOperation(`schematic-build-${buildMode}`);
+
 			// End performance monitoring session and display results
 			const sessionData = performanceMonitor.endSession(sessionId);
 			if (sessionData) {
@@ -1094,8 +898,9 @@ export class SchematicObject extends EventEmitter {
 			}
 
 			return result;
-		} finally {
-			performanceMonitor.endOperation(`schematic-build-${buildMode}`);
+		} catch (error) {
+			performanceMonitor.endOperation(`schematic-build-${buildMode}`); // Ensure closed on error too
+			throw error;
 		}
 	}
 
@@ -1120,11 +925,16 @@ export class SchematicObject extends EventEmitter {
 		this.reportBuildProgress("Initializing pipeline...", 0.05);
 
 		const palettes = schematic.get_all_palettes();
+		const paletteStart = performance.now();
+		performanceMonitor.startOperation("Palette Precomputation");
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
+		performanceMonitor.endOperation("Palette Precomputation");
+		console.log(`[SchematicObject] Palette prep took ${(performance.now() - paletteStart).toFixed(2)}ms`);
 
 		this.reportBuildProgress("Creating chunk iterator...", 0.1);
 		console.log(`[SchematicObject] Creating lazy chunk iterator for ${this.id}...`);
 
+		performanceMonitor.startOperation("Chunk Iterator Creation");
 		const iterator = schematic.create_lazy_chunk_iterator(
 			chunkDimensions.chunkWidth,
 			chunkDimensions.chunkHeight,
@@ -1134,6 +944,7 @@ export class SchematicObject extends EventEmitter {
 			0,
 			0
 		);
+		performanceMonitor.endOperation("Chunk Iterator Creation");
 
 		const totalChunks = iterator.total_chunks();
 		console.log(`[SchematicObject] Chunk iterator created. Total chunks: ${totalChunks}`);
@@ -1167,16 +978,16 @@ export class SchematicObject extends EventEmitter {
 			0
 		);
 
-		console.log(`[SchematicObject] Processing ${totalChunks} chunks in immediate mode...`);
+		console.log(`[SchematicObject] Processing ${totalChunks} chunks in immediate mode (PARALLEL)...`);
 
-		// STEP 3: TRUE lazy processing - no accumulation
-		console.log("🔥 Processing chunks with minimal memory footprint...");
-		// const chunkProcessingStartTime = performance.now();
+		performanceMonitor.startOperation("Process All Chunks");
 
-		while (iterator.has_next()) {
-			const chunkData = iterator.next();
-			if (!chunkData) break;
+		// Parallel Processing Logic
+		const CONCURRENCY_LIMIT = navigator.hardwareConcurrency || 4;
+		const activePromises: Promise<void>[] = [];
 
+		// Helper to dispatch a chunk task
+		const processChunk = async (chunkData: any) => {
 			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
 
 			// Bounds culling
@@ -1205,11 +1016,11 @@ export class SchematicObject extends EventEmitter {
 							processedChunkCount
 						);
 					}
-					continue;
+					return;
 				}
 			}
 
-			// Process chunk and immediately add to scene
+			// Process chunk
 			const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 				{
 					blocks: blocks,
@@ -1228,16 +1039,13 @@ export class SchematicObject extends EventEmitter {
 				const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
 				chunkMap.set(chunkKey, chunkMeshes);
 
-				// IMMEDIATELY apply properties and add to scene
+				// Apply properties and add to scene
 				this.applyPropertiesToObjects(chunkMeshes);
 				chunkMeshes.forEach((mesh) => {
 					this.group.add(mesh);
 				});
 
 				totalMeshCount += chunkMeshes.length;
-
-				// Clear the chunk meshes reference to allow GC
-				// (they're now only referenced by the scene graph)
 			}
 
 			// Update progress occasionally
@@ -1249,8 +1057,31 @@ export class SchematicObject extends EventEmitter {
 					processedChunkCount
 				);
 			}
+		};
+
+		// Iterate and dispatch tasks
+		while (iterator.has_next()) {
+			const chunkData = iterator.next();
+			if (!chunkData) break;
+
+			// Wait if concurrency limit reached
+			if (activePromises.length >= CONCURRENCY_LIMIT) {
+				await Promise.race(activePromises);
+			}
+
+			// Start new task
+			const promise = processChunk(chunkData).then(() => {
+				// Remove self from active promises
+				const idx = activePromises.indexOf(promise);
+				if (idx > -1) activePromises.splice(idx, 1);
+			});
+			activePromises.push(promise);
 		}
 
+		// Wait for remaining tasks
+		await Promise.all(activePromises);
+
+		performanceMonitor.endOperation("Process All Chunks");
 
 
 		this.reportBuildProgress(
@@ -1390,6 +1221,9 @@ export class SchematicObject extends EventEmitter {
 		let frameCounterForLog = 0;
 		const LOG_INTERVAL_FRAMES = 30;
 
+		performanceMonitor.startOperation("schematic-build-incremental");
+		performanceMonitor.startOperation("Process All Chunks");
+
 		return new Promise((resolvePromise, rejectPromise) => {
 			const processNextFrame = async () => {
 				const frameProcessingStartTime = performance.now();
@@ -1405,7 +1239,9 @@ export class SchematicObject extends EventEmitter {
 							break;
 						}
 
+						performanceMonitor.startOperation("Get Chunk Data (WASM)");
 						const chunkData = iterator.next();
+						performanceMonitor.endOperation("Get Chunk Data (WASM)");
 						if (!chunkData) break;
 
 						const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
@@ -1439,6 +1275,7 @@ export class SchematicObject extends EventEmitter {
 						}
 
 						// Process chunk and IMMEDIATELY add to scene
+						performanceMonitor.startOperation("Build Chunk Mesh (Worker)");
 						const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
 							{
 								blocks: blocks,
@@ -1449,10 +1286,12 @@ export class SchematicObject extends EventEmitter {
 							schematicObject,
 							renderingBounds
 						);
+						performanceMonitor.endOperation("Build Chunk Mesh (Worker)");
 
 						processedChunkCount++;
 
 						if (chunkMeshes && chunkMeshes.length > 0) {
+							performanceMonitor.startOperation("Scene Update");
 							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
 							chunkMap.set(chunkKey, chunkMeshes);
 
@@ -1463,6 +1302,7 @@ export class SchematicObject extends EventEmitter {
 
 							meshesAddedThisFrame += chunkMeshes.length;
 							totalMeshCount += chunkMeshes.length;
+							performanceMonitor.endOperation("Scene Update");
 
 							// chunkMeshes can be GC'd after this point
 						}
@@ -1509,6 +1349,8 @@ export class SchematicObject extends EventEmitter {
 					if (iterator.has_next()) {
 						requestAnimationFrame(processNextFrame);
 					} else {
+						performanceMonitor.endOperation("Process All Chunks");
+
 						this.group.updateMatrixWorld(true);
 
 						// Return meshes from scene graph
@@ -1540,6 +1382,9 @@ export class SchematicObject extends EventEmitter {
 							processedChunkCount
 						);
 
+						// Ensure main operation is closed
+						performanceMonitor.endOperation("schematic-build-incremental");
+
 						setTimeout(() => {
 							if (this.schematicRenderer.uiManager) {
 								this.schematicRenderer.uiManager.hideProgressBar();
@@ -1549,6 +1394,8 @@ export class SchematicObject extends EventEmitter {
 						resolvePromise({ meshes: finalMeshes, chunkMap });
 					}
 				} catch (error) {
+					performanceMonitor.endOperation("Process All Chunks");
+					performanceMonitor.endOperation("schematic-build-incremental");
 					console.error(
 						`[SchematicObject:${schematicObject.id}] Critical error during TRUE lazy processing:`,
 						error
@@ -1850,11 +1697,25 @@ export class SchematicObject extends EventEmitter {
 		return this.schematicWrapper;
 	}
 
+	public getBlockEntitiesMap(): Map<string, any> {
+		if (this.blockEntitiesMap === null) {
+			this.blockEntitiesMap = new Map();
+			const entities = this.schematicWrapper.get_all_block_entities() || [];
+			for (const entity of entities) {
+				if (entity && entity.position && entity.position.length === 3) {
+					const key = `${entity.position[0]},${entity.position[1]},${entity.position[2]}`;
+					this.blockEntitiesMap.set(key, entity);
+				}
+			}
+		}
+		return this.blockEntitiesMap;
+	}
+
 	public async setBlockNoRebuild(
 		position: THREE.Vector3 | number[],
 		blockType: string
 	) {
-		performanceMonitor.startOperation("setBlockNoRebuild");
+		// performanceMonitor.startOperation("setBlockNoRebuild"); // Too much overhead for bulk operations
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
@@ -1868,8 +1729,9 @@ export class SchematicObject extends EventEmitter {
 
 		// Invalidate cached dimensions since we modified the schematic
 		this._cachedDimensions = null;
+		this.blockEntitiesMap = null;
 
-		performanceMonitor.endOperation("setBlockNoRebuild");
+		// performanceMonitor.endOperation("setBlockNoRebuild");
 	}
 
 	public async setBlockWithNbt(
@@ -2119,15 +1981,35 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		// Get the blocks in the chunk using the optimized method
-		const chunkBlockIndices = this.schematicWrapper.get_chunk_blocks_indices(
-			chunkOffset.x,
-			chunkOffset.y,
-			chunkOffset.z,
-			this.chunkDimensions.chunkWidth,
-			this.chunkDimensions.chunkHeight,
-			this.chunkDimensions.chunkLength
-		);
+		// Use WASM optimization to get both blocks and pre-filtered entities
+		// Cast to any as TS definitions might not be up to date immediately
+		let chunkData: any;
+		let blocks: any[];
+		let entities: any[] | undefined;
+
+		// Check if the new method exists (it should with nucleation 0.1.116)
+		if ((this.schematicWrapper as any).getChunkData) {
+			chunkData = (this.schematicWrapper as any).getChunkData(
+				chunkX,
+				chunkY,
+				chunkZ,
+				this.chunkDimensions.chunkWidth,
+				this.chunkDimensions.chunkHeight,
+				this.chunkDimensions.chunkLength
+			);
+			blocks = chunkData.blocks;
+			entities = chunkData.entities;
+		} else {
+			// Fallback for older versions
+			blocks = this.schematicWrapper.get_chunk_blocks_indices(
+				chunkOffset.x,
+				chunkOffset.y,
+				chunkOffset.z,
+				this.chunkDimensions.chunkWidth,
+				this.chunkDimensions.chunkHeight,
+				this.chunkDimensions.chunkLength
+			);
+		}
 
 		// Remove old chunk objects from the scene
 		this.removeChunkObjects(chunkX, chunkY, chunkZ);
@@ -2135,13 +2017,14 @@ export class SchematicObject extends EventEmitter {
 		// Build new chunk objects using the optimized format
 		const newChunkObjects = await this.worldMeshBuilder.getChunkMesh(
 			{
-				blocks: chunkBlockIndices, // This is already in format: [[x,y,z,paletteIndex],...]
+				blocks: blocks, // This is already in format: [[x,y,z,paletteIndex],...]
 				chunk_x: chunkX,
 				chunk_y: chunkY,
 				chunk_z: chunkZ,
 			},
 			this,
-			this.renderingBounds
+			this.renderingBounds,
+			entities // Pass pre-filtered entities if available
 		);
 
 		// Apply properties to the new objects
