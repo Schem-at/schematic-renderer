@@ -9,7 +9,7 @@ export class MaterialRegistry {
 	private materials = new Map<string, THREE.Material>();
 	private materialRefCount = new Map<string, number>();
 
-	private constructor() {}
+	private constructor() { }
 
 	static getInstance(): MaterialRegistry {
 		if (!MaterialRegistry.instance) {
@@ -38,13 +38,9 @@ export class MaterialRegistry {
 
 		// Clone the material to ensure we don't modify the original
 		const sharedMaterial = sourceMaterial.clone();
-		sharedMaterial.name = `shared_${
-			sourceMaterial.name || "material"
-		}_${key.substring(0, 8)}`;
+		sharedMaterial.name = `shared_${sourceMaterial.name || "material"
+			}_${key.substring(0, 8)}`;
 
-		// Enable mipmapping on textures for better performance at distance
-		// Uses NearestMipmapLinear for pixel-art style with smooth LOD transitions
-		this.enableMipmapping(sharedMaterial);
 
 		this.materials.set(key, sharedMaterial);
 		this.materialRefCount.set(key, 1);
@@ -52,23 +48,7 @@ export class MaterialRegistry {
 		return sharedMaterial;
 	}
 
-	/**
-	 * Enable mipmapping on material textures to reduce aliasing and improve performance at distance
-	 * Uses NearestMipmapLinearFilter to preserve pixel-art look while enabling mipmaps
-	 */
-	private enableMipmapping(material: THREE.Material): void {
-		const texturedMaterial = material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
-		
-		if (texturedMaterial.map) {
-			// NearestMipmapLinearFilter: Nearest for texel sampling, Linear between mip levels
-			// This preserves the pixel-art look while reducing aliasing at distance
-			texturedMaterial.map.generateMipmaps = true;
-			texturedMaterial.map.minFilter = THREE.NearestMipmapLinearFilter;
-			// Keep magFilter as Nearest for close-up pixel-art look
-			texturedMaterial.map.magFilter = THREE.NearestFilter;
-			texturedMaterial.map.needsUpdate = true;
-		}
-	}
+
 
 	/**
 	 * Create a unique key for a material based on its properties

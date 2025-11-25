@@ -181,6 +181,20 @@
 								</select>
 							</div>
 							<div>
+								<label
+									class="flex items-center gap-2 text-sm text-gray-300 font-medium cursor-pointer"
+								>
+									<input
+										type="checkbox"
+										x-model="config.greedyMeshing"
+										@change="toggleGreedyMeshing(config.greedyMeshing)"
+										class="w-4 h-4 rounded border-gray-600 bg-gray-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-gray-900"
+									/>
+									<span>🔲 Greedy Meshing</span>
+									<span class="text-xs text-gray-500">(reduces vertices)</span>
+								</label>
+							</div>
+							<div>
 								<label class="block text-sm text-gray-300 mb-2 font-medium"
 									>Number of Runs</label
 								>
@@ -371,6 +385,7 @@
 						schematicSize: "huge",
 						blockDensity: "medium",
 						meshBuildingMode: "batched",
+						greedyMeshing: false,
 						numberOfRuns: 1,
 					},
 
@@ -479,6 +494,18 @@
 						if (renderer && renderer.renderManager) {
 							const shadows = renderer.renderManager.renderer.shadowMap.enabled;
 							renderer.renderManager.renderer.shadowMap.enabled = !shadows;
+						}
+					},
+
+					toggleGreedyMeshing(enabled) {
+						const renderer = this.getRenderer();
+						if (renderer && renderer.worldMeshBuilder) {
+							renderer.worldMeshBuilder.setGreedyMeshing(enabled);
+							console.log(
+								`[Performance] Greedy meshing ${
+									enabled ? "enabled" : "disabled"
+								}`
+							);
 						}
 					},
 

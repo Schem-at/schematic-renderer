@@ -80,13 +80,17 @@ export class SharedMemoryPool {
     private inputBuffers: Map<string, SharedArrayBuffer | ArrayBuffer> = new Map();
     private outputBuffers: Map<string, SharedArrayBuffer | ArrayBuffer> = new Map();
 
-    // Pre-allocated large buffer for input data
-    private mainInputBuffer: SharedArrayBuffer | ArrayBuffer | null = null;
-    private mainInputSize: number = 0;
+    // Pre-allocated large buffer for input data (reserved for future optimization)
+    // @ts-expect-error Reserved for future optimization
+    private _mainInputBuffer: SharedArrayBuffer | ArrayBuffer | null = null;
+    // @ts-expect-error Reserved for future optimization
+    private _mainInputSize: number = 0;
 
-    // Pre-allocated large buffer for output data  
-    private mainOutputBuffer: SharedArrayBuffer | ArrayBuffer | null = null;
-    private mainOutputSize: number = 0;
+    // Pre-allocated large buffer for output data (reserved for future optimization)
+    // @ts-expect-error Reserved for future optimization
+    private _mainOutputBuffer: SharedArrayBuffer | ArrayBuffer | null = null;
+    // @ts-expect-error Reserved for future optimization
+    private _mainOutputSize: number = 0;
 
     constructor() {
         this.isShared = isSharedArrayBufferAvailable();

@@ -245,6 +245,12 @@ export class SchematicRenderer {
 			// Step 4: Initialize builders and managers
 			showProgress("Setting up renderer components...", 0.6);
 			this.worldMeshBuilder = new WorldMeshBuilder(this, this.cubane);
+
+			// Enable greedy meshing if configured
+			if (this.options.wasmMeshBuilderOptions?.greedyMeshingEnabled) {
+				this.worldMeshBuilder.setGreedyMeshing(true);
+			}
+
 			const schematicManagerOptions: SchematicManagerOptions = {
 				singleSchematicMode: this.options.singleSchematicMode,
 				callbacks: {
@@ -257,7 +263,18 @@ export class SchematicRenderer {
 				this,
 				schematicManagerOptions
 			);
+
+			// Initialize RenderManager (async for WebGPU support)
 			this.renderManager = new RenderManager(this);
+			await this.renderManager.initialize();
+
+			// Log renderer type
+			if (this.renderManager.isWebGPU) {
+				console.log('%c[SchematicRenderer] Using WebGPU Renderer', 'color: #4caf50; font-weight: bold');
+			} else {
+				console.log('[SchematicRenderer] Using WebGL Renderer');
+			}
+
 			this.highlightManager = new HighlightManager(this);
 			this.insignManager = new InsignManager(this);
 			this.insignIoManager = new InsignIoManager(this);

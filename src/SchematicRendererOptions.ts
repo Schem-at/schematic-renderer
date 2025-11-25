@@ -98,6 +98,50 @@ export interface WasmMeshBuilderOptions {
 	 * @default true (recommended)
 	 */
 	enabled?: boolean;
+
+	/**
+	 * Enable greedy meshing optimization.
+	 * 
+	 * Greedy meshing merges adjacent coplanar faces with the same material
+	 * into larger quads, dramatically reducing vertex count (5-10x reduction)
+	 * for large flat surfaces like walls and floors.
+	 * 
+	 * This improves both mesh building time and runtime rendering performance.
+	 * 
+	 * Note: Only works when WASM mesh builder is enabled.
+	 * 
+	 * @default false (until fully tested)
+	 */
+	greedyMeshingEnabled?: boolean;
+}
+
+export interface WebGPURendererOptions {
+	/**
+	 * Prefer WebGPU renderer when available.
+	 * 
+	 * When enabled, the renderer will attempt to use WebGPURenderer if the
+	 * browser supports WebGPU. Falls back to WebGLRenderer automatically
+	 * if WebGPU is not available.
+	 * 
+	 * Benefits of WebGPU:
+	 * - Access to Three.js Inspector for debugging
+	 * - Better performance for compute-heavy operations
+	 * - Modern GPU API with better parallelism
+	 * 
+	 * Requirements:
+	 * - Chrome 113+, Edge 113+, Safari 17+, Firefox (behind flag)
+	 * 
+	 * @default false (WebGL is more widely supported)
+	 */
+	preferWebGPU?: boolean;
+
+	/**
+	 * Force WebGPU renderer even if feature detection suggests it may not work well.
+	 * Use this for testing purposes only.
+	 * 
+	 * @default false
+	 */
+	forceWebGPU?: boolean;
 }
 
 export interface SchematicRendererOptions {
@@ -147,6 +191,8 @@ export interface SchematicRendererOptions {
 	gpuComputeOptions?: GPUComputeOptions;
 	// WASM mesh builder options (recommended for best performance)
 	wasmMeshBuilderOptions?: WasmMeshBuilderOptions;
+	// WebGPU renderer options (enables Three.js Inspector when available)
+	webgpuOptions?: WebGPURendererOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -227,6 +273,11 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	},
 	wasmMeshBuilderOptions: {
 		enabled: true, // Enabled by default - recommended for best performance
+		greedyMeshingEnabled: false, // Disabled by default until fully tested
+	},
+	webgpuOptions: {
+		preferWebGPU: false, // Disabled by default - WebGL is more widely supported
+		forceWebGPU: false,
 	},
 	resourcePackBlobs: {},
 };

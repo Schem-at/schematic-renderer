@@ -4,6 +4,9 @@
  * Provides a debug GUI panel using lil-gui for inspecting and tweaking
  * the SchematicRenderer in real-time. This is a first-class citizen of
  * the renderer that can be enabled via options.
+ * 
+ * When WebGPU mode is active, also integrates the Three.js Inspector
+ * for GPU profiling and debugging.
  */
 
 import GUI from 'lil-gui';
@@ -23,6 +26,7 @@ export class InspectorManager {
 	private panels: Map<string, InspectorPanel> = new Map();
 	private isVisible: boolean = true;
 	private state: Record<string, any> = {};
+	private threeInspector: any = null; // Three.js Inspector (WebGPU only)
 
 	constructor(renderer: SchematicRenderer, options: DebugOptions = {}) {
 		this.renderer = renderer;
@@ -38,7 +42,7 @@ export class InspectorManager {
 	}
 
 	private initialize(): void {
-		// Create main GUI
+		// Create main GUI (lil-gui - works with both WebGL and WebGPU)
 		this.gui = new GUI({
 			title: '🔧 Schematic Renderer',
 			width: 300
@@ -66,6 +70,9 @@ export class InspectorManager {
 			}
 		}
 
+		// Setup Three.js Inspector if WebGPU mode is active
+		this.setupThreeInspector();
+
 		// Handle visibility
 		if (!this.options.showOnStartup) {
 			this.hide();
@@ -73,6 +80,48 @@ export class InspectorManager {
 
 		// Add keyboard shortcut to toggle visibility
 		this.setupKeyboardShortcut();
+	}
+
+	/**
+	 * Setup Three.js Inspector when in WebGPU mode
+	 * The Inspector provides GPU profiling and debugging capabilities
+	 */
+	private setupThreeInspector(): void {
+		if (!this.renderer.renderManager) return;
+
+		const inspector = this.renderer.renderManager.getInspector();
+		if (inspector) {
+			this.threeInspector = inspector;
+
+			// Append Inspector DOM element to the canvas parent
+			const canvasParent = this.renderer.canvas.parentElement;
+			if (canvasParent && inspector.domElement) {
+				// Style the inspector to be positioned at the bottom
+				inspector.domElement.style.position = 'absolute';
+				inspector.domElement.style.bottom = '0';
+				inspector.domElement.style.left = '0';
+				inspector.domElement.style.right = '0';
+				inspector.domElement.style.zIndex = '9998';
+
+				canvasParent.appendChild(inspector.domElement);
+
+				console.log('%c[InspectorManager] Three.js Inspector attached (WebGPU mode)', 'color: #4caf50');
+			}
+		}
+	}
+
+	/**
+	 * Get the Three.js Inspector instance (WebGPU only)
+	 */
+	public getThreeInspector(): any {
+		return this.threeInspector;
+	}
+
+	/**
+	 * Check if Three.js Inspector is available
+	 */
+	public hasThreeInspector(): boolean {
+		return this.threeInspector !== null;
 	}
 
 	private initializeState(): void {
@@ -107,6 +156,7 @@ export class InspectorManager {
 			// GPU
 			gpuCompute: this.renderer.options.gpuComputeOptions?.enabled ?? false,
 			meshBuildingMode: this.renderer.options.meshBuildingMode ?? 'incremental',
+			greedyMeshing: this.renderer.options.wasmMeshBuilderOptions?.greedyMeshingEnabled ?? false,
 		};
 	}
 
@@ -333,33 +383,56 @@ export class InspectorManager {
 				console.log(`[Inspector] Mesh building mode: ${value}`);
 			});
 
+		folder.add(this.state, 'greedyMeshing')
+			.name('Greedy Meshing')
+			.onChange((value: boolean) => {
+				console.log(`[Inspector] Greedy meshing: ${value ? 'enabled' : 'disabled'}`);
+				if (this.renderer.worldMeshBuilder) {
+					this.renderer.worldMeshBuilder.setGreedyMeshing(value);
+				}
+				if (this.renderer.options.wasmMeshBuilderOptions) {
+					this.renderer.options.wasmMeshBuilderOptions.greedyMeshingEnabled = value;
+				}
+			});
+
 		// GPU info
 		const infoFolder = folder.addFolder('GPU Info');
+		const isWebGPUActive = this.renderer.renderManager?.isWebGPU ?? false;
 		const gpuInfo = {
 			renderer: 'Unknown',
 			vendor: 'Unknown',
-			webgpu: 'Checking...'
+			webgpu: 'Checking...',
+			activeRenderer: isWebGPUActive ? '🚀 WebGPU' : '🔷 WebGL'
 		};
 
-		// Get WebGL info
+		// Get GPU info based on renderer type
 		try {
 			const rm = this.renderer.renderManager as any;
 			if (rm?.renderer) {
-				const gl = rm.renderer.getContext();
-				const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-				if (debugInfo) {
-					gpuInfo.renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-					gpuInfo.vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+				if (isWebGPUActive) {
+					// WebGPU doesn't have the same debug info API
+					gpuInfo.renderer = 'WebGPU Renderer';
+					gpuInfo.vendor = 'GPU Adapter';
+				} else {
+					// WebGL debug info
+					const gl = rm.renderer.getContext();
+					const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+					if (debugInfo) {
+						gpuInfo.renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+						gpuInfo.vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+					}
 				}
 			}
 		} catch (e) {
 			// Ignore
 		}
 
-		// Check WebGPU
-		if (navigator.gpu) {
+		// Check WebGPU availability
+		if (isWebGPUActive) {
+			gpuInfo.webgpu = '✅ Active';
+		} else if (navigator.gpu) {
 			navigator.gpu.requestAdapter().then(adapter => {
-				gpuInfo.webgpu = adapter ? '✅ Available' : '❌ No adapter';
+				gpuInfo.webgpu = adapter ? '✅ Available (not used)' : '❌ No adapter';
 			}).catch(() => {
 				gpuInfo.webgpu = '❌ Not supported';
 			});
@@ -367,9 +440,10 @@ export class InspectorManager {
 			gpuInfo.webgpu = '❌ Not supported';
 		}
 
+		infoFolder.add(gpuInfo, 'activeRenderer').name('Active Renderer').disable();
 		infoFolder.add(gpuInfo, 'renderer').name('GPU').disable();
 		infoFolder.add(gpuInfo, 'vendor').name('Vendor').disable();
-		infoFolder.add(gpuInfo, 'webgpu').name('WebGPU').disable();
+		infoFolder.add(gpuInfo, 'webgpu').name('WebGPU Status').disable();
 
 		folder.close();
 		this.panels.set('gpu', { name: 'GPU', folder });

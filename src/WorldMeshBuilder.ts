@@ -21,7 +21,7 @@ import MeshBuilderWorker from "./workers/MeshBuilder.worker?worker&inline";
 import MeshBuilderWasmWorker from "./workers/MeshBuilderWasm.worker?worker&inline";
 import { GPUCapabilityManager } from "./gpu/GPUCapabilityManager";
 import { ComputeMeshBuilder } from "./gpu/ComputeMeshBuilder";
-import { getSharedMemoryPool, SharedMemoryPool, CHUNK_INPUT_HEADER_SIZE } from "./workers/SharedMemoryManager";
+import { getSharedMemoryPool, SharedMemoryPool } from "./workers/SharedMemoryManager";
 
 export const INVISIBLE_BLOCKS = new Set([
 	"minecraft:air",
@@ -34,6 +34,20 @@ export const INVISIBLE_BLOCKS = new Set([
 
 // Constants matching worker
 const POSITION_SCALE = 1024;
+
+/**
+ * Convert Int8 normals to Float32 for WebGPU compatibility.
+ * WebGPU requires vertex buffer strides to be multiples of 4 bytes.
+ * Int8 with 3 components has stride 3, which is invalid for WebGPU.
+ */
+function convertInt8NormalsToFloat32(int8Normals: Int8Array): Float32Array {
+	const float32Normals = new Float32Array(int8Normals.length);
+	for (let i = 0; i < int8Normals.length; i++) {
+		// Normalize from [-128, 127] to [-1.0, 1.0]
+		float32Normals[i] = int8Normals[i] / 127.0;
+	}
+	return float32Normals;
+}
 
 export class WorldMeshBuilder {
 	// @ts-ignore
@@ -66,6 +80,9 @@ export class WorldMeshBuilder {
 
 	// WASM Mesh Builder
 	private useWasmMeshBuilder: boolean = false;
+
+	// Timing stats for performance debugging
+	private _timingStats: { count: number; worker: number; buffer: number; tile: number; maxWorker: number; maxBuffer: number; maxTile: number } | null = null;
 
 	// SharedArrayBuffer for zero-copy transfers
 	private sharedMemoryPool: SharedMemoryPool | null = null;
@@ -187,6 +204,31 @@ export class WorldMeshBuilder {
 		return this.useSharedMemory && this.sharedMemoryPool !== null;
 	}
 
+	// Greedy meshing state
+	private greedyMeshingEnabled = false;
+
+	/**
+	 * Enable or disable greedy meshing optimization
+	 * Greedy meshing merges coplanar faces into larger quads, reducing vertex count significantly
+	 */
+	public setGreedyMeshing(enabled: boolean): void {
+		this.greedyMeshingEnabled = enabled;
+
+		// Notify all workers
+		for (const worker of this.workers) {
+			worker.postMessage({ type: "setGreedyMeshing", enabled });
+		}
+
+		console.log(`[WorldMeshBuilder] Greedy meshing ${enabled ? 'enabled' : 'disabled'}`);
+	}
+
+	/**
+	 * Check if greedy meshing is enabled
+	 */
+	public isGreedyMeshingEnabled(): boolean {
+		return this.greedyMeshingEnabled;
+	}
+
 	// Static stats collector
 	static stats = {
 		totalSetup: 0,
@@ -209,7 +251,8 @@ export class WorldMeshBuilder {
 	// Batch mode state
 	private batchPendingChunks: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
 	private batchFinishResolve: ((data: any) => void) | null = null;
-	private batchFinishReject: ((err: any) => void) | null = null;
+	// @ts-expect-error Reserved for error handling in batch mode
+	private _batchFinishReject: ((err: any) => void) | null = null;
 
 	private handleWorkerMessage(worker: Worker, event: MessageEvent) {
 		const { type, chunkId, error, timings, ...data } = event.data;
@@ -250,7 +293,7 @@ export class WorldMeshBuilder {
 			if (this.batchFinishResolve) {
 				this.batchFinishResolve(data);
 				this.batchFinishResolve = null;
-				this.batchFinishReject = null;
+				this._batchFinishReject = null;
 			}
 		} else if (type === "error") {
 			if (chunkId) {
@@ -596,8 +639,11 @@ export class WorldMeshBuilder {
 	}
 
 	/**
-	 * Process all chunks in batch mode - returns just a few merged meshes
+	 * Process all chunks in batch mode - returns merged meshes
 	 * instead of one mesh per chunk. This reduces main thread work significantly.
+	 * 
+	 * CRITICAL: We split into sub-batches to avoid creating meshes that are too large.
+	 * Without this, a 256³ schematic creates 3 meshes with millions of vertices = crash.
 	 * 
 	 * @param allChunks - Iterator or array of chunk data
 	 * @param onProgress - Optional progress callback
@@ -617,93 +663,128 @@ export class WorldMeshBuilder {
 
 		const startTime = performance.now();
 		const totalChunks = allChunks.length;
-		let processedCount = 0;
+		let globalProcessedCount = 0;
 
-		console.log(`[WorldMeshBuilder] Starting BATCH mode for ${totalChunks} chunks...`);
+		// CRITICAL: Split into sub-batches to avoid creating meshes that are too large
+		// Each sub-batch creates ~3 meshes (solid, transparent, etc.)
+		// Without this, a 256³ schematic creates 3 meshes with millions of vertices each = crash
+		const SUB_BATCH_SIZE = 64; // ~64 chunks per sub-batch = manageable mesh sizes
+		const allResultMeshes: THREE.Mesh[] = [];
+
+		const numSubBatches = Math.ceil(totalChunks / SUB_BATCH_SIZE);
+		console.log(`[WorldMeshBuilder] Starting BATCH mode: ${totalChunks} chunks in ${numSubBatches} sub-batches (${SUB_BATCH_SIZE} chunks each)...`);
 
 		// Use a single dedicated worker for accumulation
 		const batchWorker = this.workers[0];
 
-		// Start batch mode on worker
-		batchWorker.postMessage({ type: "startBatch" });
+		for (let subBatchIdx = 0; subBatchIdx < numSubBatches; subBatchIdx++) {
+			const subBatchStart = subBatchIdx * SUB_BATCH_SIZE;
+			const subBatchEnd = Math.min(subBatchStart + SUB_BATCH_SIZE, totalChunks);
+			const subBatchChunks = allChunks.slice(subBatchStart, subBatchEnd);
 
-		// Process all chunks through the batch worker
-		for (const chunkData of allChunks) {
-			const chunkId = `batch_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`;
+			// Start batch mode on worker for this sub-batch
+			batchWorker.postMessage({ type: "startBatch" });
 
-			// Convert blocks to Int32Array if needed
-			let blocksArray: Int32Array;
-			if (chunkData.blocks instanceof Int32Array) {
-				blocksArray = chunkData.blocks;
-			} else {
-				blocksArray = new Int32Array(chunkData.blocks.length * 4);
-				for (let i = 0; i < chunkData.blocks.length; i++) {
-					const block = chunkData.blocks[i];
-					blocksArray[i * 4] = block[0];
-					blocksArray[i * 4 + 1] = block[1];
-					blocksArray[i * 4 + 2] = block[2];
-					blocksArray[i * 4 + 3] = block[3];
-				}
-			}
+			// Process this sub-batch's chunks through the batch worker
+			for (const chunkData of subBatchChunks) {
+				const chunkId = `batch_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`;
 
-			// Calculate origin
-			let minX = Infinity, minY = Infinity, minZ = Infinity;
-			for (let i = 0; i < blocksArray.length; i += 4) {
-				minX = Math.min(minX, blocksArray[i]);
-				minY = Math.min(minY, blocksArray[i + 1]);
-				minZ = Math.min(minZ, blocksArray[i + 2]);
-			}
-			const originX = isFinite(minX) ? minX : 0;
-			const originY = isFinite(minY) ? minY : 0;
-			const originZ = isFinite(minZ) ? minZ : 0;
-
-			// Wait for chunk to be accumulated
-			await new Promise<void>((resolve, reject) => {
-				this.batchPendingChunks.set(chunkId, { resolve, reject });
-
-				// Use SharedArrayBuffer if available
-				if (this.useSharedMemory && this.sharedMemoryPool) {
-					const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
-						chunkId,
-						blocksArray,
-						originX,
-						originY,
-						originZ
-					);
-					batchWorker.postMessage({
-						type: "buildChunkBatched",
-						chunkId,
-						sharedInputBuffer: sharedBuffer,
-						chunkOrigin: [originX, originY, originZ]
-					});
+				// Convert blocks to Int32Array if needed
+				let blocksArray: Int32Array;
+				if (chunkData.blocks instanceof Int32Array) {
+					blocksArray = chunkData.blocks;
 				} else {
-					batchWorker.postMessage({
-						type: "buildChunkBatched",
-						chunkId,
-						blocks: blocksArray,
-						chunkOrigin: [originX, originY, originZ]
-					}, [blocksArray.buffer]);
+					blocksArray = new Int32Array(chunkData.blocks.length * 4);
+					for (let i = 0; i < chunkData.blocks.length; i++) {
+						const block = chunkData.blocks[i];
+						blocksArray[i * 4] = block[0];
+						blocksArray[i * 4 + 1] = block[1];
+						blocksArray[i * 4 + 2] = block[2];
+						blocksArray[i * 4 + 3] = block[3];
+					}
 				}
+
+				// Calculate origin
+				let minX = Infinity, minY = Infinity, minZ = Infinity;
+				for (let i = 0; i < blocksArray.length; i += 4) {
+					minX = Math.min(minX, blocksArray[i]);
+					minY = Math.min(minY, blocksArray[i + 1]);
+					minZ = Math.min(minZ, blocksArray[i + 2]);
+				}
+				const originX = isFinite(minX) ? minX : 0;
+				const originY = isFinite(minY) ? minY : 0;
+				const originZ = isFinite(minZ) ? minZ : 0;
+
+				// Wait for chunk to be accumulated
+				await new Promise<void>((resolve, reject) => {
+					this.batchPendingChunks.set(chunkId, { resolve, reject });
+
+					// Use SharedArrayBuffer if available
+					if (this.useSharedMemory && this.sharedMemoryPool) {
+						const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
+							chunkId,
+							blocksArray,
+							originX,
+							originY,
+							originZ
+						);
+						batchWorker.postMessage({
+							type: "buildChunkBatched",
+							chunkId,
+							sharedInputBuffer: sharedBuffer,
+							chunkOrigin: [originX, originY, originZ]
+						});
+					} else {
+						batchWorker.postMessage({
+							type: "buildChunkBatched",
+							chunkId,
+							blocks: blocksArray,
+							chunkOrigin: [originX, originY, originZ]
+						}, [blocksArray.buffer]);
+					}
+				});
+
+				globalProcessedCount++;
+				if (onProgress) {
+					onProgress(globalProcessedCount, totalChunks);
+				}
+			}
+
+			// Finish this sub-batch and get merged results
+			const batchResult = await new Promise<any>((resolve, reject) => {
+				this.batchFinishResolve = resolve;
+				this._batchFinishReject = reject;
+				batchWorker.postMessage({ type: "finishBatch" });
 			});
 
-			processedCount++;
-			if (onProgress) {
-				onProgress(processedCount, totalChunks);
+			console.log(`[WorldMeshBuilder] Sub-batch ${subBatchIdx + 1}/${numSubBatches}: ${batchResult.meshes.length} meshes from ${subBatchChunks.length} chunks`);
+
+			// Create Three.js meshes from this sub-batch's merged data
+			const subBatchMeshes = this.createMeshesFromBatchResult(batchResult);
+			allResultMeshes.push(...subBatchMeshes);
+
+			// Let browser breathe between sub-batches - use requestAnimationFrame for real breathing
+			// This allows the browser to render and process events
+			if (subBatchIdx < numSubBatches - 1) {
+				await new Promise<void>(r => {
+					requestAnimationFrame(() => {
+						setTimeout(r, 0);
+					});
+				});
 			}
 		}
 
-		// Finish batch and get merged results
-		const batchResult = await new Promise<any>((resolve, reject) => {
-			this.batchFinishResolve = resolve;
-			this.batchFinishReject = reject;
-			batchWorker.postMessage({ type: "finishBatch" });
-		});
-
 		const elapsed = performance.now() - startTime;
-		console.log(`[WorldMeshBuilder] BATCH mode complete: ${batchResult.meshes.length} merged meshes from ${totalChunks} chunks in ${elapsed.toFixed(0)}ms`);
+		console.log(`[WorldMeshBuilder] BATCH mode complete: ${allResultMeshes.length} merged meshes from ${totalChunks} chunks in ${elapsed.toFixed(0)}ms`);
 
-		// Create Three.js meshes from merged data
-		const resultMeshes: THREE.Mesh[] = [];
+		return allResultMeshes;
+	}
+
+	/**
+	 * Helper to create Three.js meshes from a batch result
+	 */
+	private createMeshesFromBatchResult(batchResult: any): THREE.Mesh[] {
+		const meshes: THREE.Mesh[] = [];
 
 		for (const meshData of batchResult.meshes) {
 			const geometry = new THREE.BufferGeometry();
@@ -715,8 +796,9 @@ export class WorldMeshBuilder {
 			}
 
 			if (meshData.normals) {
-				const normAttr = new THREE.Int8BufferAttribute(meshData.normals, 3);
-				normAttr.normalized = true;
+				// Convert Int8 normals to Float32 for WebGPU compatibility
+				const float32Normals = convertInt8NormalsToFloat32(meshData.normals);
+				const normAttr = new THREE.BufferAttribute(float32Normals, 3);
 				geometry.setAttribute("normal", normAttr);
 			}
 
@@ -735,19 +817,17 @@ export class WorldMeshBuilder {
 				}
 			}
 
-			const mesh = new THREE.Mesh(geometry, this.paletteCache.globalMaterials);
+			const mesh = new THREE.Mesh(geometry, this.paletteCache!.globalMaterials);
 			mesh.name = `batched_${meshData.category}`;
 
 			// NO scale needed - batch mode returns Float32 world coordinates
 			// (already de-quantized in worker)
 
 			this.configureMeshForCategory(mesh, meshData.category as keyof ChunkMeshes);
-			resultMeshes.push(mesh);
+			meshes.push(mesh);
 		}
 
-		console.log(`[WorldMeshBuilder] Created ${resultMeshes.length} THREE.Mesh objects (was ${totalChunks} without batching)`);
-
-		return resultMeshes;
+		return meshes;
 	}
 
 	public async getChunkGeometries(
@@ -1047,57 +1127,46 @@ export class WorldMeshBuilder {
 				}
 			}
 		} else {
-			// Fallback: JS-side filtering using cached map
+			// Fallback: JS-side filtering using cached spatial index
 			const blockEntityMap = schematicObject.getBlockEntitiesMap();
 
-			// Only scan for entities if map is not empty
-			if (blockEntityMap.size > 0) {
-				// Iterate ENTITIES instead of blocks (sparse iteration)
-				// Find entities that fall within this chunk's bounds
-				const chunkMinX = chunkData.chunk_x * this.chunkSize;
-				const chunkMinY = chunkData.chunk_y * this.chunkSize;
-				const chunkMinZ = chunkData.chunk_z * this.chunkSize;
-				const chunkMaxX = chunkMinX + this.chunkSize;
-				const chunkMaxY = chunkMinY + this.chunkSize;
-				const chunkMaxZ = chunkMinZ + this.chunkSize;
+			// Only scan for entities if map is not empty and reasonably sized
+			// For very large entity maps, skip to avoid O(E*C) complexity
+			if (blockEntityMap.size > 0 && blockEntityMap.size < 10000) {
+				// Use spatial cache if available, otherwise build it once
+				let spatialCache = (schematicObject as any)._entitySpatialCache as Map<string, any[]> | undefined;
 
-				// NOTE: Iterating the whole map might still be slow if map is huge.
-				// But usually tile entities are rare.
-				// Optimally we'd have a spatial index for entities, but iteration is O(E) vs O(Blocks)
-				for (const [, entity] of blockEntityMap) {
-					const pos = entity.position; // [x,y,z]
-					if (pos[0] >= chunkMinX && pos[0] < chunkMaxX &&
-						pos[1] >= chunkMinY && pos[1] < chunkMaxY &&
-						pos[2] >= chunkMinZ && pos[2] < chunkMaxZ) {
+				if (!spatialCache) {
+					// Build spatial index once - O(E)
+					spatialCache = new Map<string, any[]>();
+					for (const [, entity] of blockEntityMap) {
+						const pos = entity.position;
+						const chunkKey = `${Math.floor(pos[0] / this.chunkSize)},${Math.floor(pos[1] / this.chunkSize)},${Math.floor(pos[2] / this.chunkSize)}`;
+						if (!spatialCache.has(chunkKey)) {
+							spatialCache.set(chunkKey, []);
+						}
+						spatialCache.get(chunkKey)!.push(entity);
+					}
+					(schematicObject as any)._entitySpatialCache = spatialCache;
+					console.log(`[WorldMeshBuilder] Built entity spatial cache: ${blockEntityMap.size} entities in ${spatialCache.size} chunks`);
+				}
 
-						// It's in this chunk. We need the palette index to know block type.
-						// We have to look it up or assume we can just re-get it from schematic.
-						// But wait, we only need paletteIndex to check if it's a "sign" etc.
-						// Let's just query schematic wrapper for this single block type if needed.
-						// Actually, 'workerBlocks' has the data.
-						// Let's iterate workerBlocks ONLY if we found entities? No, that defeats the purpose.
+				// O(1) lookup for this chunk's entities
+				const chunkKey = `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`;
+				const chunkEntities = spatialCache.get(chunkKey);
 
-						// Let's do a quick lookup in the workerBlocks? No, that's O(N).
-						// Actually, we can just use schematic.get_block(x,y,z) since it's cached/fast?
-						// Or just use the entity data. Entity data usually doesn't have block type.
-
-						// Compromise: Since we stripped the main loop, we can't easily pair blocks with entities.
-						// BUT we only need to pair them to call `cubane.getBlockMesh`.
-						// `cubane.getBlockMesh` needs the block string (e.g. "minecraft:chest[facing=north]").
-
-						// We can look up the block state from the schematic wrapper for this specific position.
+				if (chunkEntities && chunkEntities.length > 0) {
+					for (const entity of chunkEntities) {
+						const pos = entity.position;
 						const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
-						// const paletteIndex = -1; // We don't strictly need index if we have name
 
-						// Check if valid tile entity type
 						if (blockName && (blockName.includes("sign") || blockName.includes("chest") || blockName.includes("banner"))) {
-							// Emulate the struct expected by tile processing
 							tileEntityBlocks.push({
 								x: pos[0],
 								y: pos[1],
 								z: pos[2],
-								paletteIndex: -1, // Special flag
-								blockName: blockName, // Pass name directly
+								paletteIndex: -1,
+								blockName: blockName,
 								nbtData: entity
 							});
 						}
@@ -1112,6 +1181,14 @@ export class WorldMeshBuilder {
 		const originZ = chunkData.chunk_z * this.chunkSize;
 
 		const resultMeshes: THREE.Object3D[] = [];
+
+		// TIMING: Track operation timings
+		const timings = {
+			workerDispatch: 0,
+			bufferGeometry: 0,
+			tileEntities: 0
+		};
+		let timingStart = performance.now();
 
 		// Try GPU compute first, then fall back to workers
 		let buildResult: { meshes: any[], origin: number[] } | null = null;
@@ -1150,8 +1227,16 @@ export class WorldMeshBuilder {
 					this.initializeWorkers();
 				}
 
+				// TIMING: Measure getFreeWorker wait time
+				const getFreeWorkerStart = performance.now();
+
 				// Get a free worker
 				const worker = await this.getFreeWorker();
+
+				const getFreeWorkerTime = performance.now() - getFreeWorkerStart;
+				if (getFreeWorkerTime > 10) {
+					console.warn(`[WorkerPool] getFreeWorker took ${getFreeWorkerTime.toFixed(0)}ms (free: ${this.freeWorkers.length}/${this.workers.length}, queue: ${this.workerQueue.length})`);
+				}
 
 				// Add timeout to prevent hanging
 				const timeoutId = setTimeout(() => {
@@ -1186,6 +1271,9 @@ export class WorldMeshBuilder {
 					worker: worker
 				});
 
+				// TIMING: Record when we send the message
+				const sendTime = performance.now();
+
 				// Use SharedArrayBuffer for zero-copy transfer if available
 				if (this.useSharedMemory && this.sharedMemoryPool && workerBlocks instanceof Int32Array) {
 					// Write data to shared memory - worker reads directly, no copy!
@@ -1201,7 +1289,8 @@ export class WorldMeshBuilder {
 						type: "buildChunk",
 						chunkId,
 						sharedInputBuffer: sharedBuffer,
-						chunkOrigin: [originX, originY, originZ]
+						chunkOrigin: [originX, originY, originZ],
+						_sendTime: sendTime // Pass timestamp for round-trip measurement
 					});
 				} else {
 					// Fallback: transfer via postMessage (copies data)
@@ -1221,6 +1310,8 @@ export class WorldMeshBuilder {
 
 			buildResult = await workerPromise;
 		}
+		timings.workerDispatch = performance.now() - timingStart;
+		timingStart = performance.now();
 
 		try {
 			// Process build result (same for GPU and worker)
@@ -1246,9 +1337,9 @@ export class WorldMeshBuilder {
 					}
 
 					if (meshData.normals) {
-						// Int8Array, normalized=true maps [-128, 127] to [-1.0, 1.0]
-						const normAttr = new THREE.Int8BufferAttribute(meshData.normals, 3);
-						normAttr.normalized = true;
+						// Convert Int8 normals to Float32 for WebGPU compatibility
+						const float32Normals = convertInt8NormalsToFloat32(meshData.normals);
+						const normAttr = new THREE.BufferAttribute(float32Normals, 3);
 						geometry.setAttribute("normal", normAttr);
 					}
 
@@ -1301,6 +1392,8 @@ export class WorldMeshBuilder {
 					resultMeshes.push(mesh);
 				}
 			}
+			timings.bufferGeometry = performance.now() - timingStart;
+			timingStart = performance.now();
 
 			// Process tile entities (Main Thread)
 			if (tileEntityBlocks.length > 0) {
@@ -1349,8 +1442,26 @@ export class WorldMeshBuilder {
 					}
 				}
 			}
+			timings.tileEntities = performance.now() - timingStart;
 		} catch (error) {
 			console.error("Error building chunk mesh:", error);
+		}
+
+		// Log detailed timing every 10 chunks
+		if (!this._timingStats) {
+			this._timingStats = { count: 0, worker: 0, buffer: 0, tile: 0, maxWorker: 0, maxBuffer: 0, maxTile: 0 };
+		}
+		this._timingStats.count++;
+		this._timingStats.worker += timings.workerDispatch;
+		this._timingStats.buffer += timings.bufferGeometry;
+		this._timingStats.tile += timings.tileEntities;
+		this._timingStats.maxWorker = Math.max(this._timingStats.maxWorker, timings.workerDispatch);
+		this._timingStats.maxBuffer = Math.max(this._timingStats.maxBuffer, timings.bufferGeometry);
+		this._timingStats.maxTile = Math.max(this._timingStats.maxTile, timings.tileEntities);
+
+		if (this._timingStats.count % 10 === 0) {
+			const n = this._timingStats.count;
+			console.log(`[ChunkTiming n=${n}] avg: worker=${(this._timingStats.worker / n).toFixed(1)}ms, buffer=${(this._timingStats.buffer / n).toFixed(1)}ms, tile=${(this._timingStats.tile / n).toFixed(1)}ms | max: w=${this._timingStats.maxWorker.toFixed(0)}, b=${this._timingStats.maxBuffer.toFixed(0)}, t=${this._timingStats.maxTile.toFixed(0)}`);
 		}
 
 		return resultMeshes;

@@ -194,7 +194,7 @@ export class PerformanceMonitor {
             sessionId,
             schematicId,
             startTime: performance.now(),
-            renderMode,
+            renderMode: renderMode as 'immediate' | 'incremental' | 'instanced',
             memorySnapshots: [],
             peakMemoryUsage: 0,
             memoryLeaks: 0,
@@ -211,11 +211,11 @@ export class PerformanceMonitor {
             frameHistory: []
         };
 
-        this.sessions.set(sessionId, this.currentSession);
+        this.sessions.set(sessionId, this.currentSession!);
 
         // Take baseline memory snapshot
         this.baselineMemory = this.takeMemorySnapshot('session_start');
-        this.currentSession.memorySnapshots.push(this.baselineMemory);
+        this.currentSession!.memorySnapshots.push(this.baselineMemory);
 
         // Start continuous memory monitoring
         this.startMemoryMonitoring();

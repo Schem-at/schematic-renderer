@@ -35,6 +35,10 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'credentialless',
     },
+    // Serve schematics folder from project root
+    fs: {
+      allow: ['..', '../..'],
+    },
   },
   root: './test/pages',
   publicDir: '../public',

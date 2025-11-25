@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Schematic Performance Test</title>
+		<script type="module" src="./scripts/schematic-perf.ts"></script>
+
+		<!-- Tailwind CSS -->
+		<script src="https://cdn.tailwindcss.com"></script>
+		<script>
+			tailwind.config = {
+				theme: {
+					extend: {
+						fontFamily: {
+							mono: ["JetBrains Mono", "Fira Code", "monospace"],
+						},
+					},
+				},
+			};
+		</script>
+
+		<!-- JetBrains Mono Font -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+			rel="stylesheet"
+		/>
+
+		<style>
+			body {
+				font-family: "JetBrains Mono", monospace;
+			}
+			.perf-card {
+				backdrop-filter: blur(10px);
+			}
+			.stat-value {
+				font-variant-numeric: tabular-nums;
+			}
+			#canvas {
+				image-rendering: pixelated;
+			}
+			.progress-bar {
+				transition: width 0.3s ease-out;
+			}
+		</style>
+	</head>
+	<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+		<!-- Header -->
+		<header class="bg-zinc-900/80 border-b border-zinc-800 px-6 py-4">
+			<div class="flex items-center justify-between max-w-7xl mx-auto">
+				<div class="flex items-center gap-4">
+					<a
+						href="index.html"
+						class="text-zinc-400 hover:text-zinc-200 transition-colors"
+					>
+						← Back
+					</a>
+					<h1 class="text-xl font-bold text-emerald-400">
+						Schematic Performance Test
+					</h1>
+				</div>
+				<div class="flex items-center gap-2 text-sm text-zinc-500">
+					<span id="renderer-type">WebGL</span>
+					<span>•</span>
+					<span id="worker-count">0 workers</span>
+				</div>
+			</div>
+		</header>
+
+		<!-- Main Layout -->
+		<div class="flex h-[calc(100vh-65px)]">
+			<!-- Left Panel: Controls -->
+			<div
+				class="w-80 bg-zinc-900/50 border-r border-zinc-800 p-4 overflow-y-auto"
+			>
+				<!-- Schematic Selection -->
+				<section class="mb-6">
+					<h2
+						class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3"
+					>
+						Schematic
+					</h2>
+					<select
+						id="schematic-select"
+						class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+					>
+						<option value="">Select a schematic...</option>
+					</select>
+					<div class="mt-3">
+						<label class="block text-xs text-zinc-500 mb-2"
+							>Or drop a file here:</label
+						>
+						<div
+							id="drop-zone"
+							class="border-2 border-dashed border-zinc-700 rounded-lg p-4 text-center text-zinc-500 text-sm hover:border-emerald-500 hover:text-emerald-400 transition-colors cursor-pointer"
+						>
+							Drop .schem, .litematic, .nbt
+						</div>
+					</div>
+				</section>
+
+				<!-- Performance Options -->
+				<section class="mb-6">
+					<h2
+						class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3"
+					>
+						Options
+					</h2>
+					<div class="space-y-3">
+						<label class="flex items-center gap-3 cursor-pointer">
+							<input
+								type="checkbox"
+								id="opt-webgpu"
+								class="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
+							/>
+							<span class="text-sm">Use WebGPU (experimental)</span>
+						</label>
+						<label class="flex items-center gap-3 cursor-pointer">
+							<input
+								type="checkbox"
+								id="opt-greedy"
+								class="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
+							/>
+							<span class="text-sm">Greedy Meshing</span>
+						</label>
+						<label class="flex items-center gap-3 cursor-pointer">
+							<input
+								type="checkbox"
+								id="opt-wasm"
+								checked
+								class="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-emerald-500 focus:ring-emerald-500"
+							/>
+							<span class="text-sm">WASM Mesh Builder</span>
+						</label>
+						<div>
+							<label class="text-sm text-zinc-400 block mb-1">Build Mode</label>
+							<select
+								id="opt-build-mode"
+								class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm"
+							>
+								<option value="incremental">Incremental (default)</option>
+								<option value="immediate">Immediate</option>
+								<option value="batched">Batched</option>
+							</select>
+						</div>
+					</div>
+				</section>
+
+				<!-- Actions -->
+				<section class="mb-6">
+					<button
+						id="btn-load"
+						class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Load Schematic
+					</button>
+					<button
+						id="btn-reload"
+						class="w-full mt-2 bg-zinc-700 hover:bg-zinc-600 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+					>
+						Reload (Clear Cache)
+					</button>
+				</section>
+
+				<!-- Real-time Stats -->
+				<section>
+					<h2
+						class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3"
+					>
+						Live Stats
+					</h2>
+					<div class="space-y-2 text-sm">
+						<div class="flex justify-between">
+							<span class="text-zinc-500">FPS</span>
+							<span id="stat-fps" class="stat-value text-emerald-400">--</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Draw Calls</span>
+							<span id="stat-drawcalls" class="stat-value">--</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Triangles</span>
+							<span id="stat-triangles" class="stat-value">--</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Memory</span>
+							<span id="stat-memory" class="stat-value">--</span>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<!-- Center: Canvas -->
+			<div class="flex-1 relative bg-zinc-950">
+				<canvas id="canvas" class="w-full h-full"></canvas>
+
+				<!-- Progress Overlay -->
+				<div
+					id="progress-overlay"
+					class="absolute inset-0 bg-zinc-950/90 flex items-center justify-center hidden"
+				>
+					<div class="text-center max-w-md px-4">
+						<div class="w-80 h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
+							<div
+								id="progress-bar"
+								class="progress-bar h-full bg-emerald-500 w-0 transition-all duration-200"
+							></div>
+						</div>
+						<p id="progress-text" class="text-zinc-300 text-sm font-medium">
+							Loading...
+						</p>
+						<div
+							id="progress-detail"
+							class="text-zinc-500 text-xs mt-2 font-mono"
+						></div>
+						<div class="mt-4 grid grid-cols-3 gap-2 text-xs">
+							<div class="bg-zinc-800/50 rounded p-2">
+								<div class="text-zinc-500">Meshes</div>
+								<div id="progress-meshes" class="text-emerald-400 font-bold">
+									0
+								</div>
+							</div>
+							<div class="bg-zinc-800/50 rounded p-2">
+								<div class="text-zinc-500">Triangles</div>
+								<div id="progress-tris" class="text-blue-400 font-bold">0</div>
+							</div>
+							<div class="bg-zinc-800/50 rounded p-2">
+								<div class="text-zinc-500">Vertices</div>
+								<div id="progress-verts" class="text-purple-400 font-bold">
+									0
+								</div>
+							</div>
+							<div class="bg-zinc-800/50 rounded p-2">
+								<div class="text-zinc-500">Memory</div>
+								<div id="progress-mem" class="text-yellow-400 font-bold">
+									0 MB
+								</div>
+							</div>
+							<div class="bg-zinc-800/50 rounded p-2">
+								<div class="text-zinc-500">Time</div>
+								<div id="progress-time" class="text-zinc-300 font-bold">0s</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Right Panel: Performance Results -->
+			<div class="w-96 bg-zinc-900/50 border-l border-zinc-800 flex flex-col">
+				<!-- Results Section -->
+				<div class="p-4 overflow-y-auto flex-1">
+					<h2
+						class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3"
+					>
+						Performance Results
+					</h2>
+
+					<!-- Summary Cards -->
+					<div id="results-container" class="space-y-4">
+						<div class="text-zinc-500 text-sm text-center py-8">
+							Load a schematic to see performance results
+						</div>
+					</div>
+
+					<!-- Detailed Breakdown -->
+					<div id="breakdown-container" class="mt-6 hidden">
+						<h3 class="text-sm font-semibold text-zinc-400 mb-2">
+							Timing Breakdown
+						</h3>
+						<div id="breakdown-list" class="space-y-1 text-xs"></div>
+					</div>
+				</div>
+
+				<!-- Console Log Section -->
+				<div class="border-t border-zinc-800 flex-shrink-0">
+					<div class="p-2 flex items-center justify-between bg-zinc-900/80">
+						<span class="text-xs text-zinc-500 uppercase tracking-wider"
+							>Console Log</span
+						>
+						<button
+							id="btn-clear-log"
+							class="text-xs text-zinc-500 hover:text-zinc-300"
+						>
+							Clear
+						</button>
+					</div>
+					<div
+						id="log-container"
+						class="h-40 overflow-y-auto p-2 bg-zinc-950 font-mono text-xs leading-relaxed"
+					>
+						<div class="text-zinc-600">
+							Ready. Select a schematic to begin testing.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

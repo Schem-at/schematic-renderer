@@ -12,6 +12,18 @@ import type { ChunkGeometryData } from '../types';
 // Constants matching compute output format
 const POSITION_SCALE = 1024;
 
+/**
+ * Convert Int8 normals to Float32 for WebGPU compatibility.
+ * WebGPU requires vertex buffer strides to be multiples of 4 bytes.
+ */
+function convertInt8NormalsToFloat32(int8Normals: Int8Array): Float32Array {
+	const float32Normals = new Float32Array(int8Normals.length);
+	for (let i = 0; i < int8Normals.length; i++) {
+		float32Normals[i] = int8Normals[i] / 127.0;
+	}
+	return float32Normals;
+}
+
 export interface GPUMeshOptions {
 	/** Category for render ordering and material setup */
 	category: string;
@@ -52,14 +64,14 @@ export class GPUMeshFactory {
 			}
 		}
 
-		// Handle quantized normals (Int8Array normalized to [-1, 1])
+		// Handle normals - convert Int8 to Float32 for WebGPU compatibility
 		if (geoData.normals) {
 			if (geoData.normals instanceof Int8Array) {
-				const normAttr = new THREE.Int8BufferAttribute(geoData.normals, 3);
-				normAttr.normalized = true;
+				const float32Normals = convertInt8NormalsToFloat32(geoData.normals);
+				const normAttr = new THREE.BufferAttribute(float32Normals, 3);
 				geometry.setAttribute('normal', normAttr);
 			} else {
-				// Float32Array path
+				// Already Float32Array
 				const normAttr = new THREE.BufferAttribute(geoData.normals as Float32Array, 3);
 				geometry.setAttribute('normal', normAttr);
 			}
@@ -183,20 +195,18 @@ export class GPUMeshFactory {
 			}
 		}
 
-		// Update normals
+		// Update normals - convert Int8 to Float32 for WebGPU compatibility
 		if (geoData.normals) {
+			const float32Normals = geoData.normals instanceof Int8Array
+				? convertInt8NormalsToFloat32(geoData.normals)
+				: geoData.normals as Float32Array;
+
 			const normAttr = geometry.getAttribute('normal');
-			if (normAttr && normAttr.array.length === geoData.normals.length) {
-				(normAttr.array as typeof geoData.normals).set(geoData.normals);
+			if (normAttr && normAttr.array.length === float32Normals.length) {
+				(normAttr.array as Float32Array).set(float32Normals);
 				normAttr.needsUpdate = true;
 			} else {
-				if (geoData.normals instanceof Int8Array) {
-					const newAttr = new THREE.Int8BufferAttribute(geoData.normals, 3);
-					newAttr.normalized = true;
-					geometry.setAttribute('normal', newAttr);
-				} else {
-					geometry.setAttribute('normal', new THREE.BufferAttribute(geoData.normals as Float32Array, 3));
-				}
+				geometry.setAttribute('normal', new THREE.BufferAttribute(float32Normals, 3));
 			}
 		}
 

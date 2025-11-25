@@ -9,10 +9,21 @@ import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
+// WebGPU imports (conditional - loaded dynamically)
+let WebGPURenderer: any = null;
+// @ts-expect-error Reserved for future WebGPU post-processing support
+let _PostProcessing: any = null;
+let Inspector: any = null;
+
+// Type for renderer that can be either WebGL or WebGPU
+type AnyRenderer = THREE.WebGLRenderer | any; // WebGPURenderer type
+
 export class RenderManager {
 	private schematicRenderer: SchematicRenderer;
-	public renderer!: THREE.WebGLRenderer;
-	private composer!: EffectComposer;
+	public renderer!: AnyRenderer;
+	private composer!: EffectComposer | null;
+	// @ts-expect-error Reserved for future WebGPU post-processing support
+	private _postProcessing: any = null;
 	private passes: Map<string, any> = new Map();
 	private eventEmitter: EventEmitter;
 	private pmremGenerator!: THREE.PMREMGenerator;
@@ -26,6 +37,12 @@ export class RenderManager {
 	private resizeTimeout: number | null = null;
 	private renderRequested: boolean = false;
 
+	// WebGPU state
+	private _isWebGPU: boolean = false;
+	// @ts-expect-error Reserved for future use
+	private _webgpuInitialized: boolean = false;
+	private inspector: any = null;
+
 	// HDRI backup for camera switching
 	private originalBackground: THREE.Texture | THREE.Color | null = null;
 	private isometricBackground: THREE.Color;
@@ -38,23 +55,149 @@ export class RenderManager {
 		this.isometricBackground = new THREE.Color(0x87ceeb); // Sky blue
 
 		this.setInitialSize();
-		this.initRenderer();
-		this.initComposer();
-		this.initDefaultPasses(this.schematicRenderer.options);
+	}
+
+	/**
+	 * Async initialization - must be called after constructor
+	 */
+	public async initialize(): Promise<void> {
+		const webgpuOptions = this.schematicRenderer.options.webgpuOptions;
+		const preferWebGPU = webgpuOptions?.preferWebGPU ?? false;
+		const forceWebGPU = webgpuOptions?.forceWebGPU ?? false;
+
+		if (preferWebGPU || forceWebGPU) {
+			const webgpuAvailable = await this.checkWebGPUSupport();
+
+			if (webgpuAvailable || forceWebGPU) {
+				try {
+					await this.initWebGPURenderer();
+					this._isWebGPU = true;
+					console.log('%c[RenderManager] WebGPU Renderer initialized', 'color: #4caf50; font-weight: bold');
+				} catch (error) {
+					console.warn('[RenderManager] WebGPU initialization failed, falling back to WebGL:', error);
+					this.initWebGLRenderer();
+				}
+			} else {
+				console.log('[RenderManager] WebGPU not available, using WebGL');
+				this.initWebGLRenderer();
+			}
+		} else {
+			this.initWebGLRenderer();
+		}
+
 		this.setupEventListeners();
 		this.updateCanvasSize();
 
+		// HDRI loading uses ShaderMaterials internally (PMREMGenerator, WebGLCubeRenderTarget)
+		// which are not compatible with WebGPU's node-based material system.
+		// Skip HDRI in WebGPU mode and use a solid color background.
 		if (
 			this.schematicRenderer.options?.hdri !== undefined &&
 			this.schematicRenderer.options.hdri !== ""
 		) {
-			this.setupHDRIBackground(this.schematicRenderer.options.hdri);
+			if (this._isWebGPU) {
+				console.warn('[RenderManager] HDRI backgrounds are not yet supported in WebGPU mode. Using solid color with enhanced lighting.');
+				// Set a nice sky color
+				this.schematicRenderer.sceneManager.scene.background = new THREE.Color(0x87ceeb);
+
+				// Create a simple procedural environment for PBR materials
+				// This provides basic ambient lighting for MeshStandardMaterial
+				this.setupWebGPUEnvironment();
+			} else {
+				this.setupHDRIBackground(this.schematicRenderer.options.hdri);
+			}
 		}
 
 		// Listen for camera changes to handle HDRI switching
 		this.schematicRenderer.cameraManager.on("cameraChanged", (event) => {
 			this.handleCameraChange(event.newCamera);
 		});
+	}
+
+	/**
+	 * Check if WebGPU is supported in the current browser
+	 */
+	private async checkWebGPUSupport(): Promise<boolean> {
+		if (!navigator.gpu) {
+			return false;
+		}
+
+		try {
+			const adapter = await navigator.gpu.requestAdapter();
+			if (!adapter) {
+				return false;
+			}
+
+			// Try to get a device to verify full support
+			const device = await adapter.requestDevice();
+			device.destroy();
+
+			return true;
+		} catch (error) {
+			console.warn('[RenderManager] WebGPU check failed:', error);
+			return false;
+		}
+	}
+
+	/**
+	 * Check if currently using WebGPU renderer
+	 */
+	public get isWebGPU(): boolean {
+		return this._isWebGPU;
+	}
+
+	/**
+	 * Get the Three.js Inspector (WebGPU only)
+	 */
+	public getInspector(): any {
+		return this.inspector;
+	}
+
+	/**
+	 * Setup simple environment lighting for WebGPU mode
+	 * Since HDRI/PMREMGenerator isn't compatible with WebGPU, we enhance
+	 * the scene lighting to compensate for the lack of environment maps.
+	 */
+	private setupWebGPUEnvironment(): void {
+		const scene = this.schematicRenderer.sceneManager.scene;
+		const sceneManager = this.schematicRenderer.sceneManager;
+
+		// Boost existing lights to compensate for no environment map
+		// SceneManager stores lights in a Map, access via getLight if available
+		if ((sceneManager as any).lights) {
+			const lights = (sceneManager as any).lights as Map<string, THREE.Light>;
+			const ambientLight = lights.get('ambientLight') as THREE.AmbientLight;
+			if (ambientLight) {
+				ambientLight.intensity = 3.5; // Boost ambient significantly
+			}
+			const directionalLight = lights.get('directionalLight') as THREE.DirectionalLight;
+			if (directionalLight) {
+				directionalLight.intensity = 1.5; // Boost directional
+			}
+		}
+
+		// Add a hemisphere light for better sky/ground lighting
+		const hemiLight = new THREE.HemisphereLight(
+			0x87ceeb, // Sky color (light blue)
+			0x666666, // Ground color (medium gray for better contrast)
+			2.0       // Higher intensity
+		);
+		hemiLight.name = 'webgpuHemiLight';
+		scene.add(hemiLight);
+
+		// Add a fill light from the opposite direction for better shading
+		const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+		fillLight.position.set(-15, 15, 15);
+		fillLight.name = 'webgpuFillLight';
+		scene.add(fillLight);
+
+		// Add a back light for rim lighting effect
+		const backLight = new THREE.DirectionalLight(0xffffcc, 0.4);
+		backLight.position.set(0, -10, -20);
+		backLight.name = 'webgpuBackLight';
+		scene.add(backLight);
+
+		console.log('[RenderManager] WebGPU environment lighting configured');
 	}
 
 	private setInitialSize(): void {
@@ -78,7 +221,69 @@ export class RenderManager {
 		this.initialSizeSet = true;
 	}
 
-	private initRenderer(): void {
+	/**
+	 * Initialize WebGPU Renderer
+	 */
+	private async initWebGPURenderer(): Promise<void> {
+		// Dynamically import WebGPU modules
+		const webgpuModule = await import('three/webgpu');
+		WebGPURenderer = webgpuModule.WebGPURenderer;
+		_PostProcessing = webgpuModule.PostProcessing;
+
+		// Try to import Inspector (no types available yet)
+		try {
+			// @ts-expect-error Inspector module doesn't have type definitions yet
+			const inspectorModule = await import('three/examples/jsm/inspector/Inspector.js');
+			Inspector = inspectorModule.Inspector;
+		} catch (e) {
+			console.warn('[RenderManager] Three.js Inspector not available:', e);
+		}
+
+		this.renderer = new WebGPURenderer({
+			canvas: this.schematicRenderer.canvas,
+			antialias: true,
+			powerPreference: "high-performance",
+		});
+
+		// WebGPU requires async initialization
+		await this.renderer.init();
+
+		if (this.initialSizeSet) {
+			const parent = this.schematicRenderer.canvas.parentElement;
+			if (parent) {
+				const width = parent.clientWidth;
+				const height = parent.clientHeight;
+				this.renderer.setSize(width, height, false);
+			}
+		}
+
+		this.renderer.setPixelRatio(window.devicePixelRatio);
+
+		// Initialize Inspector if available
+		if (Inspector && this.schematicRenderer.options.debugOptions?.enableInspector) {
+			try {
+				this.inspector = new Inspector();
+				this.inspector.setRenderer(this.renderer);
+				console.log('[RenderManager] Three.js Inspector initialized');
+			} catch (e) {
+				console.warn('[RenderManager] Failed to initialize Inspector:', e);
+			}
+		}
+
+		// WebGPU uses different post-processing
+		// For now, we'll skip the complex post-processing and use basic rendering
+		// The postprocessing library doesn't support WebGPU yet
+		this.composer = null;
+		this._webgpuInitialized = true;
+
+		// Create PMREMGenerator for HDRI
+		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+	}
+
+	/**
+	 * Initialize WebGL Renderer (original code)
+	 */
+	private initWebGLRenderer(): void {
 		this.renderer = new THREE.WebGLRenderer({
 			canvas: this.schematicRenderer.canvas,
 			alpha: true,
@@ -98,9 +303,14 @@ export class RenderManager {
 
 		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 		this.renderer.setPixelRatio(window.devicePixelRatio);
+
+		this.initComposer();
+		this.initDefaultPasses(this.schematicRenderer.options);
 	}
 
 	private initComposer(): void {
+		if (this._isWebGPU) return; // WebGPU uses different post-processing
+
 		this.composer = new EffectComposer(this.renderer);
 		const renderPass = new RenderPass(
 			this.schematicRenderer.sceneManager.scene,
@@ -158,12 +368,16 @@ export class RenderManager {
 			"webglcontextrestored",
 			this.handleContextRestored
 		);
-		canvas.addEventListener("webglcontextlost", this.handleContextLost, false);
-		canvas.addEventListener(
-			"webglcontextrestored",
-			this.handleContextRestored,
-			false
-		);
+
+		// Only add context lost handlers for WebGL
+		if (!this._isWebGPU) {
+			canvas.addEventListener("webglcontextlost", this.handleContextLost, false);
+			canvas.addEventListener(
+				"webglcontextrestored",
+				this.handleContextRestored,
+				false
+			);
+		}
 	}
 
 	private isPMREMGeneratorDisposed(): boolean {
@@ -274,9 +488,7 @@ export class RenderManager {
 
 			this.contextLost = false;
 
-			this.initRenderer();
-			this.initComposer();
-			this.initDefaultPasses(this.schematicRenderer.options);
+			this.initWebGLRenderer();
 			this.updateCanvasSize();
 
 			if (this.hdriPath) {
@@ -298,6 +510,8 @@ export class RenderManager {
 	};
 
 	private initDefaultPasses(options: any): void {
+		if (this._isWebGPU || !this.composer) return;
+
 		const gammaCorrectionEffect = new GammaCorrectionEffect(
 			options.gamma ?? 0.5
 		);
@@ -367,7 +581,10 @@ export class RenderManager {
 
 		if (!this.contextLost) {
 			this.renderer.setSize(width, height, false);
-			this.composer.setSize(width, height);
+
+			if (this.composer) {
+				this.composer.setSize(width, height);
+			}
 
 			const camera = this.schematicRenderer.cameraManager.activeCamera
 				.camera as THREE.PerspectiveCamera;
@@ -448,19 +665,28 @@ export class RenderManager {
 			return { renderTimeMs: 0, rendererInfo: renderer ? renderer.info : null };
 		}
 
-		const gl = renderer.getContext();
-		if (!gl || gl.isContextLost()) {
-			console.warn(
-				"[RenderManager] Attempted to render with lost WebGL context for stats."
-			);
-			this.contextLost = true;
-			return { renderTimeMs: 0, rendererInfo: renderer.info };
+		// Skip context check for WebGPU
+		if (!this._isWebGPU) {
+			const gl = renderer.getContext();
+			if (!gl || gl.isContextLost()) {
+				console.warn(
+					"[RenderManager] Attempted to render with lost WebGL context for stats."
+				);
+				this.contextLost = true;
+				return { renderTimeMs: 0, rendererInfo: renderer.info };
+			}
 		}
 
 		const renderStartTime = performance.now();
 		try {
 			this.isRendering = true;
-			this.composer.render();
+
+			if (this._isWebGPU) {
+				// WebGPU direct rendering
+				this.renderer.render(scene, camera);
+			} else if (this.composer) {
+				this.composer.render();
+			}
 		} catch (error) {
 			console.error(
 				"[RenderManager] Error during renderSingleFrameAndGetStats:",
@@ -485,14 +711,31 @@ export class RenderManager {
 		try {
 			this.isRendering = true;
 
-			const gl = this.renderer.getContext();
-			if (!gl || gl.isContextLost()) {
-				console.warn("Attempted to render with lost WebGL context");
-				this.contextLost = true;
-				return;
+			// Skip context check for WebGPU
+			if (!this._isWebGPU) {
+				const gl = this.renderer.getContext();
+				if (!gl || gl.isContextLost()) {
+					console.warn("Attempted to render with lost WebGL context");
+					this.contextLost = true;
+					return;
+				}
 			}
 
-			this.composer.render();
+			if (this._isWebGPU) {
+				// WebGPU rendering
+				const scene = this.schematicRenderer.sceneManager.scene;
+				const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+				this.renderer.render(scene, camera);
+
+				// Resolve timestamp queries to prevent overflow (for Inspector)
+				if (this.renderer.resolveTimestampsAsync) {
+					this.renderer.resolveTimestampsAsync('render').catch(() => {
+						// Silently ignore - timestamps are optional for profiling
+					});
+				}
+			} else if (this.composer) {
+				this.composer.render();
+			}
 		} catch (error) {
 			console.error("Render error:", error);
 			this.eventEmitter.emit("renderError", { error });
@@ -517,7 +760,10 @@ export class RenderManager {
 		if (this.contextLost) return;
 
 		this.renderer.setSize(width, height, false);
-		this.composer.setSize(width, height);
+
+		if (this.composer) {
+			this.composer.setSize(width, height);
+		}
 
 		const camera = this.schematicRenderer.cameraManager.activeCamera
 			.camera as THREE.PerspectiveCamera;
@@ -547,7 +793,7 @@ export class RenderManager {
 		}
 	}
 
-	public getRenderer(): THREE.WebGLRenderer {
+	public getRenderer(): AnyRenderer {
 		return this.renderer;
 	}
 
@@ -587,6 +833,11 @@ export class RenderManager {
 
 		if (this.currentEnvMap) {
 			this.currentEnvMap.dispose();
+		}
+
+		if (this.inspector) {
+			// Inspector cleanup if needed
+			this.inspector = null;
 		}
 
 		this.renderer.dispose();

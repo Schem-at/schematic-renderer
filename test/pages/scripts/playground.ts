@@ -76,6 +76,12 @@ const renderer = new SchematicRenderer(
 		gamma: 0.45,
 		enableAdaptiveFPS: false,
 
+		// Enable WebGPU if available (falls back to WebGL)
+		webgpuOptions: {
+			preferWebGPU: false, // Try WebGPU first
+			forceWebGPU: false, // Don't force if not supported
+		},
+
 		// Enable the debug inspector GUI (press ` to toggle)
 		debugOptions: {
 			enableInspector: true,

@@ -59,7 +59,7 @@
 		"postprocessing": "^6.35.4",
 		"simplex-noise": "^4.0.3",
 		"stats-js": "^1.0.1",
-		"three": "^0.176.0",
+		"three": "^0.181.2",
 		"three-creative-controls": "^1.0.1",
 		"vite-plugin-top-level-await": "^1.4.4",
 		"vite-plugin-wasm": "^3.3.0",

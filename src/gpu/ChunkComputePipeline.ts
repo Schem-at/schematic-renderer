@@ -13,6 +13,18 @@ import type { ChunkGeometryData, PaletteCache } from '../types';
 // Constants matching worker output format
 const POSITION_SCALE = 1024;
 
+/**
+ * Convert Int8 normals to Float32 for WebGPU compatibility.
+ * WebGPU requires vertex buffer strides to be multiples of 4 bytes.
+ */
+function convertInt8NormalsToFloat32(int8Normals: Int8Array): Float32Array {
+	const float32Normals = new Float32Array(int8Normals.length);
+	for (let i = 0; i < int8Normals.length; i++) {
+		float32Normals[i] = int8Normals[i] / 127.0;
+	}
+	return float32Normals;
+}
+
 export interface ChunkBuildRequest {
 	chunkId: string;
 	blocks: Int32Array | number[][];
@@ -207,9 +219,9 @@ export class ChunkComputePipeline {
 			}
 
 			if (geoData.normals) {
-				// Int8Array, normalized=true maps [-128, 127] to [-1.0, 1.0]
-				const normAttr = new THREE.Int8BufferAttribute(geoData.normals as Int8Array, 3);
-				normAttr.normalized = true;
+				// Convert Int8 to Float32 for WebGPU compatibility
+				const float32Normals = convertInt8NormalsToFloat32(geoData.normals as Int8Array);
+				const normAttr = new THREE.BufferAttribute(float32Normals, 3);
 				geometry.setAttribute("normal", normAttr);
 			}
 

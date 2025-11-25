@@ -10,7 +10,7 @@
 import initWasm, { MeshBuilder, get_version } from '../wasm/mesh_builder_wasm.js';
 // @ts-ignore - WASM binary import
 import wasmUrl from '../wasm/mesh_builder_wasm_bg.wasm?url';
-import { CHUNK_INPUT_HEADER_SIZE, BYTES_PER_BLOCK } from './SharedMemoryManager';
+import { CHUNK_INPUT_HEADER_SIZE } from './SharedMemoryManager';
 
 // Types
 type PaletteGeometryData = {
@@ -39,10 +39,12 @@ let meshBuilder: MeshBuilder | null = null;
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 let useSharedMemory = false;
+let useGreedyMeshing = false;  // Enable greedy meshing optimization
 
 // Batch mode state - accumulates all chunks before returning
 // Uses Float32 for positions to avoid Int16 overflow with world coordinates
-let batchMode = false;
+// @ts-expect-error State tracking variable used internally
+let _batchMode = false;
 let batchAccumulators: Map<string, {
     positions: number[];  // Will become Float32Array (world coordinates, not quantized)
     normals: number[];    // Will become Int8Array
@@ -122,6 +124,11 @@ self.onmessage = async (event: MessageEvent) => {
             case "buildChunkBatched":
                 buildChunkBatched(payload as unknown as ChunkBuildRequest);
                 break;
+            case "setGreedyMeshing":
+                useGreedyMeshing = payload.enabled;
+                console.log(`[MeshBuilderWasm Worker] Greedy meshing ${useGreedyMeshing ? 'enabled' : 'disabled'}`);
+                self.postMessage({ type: "greedyMeshingSet", enabled: useGreedyMeshing });
+                break;
             default:
                 console.warn(`[MeshBuilderWasm Worker] Unknown message type: ${type}`);
         }
@@ -139,7 +146,7 @@ self.onmessage = async (event: MessageEvent) => {
  * Start batch mode - chunks will be accumulated instead of returned
  */
 function startBatch() {
-    batchMode = true;
+    _batchMode = true;
     batchAccumulators.clear();
     self.postMessage({ type: "batchStarted" });
 }
@@ -185,15 +192,15 @@ function finishBatch() {
     const elapsed = performance.now() - startTime;
     console.log(`[MeshBuilderWasm Worker] Batch finished: ${meshes.length} meshes in ${elapsed.toFixed(2)}ms`);
 
-    batchMode = false;
+    _batchMode = false;
     batchAccumulators.clear();
 
-    self.postMessage({
+    (self as unknown as Worker).postMessage({
         type: "batchFinished",
         meshes,
         origin: [0, 0, 0],
         timings: { finalize: elapsed }
-    }, transferables);
+    }, { transfer: transferables });
 }
 
 /**
@@ -237,7 +244,11 @@ function buildChunkBatched(request: ChunkBuildRequest) {
     }
 
     // Build chunk with WASM - use chunk's min position as origin
-    const result = meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
+    // Use greedy meshing if enabled for better vertex reduction
+    const result = useGreedyMeshing
+        // @ts-expect-error build_chunk_greedy is dynamically added by WASM
+        ? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
+        : meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
 
     // The WASM returns quantized Int16 positions relative to the origin we passed
     // We need to de-quantize and convert to world Float32 coordinates
@@ -440,8 +451,11 @@ function buildChunk(request: ChunkBuildRequest) {
 
     const wasmStart = performance.now();
 
-    // Call WASM build_chunk
-    const result = meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
+    // Call WASM build_chunk (with or without greedy meshing)
+    const result = useGreedyMeshing
+        // @ts-expect-error build_chunk_greedy is dynamically added by WASM
+        ? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
+        : meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
 
     const wasmTime = performance.now() - wasmStart;
     const elapsed = performance.now() - startTime;
@@ -479,5 +493,5 @@ function buildChunk(request: ChunkBuildRequest) {
             wasm: wasmTime,
             dataTransfer: sharedInputBuffer ? 0 : (elapsed - wasmTime)
         }
-    }, transferables);
+    }, { transfer: transferables });
 }

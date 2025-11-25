@@ -1,125 +1,169 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schematic Renderer - Test Suite</title>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Schematic Renderer - Test Suite</title>
 
-    <!-- DaisyUI -->
-    <link
-        href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
-        rel="stylesheet"
-        type="text/css"
-    />
+		<!-- DaisyUI -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+			rel="stylesheet"
+			type="text/css"
+		/>
 
-    <!-- Tailwind CSS with DaisyUI -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: "#2563eb", // Tailwind's blue-600
-                        secondary: "#1d4ed8", // Tailwind's blue-700
-                    },
-                },
-            },
-            daisyui: {
-                themes: ["dark", "light"],
-            },
-        };
-    </script>
+		<!-- Tailwind CSS with DaisyUI -->
+		<script src="https://cdn.tailwindcss.com"></script>
+		<script>
+			tailwind.config = {
+				theme: {
+					extend: {
+						colors: {
+							primary: "#2563eb", // Tailwind's blue-600
+							secondary: "#1d4ed8", // Tailwind's blue-700
+						},
+					},
+				},
+				daisyui: {
+					themes: ["dark", "light"],
+				},
+			};
+		</script>
 
-    <!-- Include Material Icons -->
-    <link
-        href="https://fonts.googleapis.com/icon?family=Material+Icons"
-        rel="stylesheet"
-    />
-</head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="text-center mb-12">
-            <h1 class="text-4xl font-bold mb-4">Schematic Renderer Test Suite</h1>
-            <p class="text-gray-300 text-lg">Choose a test page to explore different features</p>
-        </div>
+		<!-- Include Material Icons -->
+		<link
+			href="https://fonts.googleapis.com/icon?family=Material+Icons"
+			rel="stylesheet"
+		/>
+	</head>
+	<body class="bg-gray-900 text-white min-h-screen">
+		<div class="container mx-auto px-4 py-8">
+			<!-- Header -->
+			<div class="text-center mb-12">
+				<h1 class="text-4xl font-bold mb-4">Schematic Renderer Test Suite</h1>
+				<p class="text-gray-300 text-lg">
+					Choose a test page to explore different features
+				</p>
+			</div>
 
-        <!-- Test Pages Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            <!-- Playground -->
-            <div class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow">
-                <div class="card-body">
-                    <h2 class="card-title text-blue-400">
-                        <span class="material-icons">build</span>
-                        Playground
-                    </h2>
-                    <p class="text-gray-300">Interactive playground with all renderer features and controls</p>
-                    <div class="card-actions justify-end">
-                        <a href="playground.html" class="btn btn-primary">
-                            <span class="material-icons">launch</span>
-                            Open
-                        </a>
-                    </div>
-                </div>
-            </div>
+			<!-- Test Pages Grid -->
+			<div
+				class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto"
+			>
+				<!-- Playground -->
+				<div
+					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
+				>
+					<div class="card-body">
+						<h2 class="card-title text-blue-400">
+							<span class="material-icons">build</span>
+							Playground
+						</h2>
+						<p class="text-gray-300">
+							Interactive playground with all renderer features and controls
+						</p>
+						<div class="card-actions justify-end">
+							<a href="playground.html" class="btn btn-primary">
+								<span class="material-icons">launch</span>
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
 
-            <!-- Performance Test -->
-            <div class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow">
-                <div class="card-body">
-                    <h2 class="card-title text-yellow-400">
-                        <span class="material-icons">speed</span>
-                        Performance Test
-                    </h2>
-                    <p class="text-gray-300">Test renderer performance with large schematics and configurable parameters</p>
-                    <div class="card-actions justify-end">
-                        <a href="performance.html" class="btn btn-primary">
-                            <span class="material-icons">launch</span>
-                            Open
-                        </a>
-                    </div>
-                </div>
-            </div>
+				<!-- Performance Test -->
+				<div
+					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
+				>
+					<div class="card-body">
+						<h2 class="card-title text-yellow-400">
+							<span class="material-icons">speed</span>
+							Performance Test
+						</h2>
+						<p class="text-gray-300">
+							Test renderer performance with large schematics and configurable
+							parameters
+						</p>
+						<div class="card-actions justify-end">
+							<a href="performance.html" class="btn btn-primary">
+								<span class="material-icons">launch</span>
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
 
-            <!-- Simulation Demo -->
-            <div class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow">
-                <div class="card-body">
-                    <h2 class="card-title text-green-400">
-                        <span class="material-icons">settings_input_component</span>
-                        Redstone Simulation
-                    </h2>
-                    <p class="text-gray-300">Interactive redstone simulation with real-time updates and debugging controls</p>
-                    <div class="card-actions justify-end">
-                        <a href="simulation.html" class="btn btn-primary">
-                            <span class="material-icons">launch</span>
-                            Open
-                        </a>
-                    </div>
-                </div>
-            </div>
+				<!-- Schematic Performance -->
+				<div
+					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
+				>
+					<div class="card-body">
+						<h2 class="card-title text-emerald-400">
+							<span class="material-icons">rocket_launch</span>
+							Schematic Perf
+						</h2>
+						<p class="text-gray-300">
+							Focused performance testing for large schematics with detailed
+							metrics
+						</p>
+						<div class="card-actions justify-end">
+							<a href="schematic-perf.html" class="btn btn-primary">
+								<span class="material-icons">launch</span>
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
 
-            <!-- Insign Regions -->
-            <div class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow">
-                <div class="card-body">
-                    <h2 class="card-title text-purple-400">
-                        <span class="material-icons">map</span>
-                        Insign Regions
-                    </h2>
-                    <p class="text-gray-300">Visualize Insign region annotations and metadata from schematic signs</p>
-                    <div class="card-actions justify-end">
-                        <a href="insign.html" class="btn btn-primary">
-                            <span class="material-icons">launch</span>
-                            Open
-                        </a>
-                    </div>
-                </div>
-            </div>
+				<!-- Simulation Demo -->
+				<div
+					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
+				>
+					<div class="card-body">
+						<h2 class="card-title text-green-400">
+							<span class="material-icons">settings_input_component</span>
+							Redstone Simulation
+						</h2>
+						<p class="text-gray-300">
+							Interactive redstone simulation with real-time updates and
+							debugging controls
+						</p>
+						<div class="card-actions justify-end">
+							<a href="simulation.html" class="btn btn-primary">
+								<span class="material-icons">launch</span>
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
 
-        </div>
+				<!-- Insign Regions -->
+				<div
+					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
+				>
+					<div class="card-body">
+						<h2 class="card-title text-purple-400">
+							<span class="material-icons">map</span>
+							Insign Regions
+						</h2>
+						<p class="text-gray-300">
+							Visualize Insign region annotations and metadata from schematic
+							signs
+						</p>
+						<div class="card-actions justify-end">
+							<a href="insign.html" class="btn btn-primary">
+								<span class="material-icons">launch</span>
+								Open
+							</a>
+						</div>
+					</div>
+				</div>
+			</div>
 
-        <!-- Footer -->
-        <div class="text-center mt-12 text-gray-400">
-            <p>Schematic Renderer Test Suite - Development Environment</p>
-        </div>
-    </div>
-</body>
+			<!-- Footer -->
+			<div class="text-center mt-12 text-gray-400">
+				<p>Schematic Renderer Test Suite - Development Environment</p>
+			</div>
+		</div>
+	</body>
 </html>
