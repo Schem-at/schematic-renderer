@@ -1623,29 +1623,23 @@ export class WorldMeshBuilder {
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
 		mesh.frustumCulled = true;
-		const materials = Array.isArray(mesh.material)
-			? mesh.material
-			: [mesh.material];
-		materials.forEach((mat) => {
-			if (!(mat instanceof THREE.Material)) return;
-			switch (category) {
-				case "water":
-					mesh.renderOrder = 3;
-					mat.transparent = true;
-					if ("opacity" in mat) (mat as any).opacity = 0.8;
-					break;
-				case "transparent":
-					mesh.renderOrder = 2;
-					mat.transparent = true;
-					break;
-				case "emissive":
-					mesh.renderOrder = 1;
-					break;
-				case "redstone":
-					mesh.userData.isDynamic = true;
-					break;
-			}
-		});
+		
+		// Optimization: Material properties are now handled in precomputePaletteGeometries via MaterialRegistry keys.
+		// We only set mesh-level properties here.
+		switch (category) {
+			case "water":
+				mesh.renderOrder = 3;
+				break;
+			case "transparent":
+				mesh.renderOrder = 2;
+				break;
+			case "emissive":
+				mesh.renderOrder = 1;
+				break;
+			case "redstone":
+				mesh.userData.isDynamic = true;
+				break;
+		}
 	}
 
 	private extractAllMeshData(
