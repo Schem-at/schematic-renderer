@@ -54,7 +54,11 @@ export class MaterialRegistry {
 	 * Create a unique key for a material based on its properties
 	 */
 	private createMaterialKey(material: THREE.Material): string {
-		const keyParts: string[] = [material.type, material.name || "unnamed"];
+		// OPTIMIZATION: Do NOT include material.name in the key
+		// Cubane assigns unique names (e.g. "minecraft:stone", "minecraft:dirt") 
+		// even when they share the same texture atlas and properties.
+		// By ignoring the name, we can merge them into a single shared material.
+		const keyParts: string[] = [material.type];
 
 		// Add common material properties to the key
 		if (
@@ -79,13 +83,19 @@ export class MaterialRegistry {
 						// For generated textures
 						keyParts.push(`map:${material.map.uuid}`);
 					}
+				} else {
+					// Fallback to UUID if image is not accessible
+					keyParts.push(`map:${material.map.uuid}`);
 				}
 			}
 
-			// Transparency
+			// Transparency and Alpha Test
 			if (material.transparent) {
 				keyParts.push(`t:1`);
 				keyParts.push(`o:${material.opacity}`);
+			}
+			if (material.alphaTest > 0) {
+				keyParts.push(`at:${material.alphaTest}`);
 			}
 
 			// Side

@@ -311,6 +311,18 @@ export class RenderManager {
 	private initComposer(): void {
 		if (this._isWebGPU) return; // WebGPU uses different post-processing
 
+		const postOpts = this.schematicRenderer.options.postProcessingOptions;
+		// If master switch disabled, don't create composer
+		if (postOpts && postOpts.enabled === false) return;
+
+		// If all individual effects disabled, don't create composer
+		if (postOpts &&
+			postOpts.enableSSAO === false &&
+			postOpts.enableSMAA === false &&
+			postOpts.enableGamma === false) {
+			return;
+		}
+
 		this.composer = new EffectComposer(this.renderer);
 		const renderPass = new RenderPass(
 			this.schematicRenderer.sceneManager.scene,
@@ -512,48 +524,71 @@ export class RenderManager {
 	private initDefaultPasses(options: any): void {
 		if (this._isWebGPU || !this.composer) return;
 
-		const gammaCorrectionEffect = new GammaCorrectionEffect(
-			options.gamma ?? 0.5
-		);
-		this.passes.set("gammaCorrection", gammaCorrectionEffect);
+		const postOpts = this.schematicRenderer.options.postProcessingOptions;
+		const effects = [];
 
-		const smaaEffect = new SMAAEffect();
-		this.passes.set("smaa", smaaEffect);
-
-		try {
-			const parent = this.schematicRenderer.canvas.parentElement;
-			const width = parent ? parent.clientWidth : window.innerWidth;
-			const height = parent ? parent.clientHeight : window.innerHeight;
-
-			const n8aoPass = new N8AOPostPass(
-				this.schematicRenderer.sceneManager.scene,
-				this.schematicRenderer.cameraManager.activeCamera.camera,
-				width,
-				height
-			) as any;
-
-			n8aoPass.configuration.aoRadius = 1.0;
-			n8aoPass.configuration.distanceFalloff = 0.4;
-			n8aoPass.configuration.intensity = 5.0;
-			n8aoPass.configuration.gammaCorrection = false;
-			n8aoPass.setQualityMode("Medium");
-
-			this.passes.set("ssao", n8aoPass);
-			this.composer.addPass(n8aoPass);
-
-			console.log("N8AO SSAO enabled successfully");
-		} catch (error) {
-			console.warn("Failed to initialize N8AO SSAO:", error);
+		if (postOpts?.enableGamma !== false) {
+			const gammaCorrectionEffect = new GammaCorrectionEffect(
+				options.gamma ?? 0.5
+			);
+			this.passes.set("gammaCorrection", gammaCorrectionEffect);
+			effects.push(gammaCorrectionEffect);
 		}
 
-		const effectPass = new EffectPass(
-			this.schematicRenderer.cameraManager.activeCamera.camera,
-			gammaCorrectionEffect,
-			smaaEffect
-		);
-		effectPass.renderToScreen = true;
-		this.composer.addPass(effectPass);
-		this.passes.set("effectPass", effectPass);
+		if (postOpts?.enableSMAA !== false) {
+			const smaaEffect = new SMAAEffect();
+			this.passes.set("smaa", smaaEffect);
+			effects.push(smaaEffect);
+		}
+
+		if (postOpts?.enableSSAO !== false) {
+			try {
+				const parent = this.schematicRenderer.canvas.parentElement;
+				const width = parent ? parent.clientWidth : window.innerWidth;
+				const height = parent ? parent.clientHeight : window.innerHeight;
+
+				const n8aoPass = new N8AOPostPass(
+					this.schematicRenderer.sceneManager.scene,
+					this.schematicRenderer.cameraManager.activeCamera.camera,
+					width,
+					height
+				) as any;
+
+				n8aoPass.configuration.aoRadius = 1.0;
+				n8aoPass.configuration.distanceFalloff = 0.4;
+				n8aoPass.configuration.intensity = 5.0;
+				n8aoPass.configuration.gammaCorrection = false;
+				n8aoPass.setQualityMode("Medium");
+
+				this.passes.set("ssao", n8aoPass);
+				this.composer.addPass(n8aoPass);
+
+				console.log("N8AO SSAO enabled successfully");
+			} catch (error) {
+				console.warn("Failed to initialize N8AO SSAO:", error);
+			}
+		}
+
+		if (effects.length > 0) {
+			const effectPass = new EffectPass(
+				this.schematicRenderer.cameraManager.activeCamera.camera,
+				...effects
+			);
+			effectPass.renderToScreen = true;
+			this.composer.addPass(effectPass);
+			this.passes.set("effectPass", effectPass);
+		} else if (this.composer.passes.length > 1) {
+			// If we have other passes (like SSAO) but no effect pass, make sure the last pass renders to screen
+			// N8AO pass usually renders to screen if it's the last one? 
+			// N8AO might need renderToScreen set manually if it's the final pass
+			const lastPass = this.composer.passes[this.composer.passes.length - 1];
+			if (lastPass) {
+				lastPass.renderToScreen = true;
+			}
+		} else {
+			// If we have composer but no effects added (edge case), better to just disable composer
+			this.composer = null;
+		}
 	}
 
 	private setupEventListeners(): void {
@@ -686,6 +721,8 @@ export class RenderManager {
 				this.renderer.render(scene, camera);
 			} else if (this.composer) {
 				this.composer.render();
+			} else {
+				this.renderer.render(scene, camera);
 			}
 		} catch (error) {
 			console.error(
@@ -735,6 +772,12 @@ export class RenderManager {
 				}
 			} else if (this.composer) {
 				this.composer.render();
+			} else {
+				// Fallback for WebGL without composer (post-processing disabled)
+				this.renderer.render(
+					this.schematicRenderer.sceneManager.scene,
+					this.schematicRenderer.cameraManager.activeCamera.camera
+				);
 			}
 		} catch (error) {
 			console.error("Render error:", error);

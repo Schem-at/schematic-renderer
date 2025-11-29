@@ -787,32 +787,33 @@ export class WorldMeshBuilder {
 		const meshes: THREE.Mesh[] = [];
 
 		for (const meshData of batchResult.meshes) {
+			// OPTIMIZATION: Sort geometry by material index to minimize draw calls
+			// Even within a single mesh, multiple groups cause multiple draw calls
+			const optimized = this.optimizeGeometryGroups(meshData);
+
 			const geometry = new THREE.BufferGeometry();
 
-			if (meshData.positions) {
-				// Batch mode returns Float32 world coordinates (already de-quantized)
-				const posAttr = new THREE.BufferAttribute(meshData.positions, 3);
+			if (optimized.positions) {
+				const posAttr = new THREE.BufferAttribute(optimized.positions, 3);
 				geometry.setAttribute("position", posAttr);
 			}
 
-			if (meshData.normals) {
-				// Convert Int8 normals to Float32 for WebGPU compatibility
-				const float32Normals = convertInt8NormalsToFloat32(meshData.normals);
-				const normAttr = new THREE.BufferAttribute(float32Normals, 3);
+			if (optimized.normals) {
+				const normAttr = new THREE.BufferAttribute(optimized.normals, 3);
 				geometry.setAttribute("normal", normAttr);
 			}
 
-			if (meshData.uvs) {
-				const uvAttr = new THREE.BufferAttribute(meshData.uvs, 2);
+			if (optimized.uvs) {
+				const uvAttr = new THREE.BufferAttribute(optimized.uvs, 2);
 				geometry.setAttribute("uv", uvAttr);
 			}
 
-			if (meshData.indices) {
-				geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+			if (optimized.indices) {
+				geometry.setIndex(new THREE.BufferAttribute(optimized.indices, 1));
 			}
 
-			if (meshData.groups) {
-				for (const group of meshData.groups) {
+			if (optimized.groups) {
+				for (const group of optimized.groups) {
 					geometry.addGroup(group.start, group.count, group.materialIndex);
 				}
 			}
@@ -820,14 +821,132 @@ export class WorldMeshBuilder {
 			const mesh = new THREE.Mesh(geometry, this.paletteCache!.globalMaterials);
 			mesh.name = `batched_${meshData.category}`;
 
-			// NO scale needed - batch mode returns Float32 world coordinates
-			// (already de-quantized in worker)
-
 			this.configureMeshForCategory(mesh, meshData.category as keyof ChunkMeshes);
 			meshes.push(mesh);
 		}
 
 		return meshes;
+	}
+
+	/**
+	 * OPTIMIZATION: Sort geometry data by material index to merge groups
+	 * This reduces draw calls from N_blocks to N_materials per mesh
+	 */
+	private optimizeGeometryGroups(meshData: any): any {
+		if (!meshData.groups || meshData.groups.length <= 1) {
+			// Pre-convert normals if needed
+			if (meshData.normals && meshData.normals instanceof Int8Array) {
+				meshData.normals = convertInt8NormalsToFloat32(meshData.normals);
+			}
+			return meshData;
+		}
+
+		// Check if already sorted/minimal (heuristic: count groups vs materials)
+		// If groups.length is huge but unique materials is small, we need to optimize
+		const uniqueMaterials = new Set(meshData.groups.map((g: any) => g.materialIndex)).size;
+		if (meshData.groups.length <= uniqueMaterials * 1.5) {
+			// Already optimized enough
+			if (meshData.normals && meshData.normals instanceof Int8Array) {
+				meshData.normals = convertInt8NormalsToFloat32(meshData.normals);
+			}
+			return meshData;
+		}
+
+		// Prepare new arrays
+		const positions = meshData.positions;
+		const normals = meshData.normals; // Int8Array usually
+		const uvs = meshData.uvs;
+		const indices = meshData.indices;
+
+		const vertexCount = positions.length / 3;
+		const indexCount = indices ? indices.length : vertexCount;
+
+		// We need to reorder everything based on material index
+		// 1. Group all existing groups by material index
+		const groupsByMaterial = new Map<number, any[]>();
+		for (const group of meshData.groups) {
+			if (!groupsByMaterial.has(group.materialIndex)) {
+				groupsByMaterial.set(group.materialIndex, []);
+			}
+			groupsByMaterial.get(group.materialIndex)!.push(group);
+		}
+
+		// 2. Calculate new size (same as old)
+		const newPositions = new Float32Array(positions.length);
+		const newNormals = normals ? new Float32Array(normals.length) : null;
+		const newUVs = uvs ? new Float32Array(uvs.length) : null;
+		// Use same type for indices (Uint16 or Uint32)
+		const NewIndexType = indices instanceof Uint16Array ? Uint16Array : Uint32Array;
+		const newIndices = indices ? new NewIndexType(indices.length) : null;
+
+		const newGroups: any[] = [];
+		let currentIndexOffset = 0;
+		let currentVertexOffset = 0; // Only relevant if not using indices (unlikely)
+
+		// 3. Iterate materials and rebuild buffers
+		for (const [materialIndex, groups] of groupsByMaterial.entries()) {
+			const groupStart = newIndices ? currentIndexOffset : currentVertexOffset;
+			let groupCount = 0;
+
+			for (const group of groups) {
+				// Copy data for this group
+				// Note: Groups refer to INDICES range (start, count)
+				// But vertices are not necessarily contiguous for the group!
+				// Wait, standard Three.js groups just define a range of the INDEX buffer to render.
+				// If the index buffer points to vertices all over the place, that's fine.
+				// BUT we want to make the INDEX buffer contiguous for this material.
+
+				if (newIndices && indices) {
+					// Copy indices for this group
+					// We can copy them directly, but we need to verify if vertices need reordering.
+					// If we just reorder indices, that's enough for draw calls!
+					// Vertices can stay where they are.
+					// Optimization: Just reorder indices.
+
+					const sourceStart = group.start;
+					const count = group.count;
+					
+					// Copy slice of indices
+					const subIndices = indices.subarray(sourceStart, sourceStart + count);
+					newIndices.set(subIndices, currentIndexOffset);
+					
+					currentIndexOffset += count;
+					groupCount += count;
+				} else {
+					// Non-indexed geometry: we must move vertices.
+					// This is rarer but possible.
+					// We assume indexed for now as WorldMeshBuilder generates indices.
+				}
+			}
+
+			newGroups.push({
+				start: groupStart,
+				count: groupCount,
+				materialIndex: materialIndex
+			});
+		}
+
+		// 4. Handle Normals conversion
+		let finalNormals = normals;
+		if (normals && normals instanceof Int8Array) {
+			finalNormals = convertInt8NormalsToFloat32(normals);
+		}
+
+		// If we only reordered indices, we can reuse vertex buffers!
+		// This is much faster than moving vertices.
+		if (newIndices) {
+			return {
+				positions: positions, // Unchanged
+				normals: finalNormals, // Converted but order unchanged
+				uvs: uvs, // Unchanged
+				indices: newIndices, // REORDERED
+				groups: newGroups, // OPTIMIZED
+				category: meshData.category
+			};
+		}
+
+		// Fallback for non-indexed (should not happen with current builder)
+		return meshData;
 	}
 
 	public async getChunkGeometries(

@@ -68,6 +68,15 @@ export interface DebugOptions {
 	}>;
 }
 
+export interface PostProcessingOptions {
+	// Master toggle for all post-processing
+	enabled?: boolean;
+	// Individual effect toggles
+	enableSSAO?: boolean;
+	enableSMAA?: boolean;
+	enableGamma?: boolean;
+}
+
 export interface GPUComputeOptions {
 	/**
 	 * Enable WebGPU compute for mesh building
@@ -187,6 +196,8 @@ export interface SchematicRendererOptions {
 	keyboardControlsOptions?: KeyboardControlsOptions;
 	// Debug/Inspector options
 	debugOptions?: DebugOptions;
+	// Post-processing options
+	postProcessingOptions?: PostProcessingOptions;
 	// GPU compute options (experimental)
 	gpuComputeOptions?: GPUComputeOptions;
 	// WASM mesh builder options (recommended for best performance)
@@ -202,7 +213,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	hdri: "",
 	gamma: 0.5,
 	chunkSideLength: 16, // Default chunk side length in blocks
-	meshBuildingMode: "incremental", // Default mesh building mode
+	meshBuildingMode: "batched", // Default mesh building mode
 	showCameraPathVisualization: false,
 	enableAutoOrbit: false,
 	autoOrbitDuration: 10,
@@ -266,6 +277,12 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	debugOptions: {
 		enableInspector: false,
 		showOnStartup: true,
+	},
+	postProcessingOptions: {
+		enabled: true,
+		enableSSAO: true,
+		enableSMAA: true,
+		enableGamma: true,
 	},
 	gpuComputeOptions: {
 		enabled: false, // Disabled by default - experimental and slower

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Runtime Performance Monitor</title>
+
+		<!-- Include your main JavaScript file -->
+		<script type="module" src="./scripts/runtime-perf.ts"></script>
+
+		<!-- DaisyUI -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
+			rel="stylesheet"
+			type="text/css"
+		/>
+
+		<!-- Alpine.js -->
+		<script
+			defer
+			src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+		></script>
+
+		<!-- Tailwind CSS -->
+		<script src="https://cdn.tailwindcss.com"></script>
+
+		<!-- Material Icons -->
+		<link
+			href="https://fonts.googleapis.com/icon?family=Material+Icons"
+			rel="stylesheet"
+		/>
+	</head>
+	<body
+		class="bg-gray-950 text-gray-100 min-h-screen font-mono"
+		x-data="runtimePerf()"
+		x-init="init()"
+	>
+		<!-- Navigation -->
+		<nav class="bg-gray-900 border-b border-gray-700 shadow-lg">
+			<div class="container mx-auto px-5 py-4 flex justify-between items-center">
+				<div class="flex items-center gap-4">
+					<a
+						href="index.html"
+						class="bg-gray-800 text-gray-100 px-3 py-2 rounded hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm"
+					>
+						<span class="material-icons text-sm">arrow_back</span> Back
+					</a>
+					<h1 class="text-xl font-bold text-gray-100">
+						Runtime Performance Monitor
+					</h1>
+				</div>
+				<div class="flex items-center gap-4">
+					<div class="text-xs text-gray-400">
+						<span class="text-emerald-400 font-bold" x-text="fps">0</span> FPS
+					</div>
+				</div>
+			</div>
+		</nav>
+
+		<!-- Main Layout -->
+		<div class="container mx-auto px-5 py-6 h-[calc(100vh-80px)] flex gap-6">
+			<!-- Sidebar Controls -->
+			<div class="w-80 flex flex-col gap-6 h-full overflow-y-auto pb-10">
+				<!-- Preset Generator -->
+				<div class="bg-gray-900 rounded-xl p-5 border border-gray-700 shadow-lg">
+					<h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+						<span class="material-icons text-emerald-500">science</span>
+						Generator
+					</h2>
+					<div class="space-y-4">
+						<div>
+							<label class="block text-xs text-gray-400 mb-1">Type</label>
+							<select
+								x-model="config.type"
+								class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 outline-none"
+							>
+								<option value="complex">Complex (Stairs/Fences)</option>
+								<option value="random">Random Noise</option>
+								<option value="transparent">Transparent (Glass)</option>
+								<option value="stress">Stress Test</option>
+							</select>
+						</div>
+						<div>
+							<label class="block text-xs text-gray-400 mb-1">Size</label>
+							<select
+								x-model="config.size"
+								class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 outline-none"
+							>
+								<option value="small">Small (16³)</option>
+								<option value="medium">Medium (32³)</option>
+								<option value="large">Large (64³)</option>
+								<option value="huge">Huge (128³)</option>
+							</select>
+						</div>
+						<div>
+							<label class="block text-xs text-gray-400 mb-1">Mode</label>
+							<select
+								x-model="config.mode"
+								class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 outline-none"
+							>
+								<option value="batched">Batched (Optimized)</option>
+								<option value="incremental">Incremental (Standard)</option>
+								<option value="immediate">Immediate (Slow)</option>
+							</select>
+						</div>
+						<button
+							@click="generate"
+							class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
+							:disabled="isGenerating"
+						>
+							<span
+								x-show="isGenerating"
+								class="loading loading-spinner loading-xs"
+							></span>
+							<span x-text="isGenerating ? 'Generating...' : 'Generate'"></span>
+						</button>
+					</div>
+				</div>
+
+				<!-- Real-time Stats -->
+				<div class="bg-gray-900 rounded-xl p-5 border border-gray-700 shadow-lg">
+					<h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+						<span class="material-icons text-blue-500">analytics</span>
+						Live Metrics
+					</h2>
+					<div class="space-y-4">
+						<div class="bg-gray-800/50 p-3 rounded">
+							<div class="text-xs text-gray-400">Draw Calls</div>
+							<div
+								class="text-2xl font-mono font-bold"
+								:class="stats.drawCalls > 100 ? 'text-red-400' : 'text-emerald-400'"
+								x-text="stats.drawCalls"
+							>
+								0
+							</div>
+						</div>
+						<div class="bg-gray-800/50 p-3 rounded">
+							<div class="text-xs text-gray-400">Triangles</div>
+							<div
+								class="text-xl font-mono text-blue-300"
+								x-text="formatNumber(stats.triangles)"
+							>
+								0
+							</div>
+						</div>
+						<div class="bg-gray-800/50 p-3 rounded">
+							<div class="text-xs text-gray-400">Geometries (Memory)</div>
+							<div
+								class="text-xl font-mono text-purple-300"
+								x-text="stats.geometries"
+							>
+								0
+							</div>
+						</div>
+						<div class="bg-gray-800/50 p-3 rounded">
+							<div class="text-xs text-gray-400">Textures</div>
+							<div
+								class="text-xl font-mono text-yellow-300"
+								x-text="stats.textures"
+							>
+								0
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Controls -->
+				<div class="bg-gray-900 rounded-xl p-5 border border-gray-700 shadow-lg">
+					<h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+						<span class="material-icons text-purple-500">tune</span>
+						Controls
+					</h2>
+					<div class="space-y-2">
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								x-model="autoRotate"
+								@change="toggleAutoRotate"
+								class="checkbox checkbox-primary checkbox-sm"
+							/>
+							<span class="text-sm">Auto-Rotate Camera</span>
+						</label>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								x-model="wireframe"
+								@change="toggleWireframe"
+								class="checkbox checkbox-secondary checkbox-sm"
+							/>
+							<span class="text-sm">Wireframe</span>
+						</label>
+					</div>
+				</div>
+			</div>
+
+			<!-- Canvas -->
+			<div
+				class="flex-grow bg-black rounded-xl border border-gray-700 overflow-hidden relative shadow-2xl"
+			>
+				<canvas id="canvas" class="w-full h-full block"></canvas>
+
+				<!-- Overlay Info -->
+				<div
+					class="absolute top-4 right-4 bg-black/70 backdrop-blur rounded p-2 text-xs font-mono text-gray-300 pointer-events-none"
+				>
+					<div x-text="rendererInfo"></div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			function runtimePerf() {
+				return {
+					fps: 0,
+					isGenerating: false,
+					autoRotate: true,
+					wireframe: false,
+					rendererInfo: "WebGL",
+					config: {
+						type: "complex",
+						size: "small",
+						mode: "batched",
+					},
+					stats: {
+						drawCalls: 0,
+						triangles: 0,
+						geometries: 0,
+						textures: 0,
+					},
+
+					formatNumber(num) {
+						if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+						if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+						return num;
+					},
+
+					init() {
+						// Listen for renderer init
+						window.addEventListener("rendererReady", () => {
+							this.startMonitoring();
+							// Generate initial scene
+							this.generate();
+						});
+					},
+
+					startMonitoring() {
+						setInterval(() => {
+							if (window.renderer) {
+								const info = window.renderer.renderManager.renderer.info;
+								this.stats.drawCalls = info.render.calls;
+								this.stats.triangles = info.render.triangles;
+								this.stats.geometries = info.memory.geometries;
+								this.stats.textures = info.memory.textures;
+
+								// Estimate FPS
+								this.fps = Math.round(window.currentFPS || 0);
+
+								// Update Renderer Info
+								const isWebGPU =
+									window.renderer.renderManager.isWebGPU;
+								this.rendererInfo = isWebGPU
+									? "Renderer: WebGPU"
+									: "Renderer: WebGL";
+							}
+						}, 500); // Update UI every 500ms
+					},
+
+					async generate() {
+						if (this.isGenerating) return;
+						this.isGenerating = true;
+						try {
+							await window.generateScene(this.config);
+						} catch (e) {
+							console.error(e);
+							alert("Generation failed");
+						} finally {
+							this.isGenerating = false;
+						}
+					},
+
+					toggleAutoRotate() {
+						if (window.renderer) {
+							window.renderer.setAutoOrbit(this.autoRotate);
+						}
+					},
+
+					toggleWireframe() {
+						if (window.renderer) {
+							window.renderer.sceneManager.toggleWireframe();
+						}
+					},
+				};
+			}
+		</script>
+	</body>
+</html>
