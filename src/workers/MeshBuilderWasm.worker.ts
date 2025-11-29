@@ -9,7 +9,7 @@
 // @ts-ignore - WASM imports are handled specially
 import initWasm, { MeshBuilder, get_version } from '../wasm/mesh_builder_wasm.js';
 // @ts-ignore - WASM binary import
-import wasmUrl from '../wasm/mesh_builder_wasm_bg.wasm?url';
+import wasmBase64 from '../wasm/mesh_builder_wasm_bg.wasm';
 import { CHUNK_INPUT_HEADER_SIZE } from './SharedMemoryManager';
 
 // Types
@@ -69,7 +69,7 @@ async function initialize(): Promise<void> {
     initPromise = (async () => {
         try {
             // Initialize WASM - use new API format to avoid deprecation warning
-            await initWasm({ module_or_path: wasmUrl });
+            await initWasm({ module_or_path: wasmBase64 });
 
             // Create mesh builder instance
             meshBuilder = new MeshBuilder();

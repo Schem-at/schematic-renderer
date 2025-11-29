@@ -48,7 +48,7 @@ export default defineConfig({
       entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'SchematicRenderer',
       fileName: (format) => `schematic-renderer.${format}.js`,
-      formats: ['es'],
+      formats: ['es', 'umd'],
     },
     sourcemap: true,
     rollupOptions: {
