@@ -53,11 +53,13 @@ const renderer = new SchematicRenderer(
 		},
 	},
 	{
+		enableAdaptiveFPS: false,
 		cameraOptions: {
 			enableZoomInOnLoad: true,
 		},
 		gamma: 0.45,
 		enableInteraction: true,
+		enableGizmos: true, // Enable gizmos for region editing
 		interactionOptions: {
 			enableSelection: false,
 		},
@@ -86,7 +88,7 @@ const renderer = new SchematicRenderer(
 			onSimulationInitialized: (schematicName: string) => {
 				updateSimulationStatus(true);
 				enableControls(true);
-				
+
 				// Tick 10 times initially to let MCHPRS correct any invalid initial states
 				renderer.tickSimulation(10);
 				renderer.syncSimulation();
@@ -150,9 +152,9 @@ function enableControls(enabled: boolean) {
 initBtn.addEventListener("click", async () => {
 	initBtn.disabled = true;
 	initBtn.textContent = "Initializing...";
-	
+
 	const success = await renderer.initializeSimulation();
-	
+
 	if (success) {
 		console.log("Simulation initialized successfully");
 		initBtn.textContent = "Initialized ✓";
@@ -176,7 +178,7 @@ tick10Btn.addEventListener("click", () => {
 // Auto-tick toggle button
 autoTickBtn.addEventListener("click", () => {
 	autoTickActive = !autoTickActive;
-	
+
 	if (autoTickActive) {
 		renderer.startAutoTick();
 		autoTickStatus.textContent = "On";
@@ -200,7 +202,7 @@ syncBtn.addEventListener("click", () => {
 resetBtn.addEventListener("click", async () => {
 	resetBtn.disabled = true;
 	resetBtn.textContent = "Resetting...";
-	
+
 	// Stop auto-tick if active
 	if (autoTickActive) {
 		autoTickActive = false;
@@ -209,9 +211,9 @@ resetBtn.addEventListener("click", async () => {
 		autoTickBtn.classList.remove("btn-error");
 		autoTickBtn.classList.add("btn-accent");
 	}
-	
+
 	const success = await renderer.resetSimulation();
-	
+
 	if (success) {
 		currentTicks = 0;
 		tickCount.textContent = "0";

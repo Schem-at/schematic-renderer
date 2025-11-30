@@ -126,29 +126,29 @@ export class SimulationManager {
 			} = config || {};
 
 			SimulationLogger.info(`Initializing simulation [mode=${syncMode}, optimize=${optimize}, customIo=${customIo.length}]`);
-			
+
 			// Store config
 			this.state.syncMode = syncMode;
 			this.state.tickSpeed = tickSpeed;
 			this.state.customIoPositions = customIo;
-			
+
 			// Check schematic dimensions
 			const dimensions = schematic.get_dimensions();
 			SimulationLogger.info(`Schematic dimensions: [${dimensions[0]}, ${dimensions[1]}, ${dimensions[2]}]`);
-			
+
 			// Create simulation world with options
 			SimulationLogger.info("Creating MCHPRS simulation world...");
-			
+
 			// Import nucleation wasm module
 			const { SimulationOptionsWrapper } = await import("nucleation");
 			const simOptions = new SimulationOptionsWrapper();
-			
+
 			// Set optimization flag
 			simOptions.optimize = optimize;
-			
+
 			// Set IO-only mode (only affects flush, not compilation)
 			simOptions.io_only = syncMode === 'io-only';
-			
+
 			// Add custom IO positions
 			if (customIo.length > 0) {
 				SimulationLogger.info(`Registering ${customIo.length} custom IO positions...`);
@@ -156,21 +156,21 @@ export class SimulationManager {
 					simOptions.addCustomIo(pos.x, pos.y, pos.z);
 				}
 			}
-			
+
 			// Create simulation world
 			this.simulationWorld = schematic.create_simulation_world_with_options(simOptions);
 			this.schematic = schematic;
 			this.state.isRunning = true;
 			this.state.tickCount = 0;
-			
+
 			SimulationLogger.success("✓ Simulation initialized successfully");
-			
+
 			this.eventEmitter.emit("simulationInitialized", {
 				syncMode,
 				optimize,
 				customIoCount: customIo.length,
 			});
-			
+
 			// Emit custom IO positions changed event for highlights
 			if (customIo.length > 0) {
 				console.log(`[SimulationManager] Emitting customIoPositionsChanged event`);
@@ -178,7 +178,7 @@ export class SimulationManager {
 					positions: this.state.customIoPositions,
 				});
 			}
-			
+
 			return true;
 		} catch (error) {
 			SimulationLogger.error("Failed to initialize simulation:", error);
@@ -274,16 +274,16 @@ export class SimulationManager {
 
 		try {
 			SimulationLogger.info("Syncing simulation state back to schematic...");
-			
+
 			// Flush Redpiler state to world blocks
 			this.simulationWorld.flush();
-			
+
 			// Sync to schematic
 			this.simulationWorld.sync_to_schematic();
-			
+
 			// Get updated schematic
 			const updatedSchematic = this.simulationWorld.get_schematic();
-			
+
 			// Debug custom IO blocks if present
 			if (this.state.customIoPositions.length > 0) {
 				console.log("[SimulationManager] DEBUG: Checking custom IO blocks after sync:");
@@ -293,7 +293,7 @@ export class SimulationManager {
 					console.log(`  [${pos.x},${pos.y},${pos.z}] signal=${signalStrength}, block="${blockString}"`);
 				});
 			}
-			
+
 			SimulationLogger.sync();
 
 			this.eventEmitter.emit("simulationSynced", {
@@ -364,10 +364,10 @@ export class SimulationManager {
 		try {
 			SimulationLogger.info(`Set signal strength at (${x},${y},${z}) to ${strength}`);
 			this.simulationWorld.setSignalStrength(x, y, z, strength);
-			
+
 			// Check for custom IO state changes immediately
 			this.checkCustomIoChanges();
-			
+
 			return true;
 		} catch (error) {
 			SimulationLogger.error("Failed to set signal strength:", error);
@@ -485,15 +485,15 @@ export class SimulationManager {
 		try {
 			// Ask nucleation to check for changes (zero overhead if no custom IO)
 			this.simulationWorld.checkCustomIoChanges();
-			
+
 			// Poll the detected changes
 			const changes = this.simulationWorld.pollCustomIoChanges();
-			
+
 			// Trigger JS callbacks for each change
 			for (const change of changes) {
 				const key = `${change.x},${change.y},${change.z}`;
 				const callbacks = this.customIoCallbacks.get(key);
-				
+
 				if (callbacks && callbacks.length > 0) {
 					const state: CustomIoState = {
 						x: change.x,
@@ -525,13 +525,13 @@ export class SimulationManager {
 
 		try {
 			SimulationLogger.info(`Interacting with block at (${x}, ${y}, ${z})`);
-			
+
 			// Interact with block
 			this.simulationWorld.on_use_block(x, y, z);
-			
+
 			// Tick to process the interaction
-			this.simulationWorld.tick(2);
-			
+			this.simulationWorld.tick(20);
+
 			// Flush changes
 			this.simulationWorld.flush();
 
@@ -611,7 +611,7 @@ export class SimulationManager {
 	 */
 	setTickSpeed(ticksPerSecond: number): void {
 		this.state.tickSpeed = ticksPerSecond;
-		
+
 		// Restart auto-tick if it's running to apply new speed
 		if (this.state.autoTickEnabled) {
 			this.stopAutoTick();
@@ -629,14 +629,14 @@ export class SimulationManager {
 	reset(): void {
 		this.stopAutoTick();
 		this.state.tickCount = 0;
-		
+
 		// Re-initialize if we have a schematic
 		if (this.schematic) {
 			SimulationLogger.info("Resetting simulation...");
 			// Would need to store config to re-init properly
 			// For now, just clear state
 		}
-		
+
 		this.eventEmitter.emit("simulationReset");
 	}
 
@@ -645,7 +645,7 @@ export class SimulationManager {
 	 */
 	destroy(): void {
 		this.stopAutoTick();
-		
+
 		if (this.simulationWorld) {
 			try {
 				this.simulationWorld.free();

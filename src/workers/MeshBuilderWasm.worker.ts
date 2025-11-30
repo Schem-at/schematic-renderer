@@ -9,7 +9,7 @@
 // @ts-ignore - WASM imports are handled specially
 import initWasm, { MeshBuilder, get_version } from '../wasm/mesh_builder_wasm.js';
 // @ts-ignore - WASM binary import
-import wasmBase64 from '../wasm/mesh_builder_wasm_bg.wasm';
+import wasmBase64 from '../wasm/mesh_builder_wasm_bg.wasm?inline';
 import { CHUNK_INPUT_HEADER_SIZE } from './SharedMemoryManager';
 
 // Types
@@ -246,7 +246,6 @@ function buildChunkBatched(request: ChunkBuildRequest) {
     // Build chunk with WASM - use chunk's min position as origin
     // Use greedy meshing if enabled for better vertex reduction
     const result = useGreedyMeshing
-        // @ts-expect-error build_chunk_greedy is dynamically added by WASM
         ? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
         : meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
 
@@ -453,7 +452,6 @@ function buildChunk(request: ChunkBuildRequest) {
 
     // Call WASM build_chunk (with or without greedy meshing)
     const result = useGreedyMeshing
-        // @ts-expect-error build_chunk_greedy is dynamically added by WASM
         ? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
         : meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
 

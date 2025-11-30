@@ -1,6 +1,14 @@
 // managers/SchematicObject.ts
 import * as THREE from "three";
-import { SchematicWrapper } from "nucleation";
+import {
+	SchematicWrapper,
+	IoLayoutBuilderWrapper,
+	IoTypeWrapper,
+	LayoutFunctionWrapper,
+	TypedCircuitExecutorWrapper,
+	ExecutionModeWrapper,
+	BlockPosition
+} from "../nucleationExports";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
@@ -13,7 +21,10 @@ import { performanceMonitor } from "../performance/PerformanceMonitor";
 
 // Define chunk data interface to fix TypeScript errors
 
+import { EditableRegionHighlight } from "./highlight/EditableRegionHighlight";
+
 export class SchematicObject extends EventEmitter {
+	// ... existing imports and properties ...
 	public name: string;
 	public schematicWrapper: SchematicWrapper;
 	private schematicRenderer: SchematicRenderer;
@@ -935,7 +946,7 @@ export class SchematicObject extends EventEmitter {
 		// STEP 1: Initialize pipeline
 		this.reportBuildProgress("Initializing pipeline...", 0.05);
 
-		const palettes = schematic.get_all_palettes();
+		const palettes = this.getPalettes(schematic);
 		const paletteStart = performance.now();
 		performanceMonitor.startOperation("Palette Precomputation");
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
@@ -1183,7 +1194,7 @@ export class SchematicObject extends EventEmitter {
 		const schematic = schematicObject.schematicWrapper;
 
 		// Initialize pipeline
-		const palettes = schematic.get_all_palettes();
+		const palettes = this.getPalettes(schematic);
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 
 		// CRITICAL: Wait for JSZip's async postMessage queue to drain
@@ -1397,7 +1408,7 @@ export class SchematicObject extends EventEmitter {
 		// STEP 1: Initialize pipeline
 		this.reportBuildProgress("Initializing batched pipeline...", 0.05);
 
-		const palettes = schematic.get_all_palettes();
+		const palettes = this.getPalettes(schematic);
 		const paletteStart = performance.now();
 		performanceMonitor.startOperation("Palette Precomputation");
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
@@ -1564,7 +1575,7 @@ export class SchematicObject extends EventEmitter {
 
 		// Initialize instanced rendering
 		await this.worldMeshBuilder.precomputePaletteGeometries(
-			this.schematicWrapper.get_all_palettes().default
+			this.getPalettes(this.schematicWrapper).default
 		);
 
 		this.worldMeshBuilder.enableInstancedRendering(this.group, true);
@@ -1800,11 +1811,19 @@ export class SchematicObject extends EventEmitter {
 			}
 		});
 
-
-		// Also clear ALL children from the group (in case some were missed)
+		// Also clear ALL children from the group, EXCEPT regions
+		// Create a copy of children to iterate over safely
+		const children = [...this.group.children];
 		let removedCount = 0;
-		while (this.group.children.length > 0) {
-			const child = this.group.children[0];
+
+		for (const child of children) {
+			// Skip regions - regions are parented to the schematic group and have names starting with "region_"
+			// We check 'name' because 'id' is an internal three.js integer
+			if (child.name && child.name.startsWith("region_")) {
+				console.log(`[SchematicObject] Preserving region during rebuild: ${child.name}`);
+				continue;
+			}
+
 			this.group.remove(child);
 			removedCount++;
 			if (child instanceof THREE.Mesh) {
@@ -1840,6 +1859,193 @@ export class SchematicObject extends EventEmitter {
 
 	public getSchematicWrapper(): SchematicWrapper {
 		return this.schematicWrapper;
+	}
+
+	public getRegions(): EditableRegionHighlight[] {
+		return this.schematicRenderer.regionManager?.getRegionsForSchematic(this.id) || [];
+	}
+
+	public getRegion(name: string): EditableRegionHighlight | undefined {
+		// First try scoped name
+		const scopedName = `${this.id}_${name}`;
+		const region = this.schematicRenderer.regionManager?.getRegion(scopedName);
+		if (region) return region;
+
+		// Fallback to raw name if user created it manually without scoping
+		return this.schematicRenderer.regionManager?.getRegion(name);
+	}
+
+	public createRegion(
+		name: string,
+		min: { x: number; y: number; z: number },
+		max: { x: number; y: number; z: number }
+	): EditableRegionHighlight {
+		const scopedName = `${this.id}_${name}`;
+		return this.schematicRenderer.regionManager!.createRegion(scopedName, min, max, this.id);
+	}
+
+	/**
+	 * Creates a callable JavaScript function from this schematic using region-based IO.
+	 * This allows you to treat the schematic as a black-box function in JS.
+	 * 
+	 * @param inputs List of input definitions
+	 * @param outputs List of output definitions
+	 * @returns A callable object to run the circuit
+	 */
+	public createCircuitFunction(
+		inputs: Array<{
+			name: string;
+			bits: number;
+			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string;
+			signed?: boolean;
+			mode?: 'binary' | 'signal';
+		}>,
+		outputs: Array<{
+			name: string;
+			bits: number;
+			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string;
+			signed?: boolean;
+			mode?: 'binary' | 'signal';
+		}>
+	) {
+		// Dynamic import to avoid circular dependencies if any, and access the exported builders
+		// We use the schematicWrapper instance we already have
+
+		// 1. Build the IO Layout
+		let builder = new IoLayoutBuilderWrapper();
+
+		// Helper to resolve region
+		const resolveRegion = (region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string) => {
+			if (typeof region === 'string') {
+				// Try using getRegion to handle scoping automatically
+				const regionObj = this.getRegion(region);
+				if (!regionObj) {
+					throw new Error(`Region '${region}' not found in RegionManager`);
+				}
+				// Get current bounds from the editable region
+				const bounds = regionObj.getBounds();
+				return {
+					min: bounds.min,
+					max: bounds.max
+				};
+			}
+			return region;
+		};
+
+		// Add Inputs
+		for (const input of inputs) {
+			// If using signal mode (packed4), force bits to be at least 4 to match layout expectations
+			const effectiveBits = (input.mode === 'signal' && input.bits < 4) ? 4 : input.bits;
+
+			const type = input.signed
+				? IoTypeWrapper.signedInt(effectiveBits)
+				: IoTypeWrapper.unsignedInt(effectiveBits);
+
+			const region = resolveRegion(input.region);
+
+			// Default to binary (oneToOne) unless signal (packed4) is requested
+			const layout = input.mode === 'signal'
+				? LayoutFunctionWrapper.packed4()
+				: LayoutFunctionWrapper.oneToOne();
+
+			builder = builder.addInputRegion(
+				input.name,
+				type,
+				layout,
+				new BlockPosition(region.min.x, region.min.y, region.min.z),
+				new BlockPosition(region.max.x, region.max.y, region.max.z)
+			);
+		}
+
+		// Add Outputs
+		for (const output of outputs) {
+			// If using signal mode (packed4), force bits to be at least 4 to match layout expectations
+			const effectiveBits = (output.mode === 'signal' && output.bits < 4) ? 4 : output.bits;
+
+			const type = output.signed
+				? IoTypeWrapper.signedInt(effectiveBits)
+				: IoTypeWrapper.unsignedInt(effectiveBits);
+
+			const region = resolveRegion(output.region);
+
+			const layout = output.mode === 'signal'
+				? LayoutFunctionWrapper.packed4()
+				: LayoutFunctionWrapper.oneToOne();
+
+			// When using packed4 (signal mode), we need to ensure the type is wide enough
+			// packed4 stores 4 bits per element, so we likely need at least 4 bits if we want full range 0-15
+
+			builder = builder.addOutputRegion(
+				output.name,
+				type,
+				layout,
+				new BlockPosition(region.min.x, region.min.y, region.min.z),
+				new BlockPosition(region.max.x, region.max.y, region.max.z)
+			);
+		}
+
+		const layout = builder.build();
+
+		// 2. Create the Simulation Environment
+		const world = this.schematicWrapper.create_simulation_world();
+
+		// 3. Create the Executor
+		const executor = TypedCircuitExecutorWrapper.fromLayout(world, layout);
+
+		// 4. Return the Interface
+		return {
+			run: (inputValues: Record<string, number | boolean>, maxTicks = 1000, mode: 'stable' | 'fixed' = 'stable') => {
+				// Sanitize inputs: Convert booleans to numbers (1/0)
+				const sanitizedInputs: Record<string, number> = {};
+				for (const [key, val] of Object.entries(inputValues)) {
+					sanitizedInputs[key] = typeof val === 'boolean' ? (val ? 1 : 0) : val;
+				}
+
+				let executionMode;
+				if (mode === 'fixed') {
+					executionMode = ExecutionModeWrapper.fixedTicks(maxTicks);
+				} else {
+					executionMode = ExecutionModeWrapper.untilStable(2, maxTicks);
+				}
+
+				const result = executor.execute(
+					sanitizedInputs,
+					executionMode
+				);
+				return result;
+			},
+			reset: () => executor.reset(),
+			sync: async () => {
+				const updatedSchematic = executor.syncToSchematic();
+				// Update the wrapper reference to the new state
+				this.schematicWrapper = updatedSchematic;
+				// Rebuild visuals
+				await this.rebuildMesh();
+				// Return the current outputs for convenience
+				// Note: This requires polling the outputs again from the executor if we want the latest values
+				// But since syncToSchematic consumes the simulation state, we might not be able to query outputs directly afterwards
+				// unless we re-create the executor or if syncToSchematic keeps the simulation alive.
+				// Based on mchprs logic, sync usually updates the schematic data.
+			},
+			executor
+		};
+	}
+
+	private getPalettes(schematic: SchematicWrapper): any {
+		// Safety check for get_all_palettes
+		if (typeof schematic.get_all_palettes === 'function') {
+			return schematic.get_all_palettes();
+		}
+
+		console.warn("[SchematicObject] get_all_palettes missing, falling back to get_palette");
+
+		// Fallback to get_palette
+		if (typeof schematic.get_palette === 'function') {
+			return { default: schematic.get_palette() };
+		}
+
+		console.error("[SchematicObject] Both get_all_palettes and get_palette are missing!");
+		return { default: [] };
 	}
 
 	public getBlockEntitiesMap(): Map<string, any> {
@@ -2031,6 +2237,39 @@ export class SchematicObject extends EventEmitter {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
 		return this.schematicWrapper.get_block(position.x, position.y, position.z);
+	}
+
+	public debugBlock(position: THREE.Vector3 | { x: number; y: number; z: number }) {
+		const x = Math.floor(position.x);
+		const y = Math.floor(position.y);
+		const z = Math.floor(position.z);
+
+		console.log(`🔍 Debug Block at (${x}, ${y}, ${z}):`);
+		const blockType = this.schematicWrapper.get_block(x, y, z);
+		console.log(`Type: ${blockType}`);
+
+		try {
+			// @ts-ignore
+			const blockState = this.schematicWrapper.get_block_with_properties?.(x, y, z);
+			if (blockState) {
+				console.log(`Properties:`, blockState.properties());
+			}
+		} catch (e) {
+			console.warn("Could not get block properties:", e);
+		}
+
+		try {
+			const sim = this.schematicWrapper.create_simulation_world();
+			console.log(`Redstone Power: ${sim.get_redstone_power(x, y, z)}`);
+			// @ts-ignore
+			if (sim.is_lit) {
+				// @ts-ignore
+				console.log(`Is Lit: ${sim.is_lit(x, y, z)}`);
+			}
+			sim.free();
+		} catch (e) {
+			console.warn("Could not check simulation state:", e);
+		}
 	}
 
 	public async replaceBlock(replaceBlock: string, newBlock: string) {

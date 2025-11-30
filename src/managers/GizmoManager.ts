@@ -25,6 +25,10 @@ export class GizmoManager {
 			this.schematicRenderer.cameraManager.activeCamera.camera,
 			this.schematicRenderer.renderManager?.renderer.domElement
 		);
+		// Ensure it's on top of everything
+		(this.transformControls as any).depthTest = false;
+		(this.transformControls as any).depthWrite = false;
+		(this.transformControls as any).renderOrder = 999;
 		this.schematicRenderer.sceneManager.scene.add(this.transformControls);
 
 		// Disable camera controls when transforming
@@ -43,6 +47,13 @@ export class GizmoManager {
 		this.transformControls.addEventListener("change", () => {
 			if (this.boundingBoxHelper) {
 				this.boundingBoxHelper.update();
+			}
+			// Emit modification event
+			if (this.transformControls.object) {
+				this.schematicRenderer.eventEmitter.emit("gizmoObjectModified", {
+					object: this.transformControls.object,
+					mode: this.transformControls.getMode()
+				});
 			}
 		});
 
@@ -83,6 +94,11 @@ export class GizmoManager {
 			"objectDeselected",
 			this.onObjectDeselected.bind(this)
 		);
+
+		// Listen for camera changes to update TransformControls
+		this.schematicRenderer.cameraManager.on("cameraChanged", () => {
+			this.transformControls.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+		});
 	}
 
 	public detach() {
@@ -101,9 +117,32 @@ export class GizmoManager {
 			threeObject = object.group;
 		} else if (object instanceof THREE.Object3D) {
 			threeObject = object;
+		} else if ((object as any).group instanceof THREE.Object3D) {
+			// Handle objects that wrap a THREE.Group (like EditableRegionHighlight)
+			threeObject = (object as any).group;
 		}
 
 		if (threeObject) {
+			// Re-verify object existence in scene before attaching
+			if (!this.schematicRenderer.sceneManager.scene.getObjectById(threeObject.id)) {
+				// Special check: Regions are parented to Schematics, not Scene directly
+				// const isRegion = (object as any).id?.startsWith("region_");
+				let hasParent = false;
+				let p = threeObject.parent;
+				while (p) {
+					if (p === this.schematicRenderer.sceneManager.scene) {
+						hasParent = true;
+						break;
+					}
+					p = p.parent;
+				}
+
+				if (!hasParent) {
+					console.warn("Attempted to attach gizmo to detached object:", threeObject.name);
+					return;
+				}
+			}
+
 			this.transformControls.attach(threeObject);
 			console.log("Gizmo attached to:", threeObject.name);
 
@@ -115,9 +154,45 @@ export class GizmoManager {
 				this.boundingBoxHelper = null;
 			}
 
+			// Determine if we should set default mode based on object type
+			// If it's a region, default to translate because handles handle scaling
+			// Check both wrapper pattern (object.group exists) and direct object pattern
+			if (
+				((object as any).group && (object as any).id.startsWith("region_")) ||
+				((object as any).name && (object as any).name.startsWith("region_"))
+			) {
+				this.setMode("translate");
+			}
+
+			// Force visibility and update
+			this.transformControls.visible = true;
+			this.transformControls.enabled = true;
+
+			// Re-apply renderOrder and depthTest settings on attach
+			this.transformControls.traverse((child: THREE.Object3D) => {
+				if ((child as any).material) {
+					(child as any).material.depthTest = false;
+					(child as any).material.depthWrite = false;
+				}
+				child.renderOrder = 999;
+			});
+
+			// Also set on the root just in case (though it's an Object3D)
+			(this.transformControls as any).renderOrder = 999;
+
+			// Reset size to default to ensure visibility
+			this.transformControls.setSize(1.0);
+			if (this.transformControls.getRaycaster()) {
+				// Ensure raycaster checks all objects
+				this.transformControls.getRaycaster().layers.enableAll();
+			}
+
 			// Create a new bounding box helper
 			this.boundingBoxHelper = new THREE.BoxHelper(threeObject, 0xffff00);
 			this.schematicRenderer.sceneManager.scene.add(this.boundingBoxHelper);
+
+			// Force update immediately
+			this.update();
 		}
 	}
 
@@ -152,6 +227,11 @@ export class GizmoManager {
 			this.handleTransformError();
 			if (this.boundingBoxHelper) {
 				this.boundingBoxHelper.update();
+			}
+			// Ensure visibility persists
+			if (this.transformControls.object) {
+				this.transformControls.visible = true;
+				(this.transformControls as any).depthTest = false;
 			}
 		} catch (error) {
 			this.detach();

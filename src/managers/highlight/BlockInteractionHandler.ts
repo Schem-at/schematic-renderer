@@ -17,7 +17,7 @@ export class BlockInteractionHandler {
 		this.eventEmitter = eventEmitter;
 		this.simulationManager = simulationManager || null;
 
-		this.eventEmitter.on("interactWithBlock", this.onInteractBlock);
+		this.eventEmitter.on("interactBlock", this.onInteractBlock);
 	}
 
 	private onInteractBlock = async (data: {
@@ -87,7 +87,7 @@ export class BlockInteractionHandler {
 
 
 		// Use simulation to interact with the block - this returns the updated schematic
-		const updatedSchematic = this.simulationManager.interactWithBlock(
+		const updatedSchematic = await this.simulationManager.interactWithBlock(
 			position.x,
 			position.y,
 			position.z
@@ -98,10 +98,15 @@ export class BlockInteractionHandler {
 			return;
 		}
 
-		
+		// Validation to debug "get_all_palettes" error
+		if (typeof updatedSchematic.get_all_palettes !== 'function') {
+			console.warn("Updated schematic missing get_all_palettes function. Available keys:", Object.keys(Object.getPrototypeOf(updatedSchematic) || updatedSchematic));
+		}
+
+
 		// Replace the schematic wrapper with the updated one
 		schematicObject.schematicWrapper = updatedSchematic;
-		
+
 		// Rebuild the mesh to show the change
 		await schematicObject.rebuildMesh();
 	}
@@ -114,9 +119,9 @@ export class BlockInteractionHandler {
 		// Get the current 'powered' state of the lever
 		const properties = block.properties();
 		const blockName = block.name();
-		
+
 		console.log("  Before toggle:", blockName, properties);
-		
+
 		const isPowered = properties.powered === "true";
 
 		// Toggle the 'powered' state while preserving ALL other properties
@@ -131,7 +136,7 @@ export class BlockInteractionHandler {
 				newProperties[key] = properties[key];
 			}
 		}
-		
+
 		console.log("  After toggle:", blockName, newProperties);
 
 		// Update the block in the schematic
@@ -144,8 +149,7 @@ export class BlockInteractionHandler {
 		);
 
 		console.log(
-			`Lever at ${position.x}, ${position.y}, ${position.z} toggled to ${
-				newPoweredState ? "ON" : "OFF"
+			`Lever at ${position.x}, ${position.y}, ${position.z} toggled to ${newPoweredState ? "ON" : "OFF"
 			}`
 		);
 	}

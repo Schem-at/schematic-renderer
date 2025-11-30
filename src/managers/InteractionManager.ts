@@ -1,13 +1,13 @@
 import * as THREE from "three";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { SelectableObject } from "./SelectableObject";
-
+import { SchematicObject } from "./SchematicObject";
 
 export interface InteractionManagerOptions {
 	enableSelection?: boolean;
 	enableMovingSchematics?: boolean;
 }
-  
+
 export class InteractionManager {
 	private schematicRenderer: SchematicRenderer;
 	private options: InteractionManagerOptions;
@@ -17,62 +17,76 @@ export class InteractionManager {
 	private hoveredObject: SelectableObject | null = null;
 	private canvas: HTMLCanvasElement;
 	private selectedObject: SelectableObject | null = null;
-  
+
 	constructor(schematicRenderer: SchematicRenderer, options: InteractionManagerOptions) {
-	  this.schematicRenderer = schematicRenderer;
-	  this.options = options;
-  
-	  this.raycaster = new THREE.Raycaster();
-	  this.mouse = new THREE.Vector2();
-	  this.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
-	  this.canvas = this.schematicRenderer.canvas;
-  
-	  this.addEventListeners();
+		this.schematicRenderer = schematicRenderer;
+		this.options = options;
+
+		this.raycaster = new THREE.Raycaster();
+		this.mouse = new THREE.Vector2();
+		this.camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+		this.canvas = this.schematicRenderer.canvas;
+
+		this.addEventListeners();
 	}
 
 	private addEventListeners() {
 		// Only add event listeners if the corresponding functionality is enabled
 		if (this.options.enableSelection) {
-		  this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
-		  this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
-		  window.addEventListener('keydown', this.onKeyDown.bind(this));
+			this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+			this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
+			window.addEventListener('keydown', this.onKeyDown.bind(this));
 		}
-	  }
 
-	  private onMouseMove(event: MouseEvent) {
+		// Listen for external selection events (e.g. from RegionManager) to keep state in sync
+		this.schematicRenderer.eventEmitter.on("objectSelected", (object: SelectableObject) => {
+			if (this.selectedObject !== object) {
+				this.selectedObject = object;
+				console.log("InteractionManager synced selection:", object.id);
+			}
+		});
+
+		this.schematicRenderer.eventEmitter.on("objectDeselected", () => {
+			if (this.selectedObject) {
+				this.selectedObject = null;
+			}
+		});
+	}
+
+	private onMouseMove(event: MouseEvent) {
 		if (!this.options.enableSelection) return;
-	  
+
 		this.updateMousePosition(event);
 		// Uncomment if hover functionality is needed
 		// this.checkHover();
-	  }
-	  
-	  private onMouseDown(event: MouseEvent) {
+	}
+
+	private onMouseDown(event: MouseEvent) {
 		if (!this.options.enableSelection) return;
-	  
+
 		this.updateMousePosition(event);
 		this.checkSelection();
-	  }
+	}
 
-	  private onKeyDown(event: KeyboardEvent) {
+	private onKeyDown(event: KeyboardEvent) {
 		if (!this.options.enableMovingSchematics) return;
-	  
+
 		switch (event.key) {
-		  case 'g': // Press 'g' for translate mode
-			this.schematicRenderer.gizmoManager?.setMode('translate');
-			break;
-		  case 'r': // Press 'r' for rotate mode
-			this.schematicRenderer.gizmoManager?.setMode('rotate');
-			break;
-		  case 's': // Press 's' for scale mode
-			this.schematicRenderer.gizmoManager?.setMode('scale');
-			break;
-		  case 'Escape': // Press 'Escape' to deselect object
-			this.deselectObject();
-			break;
+			case 'g': // Press 'g' for translate mode
+				this.schematicRenderer.gizmoManager?.setMode('translate');
+				break;
+			case 'r': // Press 'r' for rotate mode
+				this.schematicRenderer.gizmoManager?.setMode('rotate');
+				break;
+			case 's': // Press 's' for scale mode
+				this.schematicRenderer.gizmoManager?.setMode('scale');
+				break;
+			case 'Escape': // Press 'Escape' to deselect object
+				this.deselectObject();
+				break;
 		}
-	  }
-	  
+	}
+
 
 	private updateMousePosition(event: MouseEvent) {
 		const rect = this.canvas.getBoundingClientRect();
@@ -97,8 +111,7 @@ export class InteractionManager {
 
 		if (validObjects.length !== selectableObjects.length) {
 			console.warn(
-				`Filtered out ${
-					selectableObjects.length - validObjects.length
+				`Filtered out ${selectableObjects.length - validObjects.length
 				} undefined objects`
 			);
 		}
@@ -186,34 +199,57 @@ export class InteractionManager {
 	private checkSelection() {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
 		const selectableObjects = this.schematicRenderer.schematicManager?.getSelectableObjects();
-		
-		console.log("Selectable objects:", selectableObjects);
-		console.log("Objects in scene:", selectableObjects?.map(obj => this.schematicRenderer.sceneManager.scene.getObjectById(obj.id)));
-		
+
 		if (!selectableObjects?.length) {
 			console.warn("No selectable objects available");
 			return;
 		}
-	
+
 		// Verify objects are in scene
-		const validObjects = selectableObjects.filter(obj => 
+		const validObjects = selectableObjects.filter(obj =>
 			this.schematicRenderer.sceneManager.scene.getObjectById(obj.id)
 		);
-	
+
 		const intersects = this.raycaster.intersectObjects(validObjects, true);
 
 		if (intersects.length > 0) {
 			const intersectedObject = intersects[0].object;
-			console.log("Intersected object:", intersectedObject);
+
+			// Check if we hit a region handle (prevent main selection logic from overriding handle drag)
+			if (intersectedObject.userData && intersectedObject.userData.isHandle) {
+				return;
+			}
+
 			const selectableObject = this.findSelectableParent(intersectedObject);
 
+			// Prevent selecting regions via click (they should be edited via API/UI)
+			if (selectableObject && (
+				selectableObject.id?.startsWith("region_") ||
+				(selectableObject as any).name?.startsWith("region_") ||
+				(selectableObject as any).group?.name?.startsWith("region_")
+			)) {
+				return;
+			}
+
 			if (selectableObject) {
+				// Don't auto-edit regions on simple click unless we implement a specific double-click or UI button
+				// However, if we select it, we want the gizmo to attach.
+
+				// Ensure that if it is a region, we don't accidentally force handles visible if they weren't
+
+				// NEW: If currently selected object is a Region, and the new object is a Schematic,
+				// assume the user is interacting with the schematic content (placing/breaking/toggling)
+				// while keeping the region active.
+				if (this.selectedObject &&
+					(this.selectedObject as any).id?.startsWith("region_") &&
+					selectableObject instanceof SchematicObject) {
+					console.log("Ignoring selection change from Region to Schematic (preserving region context)");
+					return; // Don't switch selection to schematic
+				}
+
 				this.selectObject(selectableObject);
-			} else {
-				console.log("No selectable parent found for intersected object");
 			}
 		} else {
-			console.log("No intersections found");
 			// this.deselectObject();
 		}
 	}
@@ -228,11 +264,11 @@ export class InteractionManager {
 
 	private deselectObject() {
 		if (this.selectedObject) {
-		  this.schematicRenderer.gizmoManager?.detach();
-		  this.schematicRenderer.eventEmitter.emit("objectDeselected", this.selectedObject);
-		  this.selectedObject = null;
+			this.schematicRenderer.gizmoManager?.detach();
+			this.schematicRenderer.eventEmitter.emit("objectDeselected", this.selectedObject);
+			this.selectedObject = null;
 		}
-	  }
+	}
 
 	public update() {
 		// This method can be called in the render loop if continuous updates are needed

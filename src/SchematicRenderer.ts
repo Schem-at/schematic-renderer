@@ -2,7 +2,7 @@ import initializeNucleationWasm from "nucleation";
 // @ts-ignore
 import nucleationWasm from "nucleation-wasm";
 // Initialize with inlined WASM for single-file support
-await initializeNucleationWasm(nucleationWasm);
+// await initializeNucleationWasm(nucleationWasm);
 
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
@@ -47,6 +47,8 @@ import { Cubane } from "cubane";
 import { performanceDashboard } from "./ui/PerformanceDashboard";
 import { KeyboardControls } from "./managers/KeyboardControls";
 import { InspectorManager } from "./managers/InspectorManager";
+import { RegionManager } from "./managers/RegionManager";
+import { RegionInteractionHandler } from "./managers/highlight/RegionInteractionHandler";
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
@@ -67,6 +69,8 @@ export class SchematicRenderer {
 	public blockInteractionHandler: BlockInteractionHandler | undefined;
 	public insignManager: InsignManager | undefined;
 	public insignIoManager: InsignIoManager | undefined;
+	public regionManager: RegionManager | undefined;
+	public regionInteractionHandler: RegionInteractionHandler | undefined;
 	public overlayManager: OverlayManager | undefined;
 	public keyboardControls: KeyboardControls | undefined;
 	public inspectorManager: InspectorManager | undefined;
@@ -77,6 +81,7 @@ export class SchematicRenderer {
 	public state: {
 		cameraPosition: THREE.Vector3;
 	};
+	private static isNucleationInitialized = false;
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -237,6 +242,10 @@ export class SchematicRenderer {
 			// Step 1: Initialize WebAssembly module
 			showProgress("Loading WebAssembly module...", 0.15);
 			// Wasm is already initialized at module level
+			if (!SchematicRenderer.isNucleationInitialized) {
+				await initializeNucleationWasm(nucleationWasm);
+				SchematicRenderer.isNucleationInitialized = true;
+			}
 
 			// Step 2: Initialize resource packs
 			showProgress("Initializing resource packs...", 0.3);
@@ -278,6 +287,8 @@ export class SchematicRenderer {
 			this.highlightManager = new HighlightManager(this);
 			this.insignManager = new InsignManager(this);
 			this.insignIoManager = new InsignIoManager(this);
+			this.regionManager = new RegionManager(this);
+			this.regionInteractionHandler = new RegionInteractionHandler(this);
 			this.overlayManager = new OverlayManager(this);
 
 			// Initialize optional components
@@ -1118,6 +1129,16 @@ export class SchematicRenderer {
 		if (this.inspectorManager) {
 			this.inspectorManager.dispose();
 			this.inspectorManager = undefined;
+		}
+
+		if (this.regionManager) {
+			this.regionManager.dispose();
+			this.regionManager = undefined;
+		}
+
+		if (this.regionInteractionHandler) {
+			this.regionInteractionHandler.dispose();
+			this.regionInteractionHandler = undefined;
 		}
 
 		if (!this.renderManager) {

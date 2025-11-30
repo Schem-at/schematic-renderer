@@ -12,8 +12,10 @@ const wasmInlinePlugin = () => {
     name: 'wasm-inline',
     enforce: 'pre', // Run before other plugins
     transform(code, id) {
-      if (id.endsWith('.wasm')) {
-        const buffer = fs.readFileSync(id);
+      // Clean the ID of query parameters for matching
+      const cleanId = id.split('?')[0];
+      if (cleanId.endsWith('.wasm')) {
+        const buffer = fs.readFileSync(cleanId);
         const base64 = buffer.toString('base64');
         // Return as a data URI string
         return {
@@ -84,6 +86,11 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['nucleation', '@wasm/minecraft_schematic_utils', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
+  worker: {
+    plugins: [
+      wasmInlinePlugin()
+    ]
   },
   test: {
     root: './',

@@ -858,8 +858,8 @@ export class WorldMeshBuilder {
 		const uvs = meshData.uvs;
 		const indices = meshData.indices;
 
-		const vertexCount = positions.length / 3;
-		const indexCount = indices ? indices.length : vertexCount;
+		// const vertexCount = positions.length / 3;
+		// const indexCount = indices ? indices.length : vertexCount;
 
 		// We need to reorder everything based on material index
 		// 1. Group all existing groups by material index
@@ -872,9 +872,9 @@ export class WorldMeshBuilder {
 		}
 
 		// 2. Calculate new size (same as old)
-		const newPositions = new Float32Array(positions.length);
-		const newNormals = normals ? new Float32Array(normals.length) : null;
-		const newUVs = uvs ? new Float32Array(uvs.length) : null;
+		// const newPositions = new Float32Array(positions.length);
+		// const newNormals = normals ? new Float32Array(normals.length) : null;
+		// const newUVs = uvs ? new Float32Array(uvs.length) : null;
 		// Use same type for indices (Uint16 or Uint32)
 		const NewIndexType = indices instanceof Uint16Array ? Uint16Array : Uint32Array;
 		const newIndices = indices ? new NewIndexType(indices.length) : null;
@@ -905,11 +905,11 @@ export class WorldMeshBuilder {
 
 					const sourceStart = group.start;
 					const count = group.count;
-					
+
 					// Copy slice of indices
 					const subIndices = indices.subarray(sourceStart, sourceStart + count);
 					newIndices.set(subIndices, currentIndexOffset);
-					
+
 					currentIndexOffset += count;
 					groupCount += count;
 				} else {
@@ -1623,7 +1623,7 @@ export class WorldMeshBuilder {
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
 		mesh.frustumCulled = true;
-		
+
 		// Optimization: Material properties are now handled in precomputePaletteGeometries via MaterialRegistry keys.
 		// We only set mesh-level properties here.
 		switch (category) {

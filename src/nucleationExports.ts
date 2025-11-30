@@ -3,14 +3,20 @@
 
 // Classes (which are also types)
 // @ts-ignore - nucleation classes
-export { 
-  SchematicWrapper, 
-  SimulationOptionsWrapper, 
-  MchprsWorldWrapper, 
-  SchematicBuilderWrapper, 
-  TypedCircuitExecutorWrapper, 
+export {
+  SchematicWrapper,
+  SimulationOptionsWrapper,
+  MchprsWorldWrapper,
+  SchematicBuilderWrapper,
+  TypedCircuitExecutorWrapper,
   ExecutionModeWrapper,
-  BlockPosition
+  BlockPosition,
+  IoLayoutBuilderWrapper,
+  IoTypeWrapper,
+  LayoutFunctionWrapper,
+  IoLayoutWrapper,
+  ValueWrapper,
+  OutputConditionWrapper
 } from "nucleation";
 
 // @ts-ignore - WASM initializer
