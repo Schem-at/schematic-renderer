@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Highlight } from "./Highlight";
 import { SchematicRenderer } from "../../SchematicRenderer";
 import { SelectableObject } from "../SelectableObject";
+import { DefinitionRegionWrapper, BlockPosition, SchematicWrapper } from "../../nucleationExports";
 
 export interface EditableRegionOptions {
 	name: string;
@@ -17,12 +18,14 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	public id: string;
 	public group: THREE.Group;
 
-	private min: THREE.Vector3;
-	private max: THREE.Vector3;
+	// 'baseRegion' stores the original, unfiltered selection (usually from bounds)
+	private baseRegion: DefinitionRegionWrapper;
+	// 'activeRegion' stores the potentially filtered region used for display and logic
+	private activeRegion: DefinitionRegionWrapper;
 
 	// Visual components
-	private mesh: THREE.Mesh;
-	private wireframe: THREE.LineSegments;
+	private meshes: THREE.Mesh[] = [];
+	private wireframes: THREE.LineSegments[] = [];
 	private handles: Map<string, THREE.Mesh> = new Map();
 
 	private isActive: boolean = false;
@@ -30,14 +33,22 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	private opacity: number;
 
 	private schematicId?: string;
+	private filters: string[] = [];
 
 	constructor(renderer: SchematicRenderer, options: EditableRegionOptions & { schematicId?: string }) {
 		this.renderer = renderer;
 		this.name = options.name;
 		this.id = `region_${options.name}`;
 		this.schematicId = options.schematicId;
-		this.min = new THREE.Vector3(options.min.x, options.min.y, options.min.z);
-		this.max = new THREE.Vector3(options.max.x, options.max.y, options.max.z);
+
+		// Initialize the base region
+		this.baseRegion = DefinitionRegionWrapper.fromBounds(
+			new BlockPosition(options.min.x, options.min.y, options.min.z),
+			new BlockPosition(options.max.x, options.max.y, options.max.z)
+		);
+		// Initialize active region as a copy of base
+		this.activeRegion = this.baseRegion.copy();
+
 		this.color = options.color || 0xffff00;
 		this.opacity = options.opacity || 0.3;
 
@@ -57,34 +68,14 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			this.renderer.sceneManager.scene.add(this.group);
 		}
 
-		// 1. Transparent box mesh
-		const geometry = new THREE.BoxGeometry(1, 1, 1);
-		const material = new THREE.MeshBasicMaterial({
-			color: this.color,
-			opacity: this.opacity,
-			transparent: true,
-			depthWrite: false,
-			side: THREE.DoubleSide
-		});
-		this.mesh = new THREE.Mesh(geometry, material);
-		this.group.add(this.mesh);
-
-		// 2. Wireframe helper for better visibility
-		const edges = new THREE.EdgesGeometry(geometry);
-		const lineMaterial = new THREE.LineBasicMaterial({
-			color: this.color,
-			linewidth: 2
-		});
-		this.wireframe = new THREE.LineSegments(edges, lineMaterial);
-		this.group.add(this.wireframe);
-
-		// 3. Create handles for each face
+		// Create handles for interaction
 		this.createFaceHandles();
 
 		// Default to hidden handles (not in edit mode)
 		this.setEditMode(false);
 
-		this.updateMeshTransform();
+		// Initial build
+		this.rebuildVisuals();
 	}
 
 	private createFaceHandles() {
@@ -96,7 +87,6 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		for (const face of faces) {
 			const handle = new THREE.Mesh(handleGeometry, handleMaterial.clone());
 			handle.name = `${this.id}_handle_${face}`;
-			// Add user data to identify handle and axis
 			handle.userData = {
 				isHandle: true,
 				regionName: this.name,
@@ -105,6 +95,178 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			this.group.add(handle);
 			this.handles.set(face, handle);
 		}
+	}
+
+	public getDefinitionRegion(): DefinitionRegionWrapper {
+		return this.activeRegion;
+	}
+
+	/**
+	 * Recomputes the active region from base region + filters
+	 */
+	private updateActiveRegion(): void {
+		// Free old active region
+		this.activeRegion.free();
+
+		if (this.filters.length === 0) {
+			this.activeRegion = this.baseRegion.copy();
+		} else {
+			// Need schematic for filtering
+			let schematicWrapper: SchematicWrapper | undefined;
+
+			if (this.schematicId) {
+				const schematic = this.renderer.schematicManager?.getSchematic(this.schematicId);
+				schematicWrapper = schematic?.schematicWrapper;
+			}
+
+			if (!schematicWrapper) {
+				console.warn(`Cannot apply filters to region '${this.name}': No schematic associated.`);
+				this.activeRegion = this.baseRegion.copy();
+				return;
+			}
+
+			// Apply filters
+			const copy = this.baseRegion.copy();
+			let filteredRegion = copy.filterByBlock(schematicWrapper, this.filters[0]);
+
+			for (let i = 1; i < this.filters.length; i++) {
+				const nextFiltered = copy.filterByBlock(schematicWrapper, this.filters[i]);
+				filteredRegion.unionInto(nextFiltered);
+				nextFiltered.free();
+			}
+
+			copy.free();
+			this.activeRegion = filteredRegion;
+		}
+
+		this.rebuildVisuals();
+	}
+
+	public rebuildVisuals(): void {
+		// 1. Clean up existing meshes
+		this.meshes.forEach(mesh => {
+			this.group.remove(mesh);
+			mesh.geometry.dispose();
+			(mesh.material as THREE.Material).dispose();
+		});
+		this.meshes = [];
+
+		this.wireframes.forEach(wireframe => {
+			this.group.remove(wireframe);
+			wireframe.geometry.dispose();
+			(wireframe.material as THREE.Material).dispose();
+		});
+		this.wireframes = [];
+
+		// 2. Calculate overall bounds and center
+		// Use ACTIVE region for visuals
+		const bounds = this.activeRegion.getBounds();
+		if (!bounds) return; // Empty region
+
+		const min = new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]);
+		const max = new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]);
+
+		// Center of the bounding box of the whole region
+		const overallCenter = new THREE.Vector3()
+			.addVectors(min, max)
+			.multiplyScalar(0.5); // Block center logic: (min+max)/2
+
+		// Position group at center
+		if (this.schematicId) {
+			this.group.position.copy(overallCenter);
+		} else {
+			const schematics = this.renderer.schematicManager?.getAllSchematics();
+			if (schematics && schematics.length > 0) {
+				const schematicPos = schematics[0].position;
+				this.group.position.copy(overallCenter).add(schematicPos);
+			} else {
+				this.group.position.copy(overallCenter);
+			}
+		}
+
+		this.group.rotation.set(0, 0, 0);
+		this.group.scale.set(1, 1, 1);
+
+		// 3. Create meshes for each box, relative to group center
+		const boxes = this.activeRegion.getBoxes();
+		const epsilon = 0.005;
+
+		for (const box of boxes) {
+			const bMin = new THREE.Vector3(box.min[0], box.min[1], box.min[2]);
+			const bMax = new THREE.Vector3(box.max[0], box.max[1], box.max[2]);
+
+			const width = bMax.x - bMin.x + 1;
+			const height = bMax.y - bMin.y + 1;
+			const depth = bMax.z - bMin.z + 1;
+
+			// Center of this specific box
+			const bCenter = new THREE.Vector3(
+				bMin.x + width / 2 - 0.5,
+				bMin.y + height / 2 - 0.5,
+				bMin.z + depth / 2 - 0.5
+			);
+
+			// Position relative to group
+			const localPos = bCenter.clone().sub(overallCenter);
+
+			const geometry = new THREE.BoxGeometry(width + epsilon, height + epsilon, depth + epsilon);
+			const material = new THREE.MeshBasicMaterial({
+				color: this.color,
+				opacity: this.opacity,
+				transparent: true,
+				depthWrite: false,
+				side: THREE.DoubleSide
+			});
+
+			const mesh = new THREE.Mesh(geometry, material);
+			mesh.position.copy(localPos);
+			this.group.add(mesh);
+			this.meshes.push(mesh);
+
+			// Wireframe
+			const edges = new THREE.EdgesGeometry(geometry);
+			const lineMaterial = new THREE.LineBasicMaterial({
+				color: this.color,
+				linewidth: 2
+			});
+			const wireframe = new THREE.LineSegments(edges, lineMaterial);
+			wireframe.position.copy(localPos);
+			this.group.add(wireframe);
+			this.wireframes.push(wireframe);
+		}
+
+		// 4. Update handles (relative to group center)
+		// NOTE: Handles normally control the BASE region.
+		// If filtered, the bounds might be smaller/disjoint.
+		// For now, let's position handles based on the VISIBLE bounds (active region).
+		// This might be confusing if the user drags a handle and the region 'snaps' because
+		// it's actually modifying the base region which is then filtered.
+		// Ideally, we should show handles for the BASE region (the selection box)
+		// even if the content is filtered?
+		// User: "Should essentially return nothing since I have no diamonds...".
+		// If nothing is returned, handles will be at 0,0,0 or hidden?
+		// If bounds are null, we returned early, so handles won't update.
+		// Let's rely on updateHandlePositions to handle 'empty' state if passed valid vectors.
+		this.updateHandlePositions(min, max, overallCenter);
+	}
+
+	private updateHandlePositions(min: THREE.Vector3, max: THREE.Vector3, center: THREE.Vector3) {
+		if (this.handles.size === 0) return;
+
+		// X faces - offset by 0.5 to sit on the block face
+		this.handles.get('minX')!.position.set(min.x - center.x - 0.5, 0, 0);
+		this.handles.get('maxX')!.position.set(max.x + 1 - center.x - 0.5, 0, 0);
+
+		// Y faces
+		this.handles.get('minY')!.position.set(0, min.y - center.y - 0.5, 0);
+		this.handles.get('maxY')!.position.set(0, max.y + 1 - center.y - 0.5, 0);
+
+		// Z faces
+		this.handles.get('minZ')!.position.set(0, 0, min.z - center.z - 0.5);
+		this.handles.get('maxZ')!.position.set(0, 0, max.z + 1 - center.z - 0.5);
+
+		// Reset scales
+		this.handles.forEach(h => h.scale.set(1, 1, 1));
 	}
 
 	public getName(): string {
@@ -123,15 +285,11 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		this.group.visible = false;
 	}
 
-	// Toggle edit mode (show/hide handles)
 	public setEditMode(enabled: boolean): void {
 		this.handles.forEach(handle => {
 			handle.visible = enabled;
 		});
-
-		// If disabled, also hide the wireframe potentially? 
-		// Or keep wireframe for visibility but disable handles
-		this.wireframe.visible = true; // Always keep wireframe visible if region is active
+		this.wireframes.forEach(w => w.visible = true);
 	}
 
 	public edit(): void {
@@ -147,64 +305,20 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	}
 
 	public update(_deltaTime: number): void {
-		// Could handle animations here
-	}
-
-	private updateMeshTransform(): void {
-		// Calculate size and center in local coordinates
-		// min and max are inclusive integer block coordinates
-		// Example: min=0, max=0 -> size=1, center=0
-		const size = new THREE.Vector3().subVectors(this.max, this.min).addScalar(1);
-		const center = new THREE.Vector3().addVectors(this.min, this.max).multiplyScalar(0.5);
-
-		if (this.schematicId) {
-			// If parented to schematic, we are in local space.
-			// Block 0,0,0 in schematic corresponds to local 0,0,0 if centered blocks.
-			this.group.position.copy(center);
-		} else {
-			// If in world space, we need to apply schematic offset manually
-			const schematics = this.renderer.schematicManager?.getAllSchematics();
-			let schematicOffset = new THREE.Vector3(0, 0, 0);
-			if (schematics && schematics.length > 0) {
-				schematicOffset.copy(schematics[0].position);
-			}
-			this.group.position.copy(center).add(schematicOffset);
-		}
-
-		this.group.scale.copy(size);
-		this.group.rotation.set(0, 0, 0);
-
-		// Update handle positions relative to the scaled box
-		// Note: The group is scaled, so local coordinates are relative to size 1,1,1
-		// Center is 0,0,0. Extents are +/- 0.5
-
-		if (this.handles.size > 0) {
-			// Because the parent group is scaled, we need to counter-scale handles to keep them constant size
-			const invScale = new THREE.Vector3(1 / size.x, 1 / size.y, 1 / size.z);
-			const handleScale = invScale.clone().multiplyScalar(0.8); // Fixed visual size
-
-			// X faces
-			this.handles.get('minX')!.position.set(-0.5, 0, 0);
-			this.handles.get('maxX')!.position.set(0.5, 0, 0);
-
-			// Y faces
-			this.handles.get('minY')!.position.set(0, -0.5, 0);
-			this.handles.get('maxY')!.position.set(0, 0.5, 0);
-
-			// Z faces
-			this.handles.get('minZ')!.position.set(0, 0, -0.5);
-			this.handles.get('maxZ')!.position.set(0, 0, 0.5);
-
-			// Apply scale to keep handles uniform size visually
-			this.handles.forEach(handle => {
-				handle.scale.copy(handleScale);
-			});
-		}
+		// Animations
 	}
 
 	public updateBoundsFromTransform(): void {
 		const position = this.group.position.clone();
 		const scale = this.group.scale.clone();
+
+		// Get current definition bounds from ACTIVE region
+		// (because that's what we see and manipulate)
+		const bounds = this.activeRegion.getBounds();
+		if (!bounds) return;
+
+		const min = new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]);
+		const max = new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]);
 
 		if (!this.schematicId) {
 			const schematics = this.renderer.schematicManager?.getAllSchematics();
@@ -213,33 +327,32 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			}
 		}
 
-		const halfSize = scale.clone().multiplyScalar(0.5);
-		// Center = min + halfSize => min = Center - halfSize
-		// But Center was (min + max)/2 + 0.5
-		// We need to reverse: center = (min+max)/2 + 0.5
-		// min = center - 0.5 - (max-min)/2
-		// size = max - min + 1
+		const size = new THREE.Vector3().subVectors(max, min).addScalar(1);
+		const newSize = size.clone().multiply(scale);
 
-		// Simpler: min = position - scale/2 - 0.5 ? No.
-		// Let's trace forward:
-		// pos = (min+max)/2
-		// scale = max-min+1
-		// max = min + scale - 1
-		// pos = (min + min + scale - 1)/2 = min + scale/2 - 0.5
-		// So: min = pos - scale/2 + 0.5
+		// New center is 'position' (now corrected to local space)
+		const newCenter = position;
 
-		const min = position.clone().sub(halfSize).addScalar(0.5);
+		// Calculate new min/max
+		const newMin = newCenter.clone().sub(newSize.clone().multiplyScalar(0.5)).round();
+		const newMax = newMin.clone().add(newSize).subScalar(1).round();
 
-		this.min.set(Math.floor(min.x), Math.floor(min.y), Math.floor(min.z));
-		this.max.copy(this.min).add(scale).subScalar(1).round();
+		// Update BASE region definition (always a box from bounds)
+		// We lose complex shape if we just resize the bounding box.
+		// However, the gizmo is a box manipulator.
+		// If we are manipulating a filtered region, what does it mean to resize it?
+		// Typically, we resize the selection area.
+		// For now, let's assume we re-define the base region to these new bounds.
+		this.baseRegion.free();
+		this.baseRegion = DefinitionRegionWrapper.fromBounds(
+			new BlockPosition(newMin.x, newMin.y, newMin.z),
+			new BlockPosition(newMax.x, newMax.y, newMax.z)
+		);
 
-		this.min.min(this.max);
-		this.max.max(this.min);
-
-		this.updateMeshTransform();
+		// Recompute active region (apply filters to new base)
+		this.updateActiveRegion();
 	}
 
-	// SelectableObject implementation
 	public get position(): THREE.Vector3 { return this.group.position; }
 	public get rotation(): THREE.Euler { return this.group.rotation; }
 	public get scale(): THREE.Vector3 { return this.group.scale; }
@@ -260,53 +373,140 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		return this.group.getWorldPosition(new THREE.Vector3());
 	}
 
+	/**
+	 * Returns the overall bounding box of the ACTIVE (filtered) region.
+	 * If the region is empty (e.g. filter matches nothing), returns empty/zero bounds.
+	 */
 	public getBounds(): { min: THREE.Vector3, max: THREE.Vector3 } {
-		return { min: this.min.clone(), max: this.max.clone() };
+		const bounds = this.activeRegion.getBounds();
+		if (!bounds) return { min: new THREE.Vector3(), max: new THREE.Vector3() };
+		return {
+			min: new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
+			max: new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2])
+		};
 	}
 
-	public setBounds(min: THREE.Vector3, max: THREE.Vector3): void {
-		this.min.copy(min);
-		this.max.copy(max);
-		this.updateMeshTransform();
+	/**
+	 * Returns array of bounding boxes for the ACTIVE (filtered) region.
+	 * Useful for seeing disjoint parts.
+	 */
+	public getBoundingBoxes(): Array<{ min: THREE.Vector3, max: THREE.Vector3 }> {
+		const boxes = this.activeRegion.getBoxes();
+		return boxes.map((box: any) => ({
+			min: new THREE.Vector3(box.min[0], box.min[1], box.min[2]),
+			max: new THREE.Vector3(box.max[0], box.max[1], box.max[2])
+		}));
 	}
 
-	public setColor(color: number): void {
+	public addFilter(filter: string): this {
+		if (!this.filters.includes(filter)) {
+			this.filters.push(filter);
+			this.updateActiveRegion();
+		}
+		return this;
+	}
+
+	public setFilters(filters: string[]): this {
+		this.filters = [...filters];
+		this.updateActiveRegion();
+		return this;
+	}
+
+	public clearFilters(): this {
+		this.filters = [];
+		this.updateActiveRegion();
+		return this;
+	}
+
+	public addPoint(point: { x: number; y: number; z: number }): this {
+		this.baseRegion.addPoint(point.x, point.y, point.z);
+		this.updateActiveRegion();
+		return this;
+	}
+
+	public getFilters(): string[] {
+		return [...this.filters];
+	}
+
+	// @ts-ignore
+	public toDefinitionRegion(schematic?: SchematicWrapper): DefinitionRegionWrapper {
+		// activeRegion is already filtered, so just return a copy.
+		// The 'schematic' arg is preserved for API compatibility but not strictly needed if we trust activeRegion.
+		return this.activeRegion.copy();
+	}
+
+	public setBounds(min: THREE.Vector3, max: THREE.Vector3): this {
+		this.baseRegion.free();
+		this.baseRegion = DefinitionRegionWrapper.fromBounds(
+			new BlockPosition(min.x, min.y, min.z),
+			new BlockPosition(max.x, max.y, max.z)
+		);
+		this.updateActiveRegion();
+		return this;
+	}
+
+	public setColor(color: number): this {
 		this.color = color;
-		if (this.mesh.material instanceof THREE.MeshBasicMaterial) {
-			this.mesh.material.color.setHex(color);
-		}
-		if (this.wireframe.material instanceof THREE.LineBasicMaterial) {
-			this.wireframe.material.color.setHex(color);
-		}
+		this.meshes.forEach(mesh => {
+			if (mesh.material instanceof THREE.MeshBasicMaterial) {
+				mesh.material.color.setHex(color);
+			}
+		});
+		this.wireframes.forEach(wf => {
+			if (wf.material instanceof THREE.LineBasicMaterial) {
+				wf.material.color.setHex(color);
+			}
+		});
+		return this;
 	}
 
-	public setOpacity(opacity: number): void {
+	public setOpacity(opacity: number): this {
 		this.opacity = opacity;
-		if (this.mesh.material instanceof THREE.MeshBasicMaterial) {
-			this.mesh.material.opacity = opacity;
-		}
+		this.meshes.forEach(mesh => {
+			if (mesh.material instanceof THREE.MeshBasicMaterial) {
+				mesh.material.opacity = opacity;
+			}
+		});
+		return this;
 	}
 
 	public dispose(): void {
 		this.deactivate();
 
-		// Remove from parent
 		if (this.group.parent) {
 			this.group.parent.remove(this.group);
 		}
 
-		if (this.mesh) {
-			this.mesh.geometry.dispose();
-			(this.mesh.material as THREE.Material).dispose();
-		}
-		if (this.wireframe) {
-			this.wireframe.geometry.dispose();
-			(this.wireframe.material as THREE.Material).dispose();
-		}
+		this.meshes.forEach(mesh => {
+			mesh.geometry.dispose();
+			(mesh.material as THREE.Material).dispose();
+		});
+		this.meshes = [];
+
+		this.wireframes.forEach(wf => {
+			wf.geometry.dispose();
+			(wf.material as THREE.Material).dispose();
+		});
+		this.wireframes = [];
+
 		this.handles.forEach(handle => {
 			handle.geometry.dispose();
 			(handle.material as THREE.Material).dispose();
 		});
 		this.handles.clear();
+
+		if (this.baseRegion) {
+			this.baseRegion.free();
+		}
+		if (this.activeRegion) {
+			this.activeRegion.free();
+		}
+	}
+
+	public setBaseRegion(region: DefinitionRegionWrapper): this {
+		this.baseRegion.free();
+		this.baseRegion = region.clone();
+		this.updateActiveRegion();
+		return this;
 	}
 }

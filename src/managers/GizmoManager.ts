@@ -169,13 +169,24 @@ export class GizmoManager {
 			this.transformControls.enabled = true;
 
 			// Re-apply renderOrder and depthTest settings on attach
-			this.transformControls.traverse((child: THREE.Object3D) => {
-				if ((child as any).material) {
-					(child as any).material.depthTest = false;
-					(child as any).material.depthWrite = false;
-				}
-				child.renderOrder = 999;
-			});
+			if (typeof this.transformControls.traverse === 'function') {
+				this.transformControls.traverse((child: THREE.Object3D) => {
+					if ((child as any).material) {
+						(child as any).material.depthTest = false;
+						(child as any).material.depthWrite = false;
+					}
+					child.renderOrder = 999;
+				});
+			} else if (this.transformControls.children) {
+				// Fallback for direct children
+				this.transformControls.children.forEach((child: THREE.Object3D) => {
+					if ((child as any).material) {
+						(child as any).material.depthTest = false;
+						(child as any).material.depthWrite = false;
+					}
+					child.renderOrder = 999;
+				});
+			}
 
 			// Also set on the root just in case (though it's an Object3D)
 			(this.transformControls as any).renderOrder = 999;

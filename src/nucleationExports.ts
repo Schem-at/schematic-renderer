@@ -16,7 +16,11 @@ export {
   LayoutFunctionWrapper,
   IoLayoutWrapper,
   ValueWrapper,
-  OutputConditionWrapper
+  OutputConditionWrapper,
+  DefinitionRegionWrapper,
+  CircuitBuilderWrapper,
+  StateModeConstants,
+  SortStrategyWrapper
 } from "nucleation";
 
 // @ts-ignore - WASM initializer

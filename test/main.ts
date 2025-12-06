@@ -99,9 +99,9 @@ const renderer = new SchematicRenderer(
 		// enableAutoOrbit: true,
 		gamma: 0.45,
 		showCameraPathVisualization: false,
-		enableInteraction: false,
+		enableInteraction: true,
 		enableDragAndDrop: true,
-		enableGizmos: false,
+		enableGizmos: true,
 		interactionOptions: {
 			enableSelection: true,
 			enableMovingSchematics: true,
@@ -123,16 +123,20 @@ const renderer = new SchematicRenderer(
 				console.log("Schematic dropped successfully:", file);
 			},
 			onRendererInitialized: async (renderer: SchematicRenderer) => {
-				// renderer.uiManager?.hideEmptyState();
-				// createDirtHouseSchematic(renderer, "dirtHouse");
-				// // renderer.schematicManager?.createEmptySchematic(
-				// // 	"testSchematic");
-				// // renderer.schematicManager?.getSchematic("testSchematic")?.setBlock(
-				// // 	[0, 0, 0],
-				// // 	"minecraft:red_stained_glass",
-				// // );
-				// // createFlowingWaterSchematic(renderer, "flowingWater");
-				// renderer.cameraManager.focusOnSchematics();
+				const s = renderer.schematicManager.getFirstSchematic();
+				const region = s.createRegion("a", { x: 6, y: 3, z: 3 }, { x: 6, y: 17, z: 3 });
+
+				const r_b = s.createRegion("b", { x: 6, y: 3, z: 0 }, { x: 6, y: 17, z: 0 });
+
+				const r_c = s.createRegion("c", { x: 0, y: 2, z: 4 }, { x: 0, y: 16, z: 4 });
+
+				const circuit = s.createCircuitFunction(
+					[{ name: "a", bits: 8, region: "a" },
+					{ name: "b", bits: 8, region: "b" }
+					],
+					[{ name: "out", bits: 8, region: "c", mode: "signal" }]
+				);
+				console.log("Circuit function created", circuit);
 			},
 			onSchematicLoaded: (schematicName: string) => {
 				console.log(`Schematic ${schematicName} has been loaded.`);

@@ -44,30 +44,36 @@
 			href="https://fonts.googleapis.com/icon?family=Material+Icons"
 			rel="stylesheet"
 		/>
-
 	</head>
-	<body class="bg-gray-900 text-white min-h-screen" x-data="rendererUI()" x-init="init()">
+	<body
+		class="bg-gray-900 text-white min-h-screen"
+		x-data="rendererUI()"
+		x-init="init()"
+	>
 		<!-- Navigation Bar -->
 		<nav class="bg-gray-800 border-b border-gray-700 px-4 py-2">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center space-x-4">
-					<a href="index.html" class="text-blue-400 hover:text-blue-300 flex items-center space-x-2">
+					<a
+						href="index.html"
+						class="text-blue-400 hover:text-blue-300 flex items-center space-x-2"
+					>
 						<span class="material-icons">arrow_back</span>
 						<span>Back to Test Suite</span>
 					</a>
 					<h1 class="text-xl font-bold">Schematic Renderer - Playground</h1>
 				</div>
 				<div class="flex items-center space-x-2">
-					<button 
-						class="btn btn-sm btn-primary" 
+					<button
+						class="btn btn-sm btn-primary"
 						@click="addSchematic"
 						title="Add Schematic"
 					>
 						<span class="material-icons">add</span>
 						Add Schematic
 					</button>
-					<button 
-						class="btn btn-sm btn-ghost" 
+					<button
+						class="btn btn-sm btn-ghost"
 						@click="toggleDarkMode()"
 						title="Toggle Theme"
 					>
@@ -81,69 +87,6 @@
 		<!-- Main Content Area -->
 		<div class="flex h-screen">
 			<!-- Left Sidebar -->
-			<div class="w-64 bg-gray-800 border-r border-gray-700 p-4" x-show="showSidebar" x-transition>
-				<div class="space-y-4">
-					<!-- View Controls -->
-					<div class="bg-gray-700 rounded-lg p-3">
-						<h3 class="text-sm font-semibold mb-2 text-blue-400">View Controls</h3>
-						<div class="space-y-2">
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleGrid">
-								<span class="material-icons text-sm">grid_on</span>
-								Toggle Grid
-							</button>
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleAxes">
-								<span class="material-icons text-sm">3d_rotation</span>
-								Toggle Axes
-							</button>
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="toggleWireframe">
-								<span class="material-icons text-sm">filter_frames</span>
-								Wireframe
-							</button>
-						</div>
-					</div>
-
-					<!-- Camera Controls -->
-					<div class="bg-gray-700 rounded-lg p-3">
-						<h3 class="text-sm font-semibold mb-2 text-blue-400">Camera</h3>
-						<div class="space-y-2">
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="resetCamera">
-								<span class="material-icons text-sm">center_focus_strong</span>
-								Reset Camera
-							</button>
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="switchToPerspective">
-								<span class="material-icons text-sm">camera_alt</span>
-								Perspective
-							</button>
-							<button class="w-full btn btn-xs btn-ghost justify-start" @click="switchToOrthographic">
-								<span class="material-icons text-sm">view_in_ar</span>
-								Orthographic
-							</button>
-						</div>
-					</div>
-
-					<!-- Schematics List -->
-					<div class="bg-gray-700 rounded-lg p-3">
-						<h3 class="text-sm font-semibold mb-2 text-blue-400">Schematics</h3>
-						<div class="space-y-2">
-							<template x-for="schematic in schematics" :key="schematic.id">
-								<div class="flex items-center justify-between p-2 bg-gray-600 rounded">
-									<span class="text-xs truncate" x-text="schematic.name"></span>
-									<button 
-										class="btn btn-xs"
-										:class="schematic.visible ? 'btn-success' : 'btn-warning'"
-										@click="toggleSchematicVisibility(schematic)"
-									>
-										<span class="material-icons text-xs" x-text="schematic.visible ? 'visibility' : 'visibility_off'"></span>
-									</button>
-								</div>
-							</template>
-							<div x-show="schematics.length === 0" class="text-xs text-gray-400 text-center py-4">
-								No schematics loaded
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
 
 			<!-- Main Canvas Area -->
 			<div class="flex-1 relative">
@@ -152,22 +95,22 @@
 
 				<!-- Toolbar -->
 				<div class="absolute top-4 right-4 flex space-x-2">
-					<button 
-						class="btn btn-sm btn-ghost" 
+					<button
+						class="btn btn-sm btn-ghost"
 						@click="showSidebar = !showSidebar"
 						title="Toggle Sidebar"
 					>
 						<span class="material-icons">menu</span>
 					</button>
-					<button 
-						class="btn btn-sm btn-ghost" 
+					<button
+						class="btn btn-sm btn-ghost"
 						@click="takeScreenshot"
 						title="Take Screenshot"
 					>
 						<span class="material-icons">photo_camera</span>
 					</button>
-					<button 
-						class="btn btn-sm btn-ghost" 
+					<button
+						class="btn btn-sm btn-ghost"
 						@click="toggleFullScreen"
 						title="Toggle Fullscreen"
 					>
@@ -176,18 +119,25 @@
 				</div>
 
 				<!-- Status Bar -->
-				<div class="absolute bottom-4 left-4 bg-gray-800 bg-opacity-80 px-3 py-2 rounded">
+				<div
+					class="absolute bottom-4 left-4 bg-gray-800 bg-opacity-80 px-3 py-2 rounded"
+				>
 					<div class="text-xs text-gray-300">
-						Camera: X: <span x-text="cameraPosition.x">0.00</span>, 
-						Y: <span x-text="cameraPosition.y">0.00</span>, 
-						Z: <span x-text="cameraPosition.z">0.00</span>
+						Camera: X: <span x-text="cameraPosition.x">0.00</span>, Y:
+						<span x-text="cameraPosition.y">0.00</span>, Z:
+						<span x-text="cameraPosition.z">0.00</span>
 					</div>
 				</div>
 
 				<!-- Recording Progress -->
-				<div x-show="isRecording" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-2 rounded-lg">
+				<div
+					x-show="isRecording"
+					class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-2 rounded-lg"
+				>
 					<div class="flex items-center space-x-2">
-						<span class="material-icons animate-pulse">fiber_manual_record</span>
+						<span class="material-icons animate-pulse"
+							>fiber_manual_record</span
+						>
 						<span>Recording... <span x-text="recordingProgress">0</span>%</span>
 					</div>
 				</div>

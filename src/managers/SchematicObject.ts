@@ -2,12 +2,13 @@
 import * as THREE from "three";
 import {
 	SchematicWrapper,
-	IoLayoutBuilderWrapper,
 	IoTypeWrapper,
 	LayoutFunctionWrapper,
-	TypedCircuitExecutorWrapper,
 	ExecutionModeWrapper,
-	BlockPosition
+	BlockPosition,
+	DefinitionRegionWrapper,
+	CircuitBuilderWrapper,
+	SortStrategyWrapper
 } from "../nucleationExports";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
@@ -1878,10 +1879,124 @@ export class SchematicObject extends EventEmitter {
 	public createRegion(
 		name: string,
 		min: { x: number; y: number; z: number },
-		max: { x: number; y: number; z: number }
+		maxOrOptions?: { x: number; y: number; z: number } | { color?: number; opacity?: number },
+		options?: { color?: number; opacity?: number }
 	): EditableRegionHighlight {
 		const scopedName = `${this.id}_${name}`;
-		return this.schematicRenderer.regionManager!.createRegion(scopedName, min, max, this.id);
+
+		let max: { x: number; y: number; z: number };
+		let finalOptions = options;
+
+		// Check if 3rd argument (maxOrOptions) is a point (has x, y, z)
+		if (maxOrOptions && typeof maxOrOptions === 'object' && 'x' in maxOrOptions && 'y' in maxOrOptions && 'z' in maxOrOptions) {
+			max = maxOrOptions as { x: number; y: number; z: number };
+		} else {
+			// It's options or undefined, so default max to min (single block region)
+			max = min;
+			// If it's defined (options), use it as options
+			if (maxOrOptions) {
+				finalOptions = maxOrOptions as { color?: number; opacity?: number };
+			}
+		}
+
+		return this.schematicRenderer.regionManager!.createRegion(scopedName, min, max, this.id, finalOptions);
+	}
+
+	// ========================================================================
+	// Definition Region Methods
+	// ========================================================================
+
+	/**
+	 * Track whether definition regions are currently visible for this schematic
+	 */
+	private _definitionRegionsVisible: boolean = false;
+
+	/**
+	 * Whether definition regions from schematic metadata are currently visible
+	 */
+	public get definitionRegionsVisible(): boolean {
+		return this._definitionRegionsVisible;
+	}
+
+	/**
+	 * Load definition regions from this schematic's metadata.
+	 * Definition regions are stored in NucleationDefinitions metadata,
+	 * typically created via CircuitBuilder, Insign, or direct API calls.
+	 * 
+	 * @param autoShow - Whether to immediately show the regions (default: true based on renderer options)
+	 * @returns Array of created region names
+	 */
+	public loadDefinitionRegions(autoShow?: boolean): string[] {
+		if (!this.schematicRenderer.regionManager) {
+			console.warn('[SchematicObject] RegionManager not available, cannot load definition regions.');
+			return [];
+		}
+
+		const shouldShow = autoShow ?? this.schematicRenderer.options.definitionRegionOptions?.showOnLoad ?? true;
+		const regionNames = this.schematicRenderer.regionManager.loadDefinitionRegionsFromSchematic(this.id, shouldShow);
+
+		this._definitionRegionsVisible = shouldShow && regionNames.length > 0;
+
+		return regionNames;
+	}
+
+	/**
+	 * Show all definition regions for this schematic
+	 */
+	public showDefinitionRegions(): void {
+		this.schematicRenderer.regionManager?.showDefinitionRegions(this.id);
+		this._definitionRegionsVisible = true;
+	}
+
+	/**
+	 * Hide all definition regions for this schematic
+	 */
+	public hideDefinitionRegions(): void {
+		this.schematicRenderer.regionManager?.hideDefinitionRegions(this.id);
+		this._definitionRegionsVisible = false;
+	}
+
+	/**
+	 * Toggle visibility of all definition regions for this schematic
+	 * @returns The new visibility state
+	 */
+	public toggleDefinitionRegions(): boolean {
+		const isVisible = this.schematicRenderer.regionManager?.toggleDefinitionRegions(this.id) ?? false;
+		this._definitionRegionsVisible = isVisible;
+		return isVisible;
+	}
+
+	/**
+	 * Check if this schematic has any definition regions loaded
+	 */
+	public hasDefinitionRegions(): boolean {
+		return this.schematicRenderer.regionManager?.hasDefinitionRegions(this.id) ?? false;
+	}
+
+	/**
+	 * Get the names of all definition regions for this schematic
+	 */
+	public getDefinitionRegionNames(): string[] {
+		// First get regions from schematic wrapper metadata
+		const metadataRegions = this.schematicWrapper.getDefinitionRegionNames();
+		return Array.from(metadataRegions);
+	}
+
+	/**
+	 * Get a definition region by its original name (from schematic metadata).
+	 * Returns the EditableRegionHighlight if loaded, or undefined.
+	 */
+	public getDefinitionRegion(name: string): EditableRegionHighlight | undefined {
+		const scopedName = `${this.id}_defRegion_${name}`;
+		return this.schematicRenderer.regionManager?.getRegion(scopedName);
+	}
+
+	/**
+	 * Remove all loaded definition regions for this schematic
+	 */
+	public removeDefinitionRegions(): void {
+		this.schematicRenderer.regionManager?.removeDefinitionRegions(this.id);
+		this._definitionRegionsVisible = false;
 	}
 
 	/**
@@ -1896,40 +2011,94 @@ export class SchematicObject extends EventEmitter {
 		inputs: Array<{
 			name: string;
 			bits: number;
-			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string;
+			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper;
 			signed?: boolean;
 			mode?: 'binary' | 'signal';
+			blockFilter?: string | string[];
+			sort?: string | SortStrategyWrapper;
 		}>,
 		outputs: Array<{
 			name: string;
 			bits: number;
-			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string;
+			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper;
 			signed?: boolean;
 			mode?: 'binary' | 'signal';
+			blockFilter?: string | string[];
+			sort?: string | SortStrategyWrapper;
 		}>
 	) {
 		// Dynamic import to avoid circular dependencies if any, and access the exported builders
 		// We use the schematicWrapper instance we already have
 
-		// 1. Build the IO Layout
-		let builder = new IoLayoutBuilderWrapper();
+		// 1. Build the Circuit using CircuitBuilderWrapper
+		// This uses the new high-level API which handles layout building and executor creation
+		let builder = new CircuitBuilderWrapper(this.schematicWrapper);
 
 		// Helper to resolve region
-		const resolveRegion = (region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string) => {
-			if (typeof region === 'string') {
+		const resolveRegion = (region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper, filters?: string | string[]) => {
+			let defRegion: DefinitionRegionWrapper;
+
+			if (region instanceof DefinitionRegionWrapper) {
+				defRegion = region;
+			} else if (typeof region === 'string') {
 				// Try using getRegion to handle scoping automatically
 				const regionObj = this.getRegion(region);
 				if (!regionObj) {
 					throw new Error(`Region '${region}' not found in RegionManager`);
 				}
-				// Get current bounds from the editable region
-				const bounds = regionObj.getBounds();
-				return {
-					min: bounds.min,
-					max: bounds.max
-				};
+				// Use the region's native conversion method, passing the schematic for filtering
+				defRegion = regionObj.toDefinitionRegion(this.schematicWrapper);
+			} else {
+				// It's a simple bounds object
+				defRegion = DefinitionRegionWrapper.fromBounds(
+					new BlockPosition(region.min.x, region.min.y, region.min.z),
+					new BlockPosition(region.max.x, region.max.y, region.max.z)
+				);
 			}
-			return region;
+
+			// Apply additional filters from arguments if provided
+			// Note: If the region itself already applied filters (in toDefinitionRegion),
+			// these will be applied ON TOP (intersection or union depending on intent, here usually filtering further)
+			// But actually, toDefinitionRegion returns the filtered points.
+			// filterByBlock returns a subset. So applying another filterByBlock intersects.
+
+			// However, the previous logic was: if filters provided, filter the box.
+			// Now: if region has internal filters, it returns filtered points.
+			// If we also provide filters here, we probably want to apply them too.
+
+			if (filters) {
+				const filterList = Array.isArray(filters) ? filters : [filters];
+				if (filterList.length > 0) {
+					// Apply first filter
+					let filteredRegion = defRegion.filterByBlock(this.schematicWrapper, filterList[0]);
+
+					// Apply subsequent filters and union results (OR logic)
+					for (let i = 1; i < filterList.length; i++) {
+						const nextFiltered = defRegion.filterByBlock(this.schematicWrapper, filterList[i]);
+						filteredRegion.unionInto(nextFiltered);
+						nextFiltered.free();
+					}
+
+					// If defRegion was created locally or returned new from toDefinitionRegion, we should free it
+					if (!(region instanceof DefinitionRegionWrapper)) {
+						defRegion.free();
+					}
+
+					defRegion = filteredRegion;
+				}
+			}
+
+			return defRegion;
+		};
+
+		// Helper to resolve sort strategy
+		const resolveSort = (sort?: string | SortStrategyWrapper): SortStrategyWrapper | undefined => {
+			if (!sort) return undefined;
+			if (sort instanceof SortStrategyWrapper) return sort;
+			if (typeof sort === 'string') {
+				return SortStrategyWrapper.fromString(sort);
+			}
+			return undefined;
 		};
 
 		// Add Inputs
@@ -1941,20 +2110,44 @@ export class SchematicObject extends EventEmitter {
 				? IoTypeWrapper.signedInt(effectiveBits)
 				: IoTypeWrapper.unsignedInt(effectiveBits);
 
-			const region = resolveRegion(input.region);
+			const region = resolveRegion(input.region, input.blockFilter);
+			const sortStrategy = resolveSort(input.sort);
 
-			// Default to binary (oneToOne) unless signal (packed4) is requested
-			const layout = input.mode === 'signal'
-				? LayoutFunctionWrapper.packed4()
-				: LayoutFunctionWrapper.oneToOne();
-
-			builder = builder.addInputRegion(
-				input.name,
-				type,
-				layout,
-				new BlockPosition(region.min.x, region.min.y, region.min.z),
-				new BlockPosition(region.max.x, region.max.y, region.max.z)
-			);
+			if (input.mode === 'signal') {
+				const layout = LayoutFunctionWrapper.packed4();
+				if (sortStrategy) {
+					builder = builder.withInputSorted(
+						input.name,
+						type,
+						layout,
+						region,
+						sortStrategy
+					);
+				} else {
+					builder = builder.withInput(
+						input.name,
+						type,
+						layout,
+						region
+					);
+				}
+			} else {
+				// Use Auto for default/binary mode
+				if (sortStrategy) {
+					builder = builder.withInputAutoSorted(
+						input.name,
+						type,
+						region,
+						sortStrategy
+					);
+				} else {
+					builder = builder.withInputAuto(
+						input.name,
+						type,
+						region
+					);
+				}
+			}
 		}
 
 		// Add Outputs
@@ -1966,31 +2159,48 @@ export class SchematicObject extends EventEmitter {
 				? IoTypeWrapper.signedInt(effectiveBits)
 				: IoTypeWrapper.unsignedInt(effectiveBits);
 
-			const region = resolveRegion(output.region);
+			const region = resolveRegion(output.region, output.blockFilter);
+			const sortStrategy = resolveSort(output.sort);
 
-			const layout = output.mode === 'signal'
-				? LayoutFunctionWrapper.packed4()
-				: LayoutFunctionWrapper.oneToOne();
-
-			// When using packed4 (signal mode), we need to ensure the type is wide enough
-			// packed4 stores 4 bits per element, so we likely need at least 4 bits if we want full range 0-15
-
-			builder = builder.addOutputRegion(
-				output.name,
-				type,
-				layout,
-				new BlockPosition(region.min.x, region.min.y, region.min.z),
-				new BlockPosition(region.max.x, region.max.y, region.max.z)
-			);
+			if (output.mode === 'signal') {
+				const layout = LayoutFunctionWrapper.packed4();
+				if (sortStrategy) {
+					builder = builder.withOutputSorted(
+						output.name,
+						type,
+						layout,
+						region,
+						sortStrategy
+					);
+				} else {
+					builder = builder.withOutput(
+						output.name,
+						type,
+						layout,
+						region
+					);
+				}
+			} else {
+				// Use Auto for default/binary mode
+				if (sortStrategy) {
+					builder = builder.withOutputAutoSorted(
+						output.name,
+						type,
+						region,
+						sortStrategy
+					);
+				} else {
+					builder = builder.withOutputAuto(
+						output.name,
+						type,
+						region
+					);
+				}
+			}
 		}
 
-		const layout = builder.build();
-
-		// 2. Create the Simulation Environment
-		const world = this.schematicWrapper.create_simulation_world();
-
-		// 3. Create the Executor
-		const executor = TypedCircuitExecutorWrapper.fromLayout(world, layout);
+		// Build directly to executor
+		const executor = builder.build();
 
 		// 4. Return the Interface
 		return {

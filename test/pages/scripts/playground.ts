@@ -84,14 +84,14 @@ const renderer = new SchematicRenderer(
 
 		// Enable the debug inspector GUI (press ` to toggle)
 		debugOptions: {
-			enableInspector: true,
+			enableInspector: false,
 			showOnStartup: true,
 		},
 
 		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,
-		enableGizmos: false,
+		enableGizmos: true,
 		interactionOptions: {
 			enableSelection: true,
 			enableMovingSchematics: true,

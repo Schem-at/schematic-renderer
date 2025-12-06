@@ -77,6 +77,46 @@ export interface PostProcessingOptions {
 	enableGamma?: boolean;
 }
 
+export interface DefinitionRegionOptions {
+	/**
+	 * Automatically show definition regions from schematic metadata when a schematic is loaded.
+	 * Definition regions are regions stored in the schematic's NucleationDefinitions metadata,
+	 * typically created via the CircuitBuilder or Insign APIs.
+	 * 
+	 * @default true
+	 */
+	showOnLoad?: boolean;
+
+	/**
+	 * Default color for definition regions (hex).
+	 * Individual regions may override this if they have color metadata.
+	 * 
+	 * @default 0x00ff88 (green)
+	 */
+	defaultColor?: number;
+
+	/**
+	 * Default opacity for definition regions.
+	 * 
+	 * @default 0.25
+	 */
+	defaultOpacity?: number;
+
+	/**
+	 * Show wireframe edges around regions
+	 * 
+	 * @default true
+	 */
+	showEdges?: boolean;
+
+	/**
+	 * Show labels with region names
+	 * 
+	 * @default true
+	 */
+	showLabels?: boolean;
+}
+
 export interface GPUComputeOptions {
 	/**
 	 * Enable WebGPU compute for mesh building
@@ -204,6 +244,8 @@ export interface SchematicRendererOptions {
 	wasmMeshBuilderOptions?: WasmMeshBuilderOptions;
 	// WebGPU renderer options (enables Three.js Inspector when available)
 	webgpuOptions?: WebGPURendererOptions;
+	// Definition region display options (for regions stored in schematic metadata)
+	definitionRegionOptions?: DefinitionRegionOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -295,6 +337,13 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	webgpuOptions: {
 		preferWebGPU: false, // Disabled by default - WebGL is more widely supported
 		forceWebGPU: false,
+	},
+	definitionRegionOptions: {
+		showOnLoad: true, // Auto-show definition regions from schematic metadata
+		defaultColor: 0x00ff88, // Green
+		defaultOpacity: 0.25,
+		showEdges: true,
+		showLabels: true,
 	},
 	resourcePackBlobs: {},
 };

@@ -453,6 +453,11 @@ export class SchematicManager {
 		const startMemory = MemoryLeakFix.monitorMemory();
 
 		try {
+			// Remove definition regions associated with this schematic
+			if (this.schematicRenderer.regionManager) {
+				this.schematicRenderer.regionManager.removeDefinitionRegions(name);
+			}
+
 			// Remove from map first to prevent any new operations on this schematic
 			this.schematics.delete(name);
 
@@ -509,6 +514,23 @@ export class SchematicManager {
 
 	addSchematic(schematic: SchematicObject): void {
 		this.schematics.set(schematic.id, schematic);
+
+		// Auto-load definition regions from schematic metadata if enabled
+		const defRegionOptions = this.schematicRenderer.options.definitionRegionOptions;
+		if (defRegionOptions?.showOnLoad !== false) {
+			// Defer loading to ensure schematic is fully initialized
+			// Use queueMicrotask for better performance than setTimeout
+			queueMicrotask(() => {
+				try {
+					const regionNames = schematic.loadDefinitionRegions();
+					if (regionNames.length > 0) {
+						console.log(`[SchematicManager] Auto-loaded ${regionNames.length} definition regions for '${schematic.id}'`);
+					}
+				} catch (e) {
+					console.warn(`[SchematicManager] Failed to auto-load definition regions for '${schematic.id}':`, e);
+				}
+			});
+		}
 	}
 
 	getSchematic(id: string): SchematicObject | undefined {
