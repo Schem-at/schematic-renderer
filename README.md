@@ -10,10 +10,11 @@ A powerful, high-performance 3D rendering library for Minecraft schematics (.sch
 - **Easy Integration**: Single-file UMD build with bundled WASM and Workers - just drop it in!
 - **Zero-Copy Data Transfer**: Utilizes SharedArrayBuffer (when available) for instant data passing between threads.
 - **Resource Pack Support**: Load standard Minecraft resource packs (.zip) with automatic texture atlas generation.
-- **Interactive Controls**: Orbit, fly, and creative camera modes.
+- **Interactive Controls**: Orbit, fly, and creative camera modes with smooth transitions.
+- **Enhanced Isometric Mode**: True isometric projection with smart framing, customizable angles, and optimized SSAO.
 - **Schematic Slicing**: Real-time rendering bounds for inspecting schematic interiors.
 - **Simulation**: Optional redstone/mechanism simulation support (powered by Nucleation).
-- **Advanced Rendering**: Support for SSAO, SMAA, and Gamma Correction.
+- **Advanced Rendering**: Adaptive SSAO (automatically adjusts for camera mode), SMAA, and Gamma Correction.
 - **Customizable UI**: Built-in progress bars and debug tools.
 
 ## Installation
@@ -119,6 +120,21 @@ const options = {
         enableSSAO: true,       // Screen Space Ambient Occlusion
         enableSMAA: true,       // Anti-aliasing
         enableGamma: true,      // Gamma correction
+
+        // Custom SSAO presets for different camera modes
+        // (automatically switches between presets when changing cameras)
+        ssaoPresets: {
+            perspective: {
+                aoRadius: 1.0,
+                distanceFalloff: 0.4,
+                intensity: 5.0
+            },
+            isometric: {
+                aoRadius: 0.3,        // Smaller radius for orthographic
+                distanceFalloff: 0.1, // Less falloff for flatter look
+                intensity: 0.8        // Much lower intensity
+            }
+        }
     },
 
     // --- Interaction ---
@@ -248,6 +264,115 @@ schematic.bounds.maxY = 10;
 
 // Reset to full view
 schematic.bounds.reset();
+```
+
+### Camera Modes
+
+Switch between different camera presets, including isometric view:
+
+```javascript
+// Switch to isometric mode
+renderer.cameraManager.switchCameraPreset("isometric");
+
+// Switch back to perspective
+renderer.cameraManager.switchCameraPreset("perspective");
+
+// Switch to first-person view
+renderer.cameraManager.switchCameraPreset("perspective_fpv");
+
+// Or from the console:
+canvas.schematicRenderer.cameraManager.switchCameraPreset("isometric");
+```
+
+#### Customizing Isometric View
+
+The isometric camera now features improved framing that properly accounts for 3D object projection at viewing angles. You can also customize the viewing angles:
+
+```javascript
+// Set custom isometric angles
+// pitch: vertical angle (0-90°, default ~35.264° for true isometric)
+// yaw: horizontal rotation (default 45°)
+renderer.setIsometricAngles(40, 45); // Slightly steeper view
+
+// Common presets:
+renderer.setIsometricAngles(35.264, 45); // True isometric (default)
+renderer.setIsometricAngles(30, 45); // Flatter, more top-down
+renderer.setIsometricAngles(45, 45); // Steeper angle
+renderer.setIsometricAngles(35.264, 30); // Different rotation
+
+// Reset to true isometric
+renderer.resetIsometricAngles();
+
+// Get current angles
+const angles = renderer.getIsometricAngles();
+console.log(angles); // { pitch: 35.264, yaw: 45 }
+
+// From console:
+canvas.schematicRenderer.setIsometricAngles(40, 60);
+```
+
+**Improved Framing:** The isometric camera now calculates the projected bounding box based on the viewing angle, ensuring optimal framing regardless of object orientation. This prevents excessive whitespace and provides tighter, more professional-looking views.
+
+#### SSAO and Isometric Mode
+
+SSAO (Screen Space Ambient Occlusion) automatically adjusts when switching between camera modes. Orthographic cameras (isometric) require different SSAO settings than perspective cameras to avoid overly dark shadows.
+
+**Runtime SSAO Adjustment:**
+
+```javascript
+// Customize SSAO for isometric mode
+renderer.setSSAOPreset("isometric", {
+	aoRadius: 0.3, // Smaller radius for orthographic
+	distanceFalloff: 0.1, // Less falloff
+	intensity: 0.8, // Lower intensity to prevent darkness
+});
+
+// Customize SSAO for perspective mode
+renderer.setSSAOPreset("perspective", {
+	aoRadius: 1.0,
+	distanceFalloff: 0.4,
+	intensity: 5.0,
+});
+
+// Get current presets
+const presets = renderer.getSSAOPresets();
+console.log(presets);
+
+// Adjust current SSAO directly (without changing presets)
+renderer.setSSAOParameters({
+	intensity: 2.0,
+	qualityMode: "High",
+});
+```
+
+**Initialization Options:**
+
+```javascript
+const renderer = new SchematicRenderer.SchematicRenderer(
+	canvas,
+	{},
+	{},
+	{
+		postProcessingOptions: {
+			enableSSAO: true,
+			ssaoPresets: {
+				isometric: {
+					aoRadius: 0.3,
+					distanceFalloff: 0.1,
+					intensity: 0.8,
+				},
+				perspective: {
+					aoRadius: 1.0,
+					distanceFalloff: 0.4,
+					intensity: 5.0,
+				},
+			},
+		},
+		cameraOptions: {
+			defaultCameraPreset: "isometric", // Start in isometric mode
+		},
+	}
+);
 ```
 
 ## Development

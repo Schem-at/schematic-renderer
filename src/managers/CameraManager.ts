@@ -97,18 +97,25 @@ export class CameraManager extends EventEmitter {
 		isometric: {
 			type: "orthographic" as const,
 			position: [0, 0, 20] as const, // Initial position
-			rotation: [(-36 * Math.PI) / 180, (135 * Math.PI) / 180, 0] as const, // Their default angles: 36° slant, 135° rotation
+			// True isometric angles: ~35.264° pitch (Math.atan(1/Math.sqrt(2))), 45° yaw
+			// Using slightly adjusted angles for better visualization
+			rotation: [
+				-Math.atan(1 / Math.sqrt(2)), // ~35.264° pitch for true isometric
+				(45 * Math.PI) / 180,          // 45° yaw for isometric
+				0
+			] as const,
 			controlType: "orbit" as const,
 			fov: 45, // FOV for orthographic camera
 			controlSettings: {
-				enableDamping: false,
+				enableDamping: true,
+				dampingFactor: 0.1,
 				minDistance: 10,
 				maxDistance: 100,
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true,
-				minPolarAngle: Math.PI / 4, // 45 degrees
-				maxPolarAngle: Math.PI * 0.4, // ~72 degrees
+				minPolarAngle: Math.PI / 6, // 30 degrees - allow more vertical movement
+				maxPolarAngle: Math.PI / 2.2, // ~82 degrees
 			},
 		},
 		perspective: {
@@ -159,7 +166,7 @@ export class CameraManager extends EventEmitter {
 		const defaultPresetName = options.defaultCameraPreset || "perspective";
 		const defaultPreset =
 			CameraManager.CAMERA_PRESETS[
-				defaultPresetName as keyof typeof CameraManager.CAMERA_PRESETS
+			defaultPresetName as keyof typeof CameraManager.CAMERA_PRESETS
 			] || CameraManager.CAMERA_PRESETS.perspective;
 		this.activeControlKey = `${defaultPresetName}-${defaultPreset.controlType}`;
 
@@ -210,14 +217,14 @@ export class CameraManager extends EventEmitter {
 		}
 		const initialPreset =
 			CameraManager.CAMERA_PRESETS[
-				this.activeCameraKey as keyof typeof CameraManager.CAMERA_PRESETS
+			this.activeCameraKey as keyof typeof CameraManager.CAMERA_PRESETS
 			];
 		this.activeControlKey = `${this.activeCameraKey}-${initialPreset.controlType}`;
 
 		this.controls.forEach((control, key) => {
 			control.enabled = key === this.activeControlKey;
 		});
-		
+
 		// Set initial orbit controls for keyboard controls if using orbit control type
 		if (initialPreset.controlType === "orbit" && this.schematicRenderer.keyboardControls) {
 			const initialControls = this.controls.get(this.activeControlKey);
@@ -436,7 +443,7 @@ export class CameraManager extends EventEmitter {
 	public switchCameraPreset(presetName: string): void {
 		const preset =
 			CameraManager.CAMERA_PRESETS[
-				presetName as keyof typeof CameraManager.CAMERA_PRESETS
+			presetName as keyof typeof CameraManager.CAMERA_PRESETS
 			];
 		if (!preset) {
 			console.warn(`Preset ${presetName} not found`);
@@ -471,7 +478,7 @@ export class CameraManager extends EventEmitter {
 			// Only call update on orbit controls
 			if (preset.controlType === "orbit" && activeControl.update) {
 				activeControl.update();
-				
+
 				// Update keyboard controls with new orbit controls reference
 				if (this.schematicRenderer.keyboardControls) {
 					this.schematicRenderer.keyboardControls.setOrbitControls(activeControl as any);
@@ -570,16 +577,16 @@ export class CameraManager extends EventEmitter {
 	private setupIsometricControls(controls: OrbitControls): void {
 		// Configure orbit controls specifically for isometric view
 		controls.enableDamping = true;
-		controls.dampingFactor = 0.05;
+		controls.dampingFactor = 0.1; // Smooth but responsive
 		controls.minDistance = 10;
 		controls.maxDistance = 100;
 		controls.enableZoom = true;
 		controls.enableRotate = true;
 		controls.enablePan = true;
 
-		// Restrict vertical rotation to maintain isometric feel
-		controls.minPolarAngle = Math.PI / 4; // 45 degrees
-		controls.maxPolarAngle = Math.PI / 2.5; // ~72 degrees
+		// Restrict vertical rotation to maintain isometric feel while allowing exploration
+		controls.minPolarAngle = Math.PI / 6; // 30 degrees - allow more vertical freedom
+		controls.maxPolarAngle = Math.PI / 2.2; // ~82 degrees
 	}
 
 	public update(deltaTime: number = 0) {
@@ -669,7 +676,7 @@ export class CameraManager extends EventEmitter {
 		if (this.schematicRenderer.schematicManager.isEmpty()) {
 			return;
 		}
-		
+
 		// Check if camera preservation is requested (either in options or global camera options)
 		const shouldPreserveCamera = options.preserveCamera ?? this.cameraOptions.preserveCameraOnUpdate ?? false;
 		if (shouldPreserveCamera) {
@@ -678,7 +685,7 @@ export class CameraManager extends EventEmitter {
 		}
 
 		const {
-			padding = 0.15, // 15% padding by default
+			padding = 0.05, // 5% padding - tight but with small safety margin
 			animationDuration = 0,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t), // smooth step
 			skipPathFitting = false,
@@ -716,6 +723,7 @@ export class CameraManager extends EventEmitter {
 
 		let targetPosition: THREE.Vector3;
 		let targetRotation: THREE.Euler | null = null;
+		let lookAtTarget = center.clone();
 
 		if (this.activeCamera.camera.type === "OrthographicCamera") {
 			// Check camera type directly
@@ -742,13 +750,15 @@ export class CameraManager extends EventEmitter {
 			orthoCamera.bottom = -requiredFrustumHeight / 2;
 			orthoCamera.updateProjectionMatrix();
 		} else {
-			// Enhanced perspective framing
-			targetPosition = this.calculatePerspectiveFraming(
+			// Enhanced perspective framing with Pan Compensation
+			const framing = this.calculatePerspectiveFraming(
 				center,
 				size,
 				aspect,
 				padding
 			);
+			targetPosition = framing.position;
+			lookAtTarget = framing.target;
 		}
 
 		// Animate to target position if duration > 0
@@ -758,7 +768,7 @@ export class CameraManager extends EventEmitter {
 				startRotation,
 				targetPosition,
 				targetRotation,
-				center,
+				lookAtTarget,
 				animationDuration,
 				easing
 			);
@@ -776,14 +786,14 @@ export class CameraManager extends EventEmitter {
 					targetRotation.z,
 				];
 			} else {
-				// For perspective, ensure it looks at the center
-				this.activeCamera.lookAt(center);
+				// For perspective, ensure it looks at the center (possibly offset)
+				this.activeCamera.lookAt(lookAtTarget);
 			}
 		}
 
 		// Update controls target
 		if (controls && "target" in controls) {
-			controls.target.copy(center);
+			controls.target.copy(lookAtTarget);
 			controls.update();
 		}
 
@@ -827,6 +837,7 @@ export class CameraManager extends EventEmitter {
 
 	/**
 	 * Calculate optimal orthographic camera size
+	 * For isometric cameras, this accounts for the 3D object's projection at the viewing angle
 	 */
 	private calculateOrthographicSize(
 		objectSize: THREE.Vector3,
@@ -835,22 +846,93 @@ export class CameraManager extends EventEmitter {
 	): number {
 		const paddingFactor = 1 + padding * 2; // e.g., 1.3 for 15% padding on each side
 
-		// Calculate the effective width and height of the object including padding
-		const paddedObjectWidth = objectSize.x * paddingFactor;
-		const paddedObjectHeight = objectSize.y * paddingFactor;
+		// For orthographic/isometric cameras, we need to consider how the 3D object
+		// projects onto the viewing plane at the camera's rotation angle
+		let projectedWidth: number;
+		let projectedHeight: number;
 
-		// Determine the orthographic camera's required frustum height.
-		// This depends on whether the object's padded width (scaled by aspect) or padded height is larger.
-		let requiredFrustumHeight;
-		if (paddedObjectWidth / aspect > paddedObjectHeight) {
-			// Width is the constraining dimension relative to viewport proportions
-			requiredFrustumHeight = paddedObjectWidth / aspect;
+		if (this.activeCamera.camera.type === "OrthographicCamera") {
+			// Get the camera's rotation to calculate projected dimensions
+			const presetName = this.activeCameraKey;
+			const preset =
+				CameraManager.CAMERA_PRESETS[
+				presetName as keyof typeof CameraManager.CAMERA_PRESETS
+				] || CameraManager.CAMERA_PRESETS.isometric;
+
+			if (preset.rotation) {
+				// For an orthographic/isometric camera, we need to find how the 3D bounding box
+				// projects onto the 2D viewing plane. We do this by:
+				// 1. Creating the 8 corners of the bounding box
+				// 2. Transforming them to camera view space (where camera looks down -Z)
+				// 3. Finding the min/max X and Y extents in view space
+
+				const rotation = new THREE.Euler(...preset.rotation);
+
+				// Create a camera to get the proper view matrix
+				const tempCamera = new THREE.OrthographicCamera();
+				tempCamera.rotation.copy(rotation);
+				tempCamera.updateMatrixWorld();
+
+				// Get the view matrix (inverse of camera's world matrix)
+				const viewMatrix = tempCamera.matrixWorldInverse;
+
+				// Create the 8 corners of the object's bounding box (in world space)
+				const halfSize = objectSize.clone().multiplyScalar(0.5);
+				const corners = [
+					new THREE.Vector3(-halfSize.x, -halfSize.y, -halfSize.z),
+					new THREE.Vector3(halfSize.x, -halfSize.y, -halfSize.z),
+					new THREE.Vector3(-halfSize.x, halfSize.y, -halfSize.z),
+					new THREE.Vector3(halfSize.x, halfSize.y, -halfSize.z),
+					new THREE.Vector3(-halfSize.x, -halfSize.y, halfSize.z),
+					new THREE.Vector3(halfSize.x, -halfSize.y, halfSize.z),
+					new THREE.Vector3(-halfSize.x, halfSize.y, halfSize.z),
+					new THREE.Vector3(halfSize.x, halfSize.y, halfSize.z),
+				];
+
+				// Transform corners to camera view space
+				const viewSpaceCorners = corners.map((corner) =>
+					corner.clone().applyMatrix4(viewMatrix)
+				);
+
+				// Find the bounding box in view space
+				// In view space: X is horizontal (right), Y is vertical (up), Z is depth (into screen)
+				let minX = Infinity, maxX = -Infinity;
+				let minY = Infinity, maxY = -Infinity;
+
+				for (const corner of viewSpaceCorners) {
+					minX = Math.min(minX, corner.x);
+					maxX = Math.max(maxX, corner.x);
+					minY = Math.min(minY, corner.y);
+					maxY = Math.max(maxY, corner.y);
+				}
+
+				projectedWidth = (maxX - minX) * paddingFactor;
+				projectedHeight = (maxY - minY) * paddingFactor;
+
+				console.log(`[CameraManager] Isometric projection: width=${projectedWidth.toFixed(2)}, height=${projectedHeight.toFixed(2)}, aspect=${aspect.toFixed(2)}`);
+			} else {
+				// Fallback to simple calculation if no rotation specified
+				projectedWidth = objectSize.x * paddingFactor;
+				projectedHeight = objectSize.y * paddingFactor;
+			}
 		} else {
-			// Height is the constraining dimension
-			requiredFrustumHeight = paddedObjectHeight;
+			// For non-orthographic cameras (shouldn't happen, but safety fallback)
+			projectedWidth = objectSize.x * paddingFactor;
+			projectedHeight = objectSize.y * paddingFactor;
 		}
 
-		// Ensure a minimum visible height to prevent extreme zoom on very small objects.
+		// Determine the orthographic camera's required frustum height
+		// This depends on whether width or height is the constraining dimension
+		let requiredFrustumHeight;
+		if (projectedWidth / aspect > projectedHeight) {
+			// Width is the constraining dimension relative to viewport proportions
+			requiredFrustumHeight = projectedWidth / aspect;
+		} else {
+			// Height is the constraining dimension
+			requiredFrustumHeight = projectedHeight;
+		}
+
+		// Ensure a minimum visible height to prevent extreme zoom on very small objects
 		return Math.max(requiredFrustumHeight, ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT);
 	}
 
@@ -1121,6 +1203,7 @@ export class CameraManager extends EventEmitter {
 
 		let finalTargetPosition: THREE.Vector3;
 		let finalTargetRotation: THREE.Euler | null = null;
+		let finalLookAtTarget: THREE.Vector3 = center;
 
 		if (this.activeCamera.camera.type === "OrthographicCamera") {
 			const result = this.calculateIsometricFraming(
@@ -1131,6 +1214,7 @@ export class CameraManager extends EventEmitter {
 			);
 			finalTargetPosition = result.position;
 			finalTargetRotation = result.rotation;
+
 			// Also update ortho camera projection for the final state
 			const orthoCamera = this.activeCamera.camera as THREE.OrthographicCamera;
 			const requiredFrustumHeight = this.calculateOrthographicSize(
@@ -1143,17 +1227,15 @@ export class CameraManager extends EventEmitter {
 			orthoCamera.top = requiredFrustumHeight / 2;
 			orthoCamera.bottom = -requiredFrustumHeight / 2;
 			// Note: We are animating position/rotation. The projection matrix will "snap" at the end.
-			// For smooth ortho zoom, one would animate orthoCamera.zoom or its frustum properties.
-			// This implementation animates position, which for ortho primarily affects clipping & perspective if any.
-			// For a true ortho zoom, the animateToPosition would need to handle ortho frustum interpolation.
-			// Current method is simpler: set final ortho projection then animate camera body.
 		} else {
-			finalTargetPosition = this.calculatePerspectiveFraming(
+			const framing = this.calculatePerspectiveFraming(
 				center,
 				size,
 				aspect,
 				padding
 			);
+			finalTargetPosition = framing.position;
+			finalLookAtTarget = framing.target;
 		}
 
 		let zoomStartPosition: THREE.Vector3;
@@ -1188,7 +1270,7 @@ export class CameraManager extends EventEmitter {
 			currentCamRotation, // Current rotation
 			finalTargetPosition,
 			finalTargetRotation, // Target rotation (for ortho)
-			center, // LookAt target
+			finalLookAtTarget, // LookAt target
 			duration,
 			easing
 		);
@@ -1200,7 +1282,7 @@ export class CameraManager extends EventEmitter {
 		}
 
 		if (controls && "target" in controls) {
-			controls.target.copy(center);
+			controls.target.copy(finalLookAtTarget);
 			if (controls.update) controls.update();
 		}
 		if (controls) controls.enabled = true;
@@ -1395,7 +1477,7 @@ export class CameraManager extends EventEmitter {
 		const dimensions = useTightBounds
 			? this.schematicRenderer.schematicManager.getMaxSchematicTightDimensions()
 			: this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
-		
+
 		console.log(`[CameraManager] Using ${useTightBounds ? 'TIGHT' : 'ALLOCATED'} bounds for framing:`, dimensions);
 
 		const halfSize = dimensions.clone().multiplyScalar(0.5);
@@ -1408,51 +1490,179 @@ export class CameraManager extends EventEmitter {
 	}
 
 	/**
+	 * Calculate optimal viewing angles based on bounding box dimensions
+	 * AND screen aspect ratio. Maximizes the projected visible area
+	 * while best fitting the screen shape.
+	 */
+	private calculateOptimalViewingAngles(
+		objectSize: THREE.Vector3,
+		screenAspect: number = 1.0
+	): { yaw: number; pitch: number } {
+		const { x: width, y: height, z: depth } = objectSize;
+
+		// Calculate optimal pitch based on height vs horizontal extent
+		// Flat objects (small height) → higher pitch (more top-down)
+		// Tall objects (large height) → lower pitch (more side view)
+		const horizontalExtent = Math.max(width, depth);
+		const pitchRatio = horizontalExtent / (height + horizontalExtent + 0.001);
+		// Map from 30° (tall) to 55° (flat) - slightly less top-down for better 3D feel
+		const minPitch = Math.PI / 6;  // 30°
+		const maxPitch = 11 * Math.PI / 36;  // 55°
+		const pitchAngle = THREE.MathUtils.lerp(minPitch, maxPitch, pitchRatio);
+
+		// Calculate base yaw based on width vs depth ratio
+		// Wide objects (X >> Z) → yaw closer to front view
+		// Deep objects (Z >> X) → yaw closer to side view
+		const yawRatio = depth / (width + depth + 0.001);
+
+		// Adapt yaw range based on screen aspect ratio
+		// Wide screens (aspect > 1): prefer angles that show more horizontal extent
+		// Tall screens (aspect < 1): prefer angles that show more vertical composition
+		const aspectInfluence = Math.min(Math.max((screenAspect - 1.0) * 0.2, -0.1), 0.1);
+		const minYaw = Math.PI / 6 - aspectInfluence;   // ~30° baseline
+		const maxYaw = Math.PI / 3 + aspectInfluence;   // ~60° baseline
+		const yawAngle = THREE.MathUtils.lerp(minYaw, maxYaw, yawRatio);
+
+		return { yaw: yawAngle, pitch: pitchAngle };
+	}
+
+	/**
 	 * Calculate optimal position for perspective camera
+	 * Automatically selects viewing angle based on bounding box dimensions
+	 * to maximize the visible projected area.
+	 * Returns both the camera position and the optimal look-at target (which may be offset from center).
 	 */
 	private calculatePerspectiveFraming(
 		center: THREE.Vector3,
 		objectSize: THREE.Vector3, // Full object dimensions (x, y, z)
 		aspect: number,
 		padding: number
-	): THREE.Vector3 {
+	): { position: THREE.Vector3; target: THREE.Vector3 } {
 		const camera = this.activeCamera.camera as THREE.PerspectiveCamera;
 		const fov = THREE.MathUtils.degToRad(camera.fov); // Vertical FoV in radians
+		const tanFov2 = Math.tan(fov / 2);
+		const paddingFactor = 1 + padding * 2;
 
-		// Add padding to the object's dimensions
-		const paddedWidth = objectSize.x * (1 + padding * 2);
-		const paddedHeight = objectSize.y * (1 + padding * 2);
+		// Calculate optimal viewing angles based on object shape AND screen aspect ratio
+		const { yaw: yawAngle, pitch: pitchAngle } = this.calculateOptimalViewingAngles(objectSize, aspect);
 
-		// Calculate distance needed to fit height
-		const distanceForHeight = paddedHeight / (2 * Math.tan(fov / 2));
-		// Calculate distance needed to fit width (fov is vertical, so account for aspect)
-		const distanceForWidth = paddedWidth / (2 * Math.tan(fov / 2) * aspect);
+		const cosYaw = Math.cos(yawAngle);
+		const sinYaw = Math.sin(yawAngle);
+		const cosPitch = Math.cos(pitchAngle);
+		const sinPitch = Math.sin(pitchAngle);
 
-		// The actual distance is the larger of the two, to ensure the whole object fits
-		const calculatedDistance = Math.max(distanceForHeight, distanceForWidth);
+		// Calculate normalized direction vector FROM center TO camera (Camera Z axis)
+		const camBack = new THREE.Vector3(
+			cosPitch * sinYaw,
+			sinPitch,
+			cosPitch * cosYaw
+		).normalize();
 
-		// Define a minimum distance floor
-		const relevantXYDimension = Math.max(objectSize.x, objectSize.y);
-		// Ensure camera is at least 0.75x the largest XY dimension from the center, or an absolute minimum.
-		const minDistanceFloor = Math.max(
-			ABSOLUTE_MIN_PERSPECTIVE_DISTANCE,
-			relevantXYDimension * 0.75
-		);
+		// Compute Camera Basis Vectors
+		const worldUp = new THREE.Vector3(0, 1, 0);
+		let camRight = new THREE.Vector3().crossVectors(worldUp, camBack).normalize();
+		if (camRight.lengthSq() < 0.001) camRight.set(1, 0, 0);
+		const camUp = new THREE.Vector3().crossVectors(camBack, camRight).normalize();
 
-		const finalDistance = Math.max(calculatedDistance, minDistanceFloor);
+		// Generate the 8 corners relative to the geometric center
+		const halfSize = objectSize.clone().multiplyScalar(0.5);
+		const corners = [
+			new THREE.Vector3(halfSize.x, halfSize.y, halfSize.z),
+			new THREE.Vector3(halfSize.x, halfSize.y, -halfSize.z),
+			new THREE.Vector3(halfSize.x, -halfSize.y, halfSize.z),
+			new THREE.Vector3(halfSize.x, -halfSize.y, -halfSize.z),
+			new THREE.Vector3(-halfSize.x, halfSize.y, halfSize.z),
+			new THREE.Vector3(-halfSize.x, halfSize.y, -halfSize.z),
+			new THREE.Vector3(-halfSize.x, -halfSize.y, halfSize.z),
+			new THREE.Vector3(-halfSize.x, -halfSize.y, -halfSize.z),
+		];
 
-		// Position camera at a common viewing angle (e.g., 45 degrees offset in XZ, 30 degrees up)
-		const offsetAngleXY = Math.PI / 4; // 45 degrees
-		const elevationAngle = Math.PI / 6; // 30 degrees
+		// Transform corners to Camera Space (but centered at 0,0,0)
+		// We want to find camera offset (cx, cy) and distance d
+		const rotatedCorners = corners.map(c => new THREE.Vector3(
+			c.dot(camRight),
+			c.dot(camUp),
+			c.dot(camBack)
+		));
 
-		const camOffset = new THREE.Vector3(
-			Math.cos(elevationAngle) * Math.sin(offsetAngleXY), // X component
-			Math.sin(elevationAngle), // Y component
-			Math.cos(elevationAngle) * Math.cos(offsetAngleXY) // Z component
-		);
-		camOffset.normalize().multiplyScalar(finalDistance);
+		let cx = 0; // Camera lateral shift (Right)
+		let cy = 0; // Camera vertical shift (Up)
+		let d = 0;  // Camera distance (Back)
 
-		return center.clone().add(camOffset);
+		// Iteratively refine Position (d) and Target Offset (cx, cy)
+		// to center the bounding box on screen and fit it tightly.
+		for (let i = 0; i < 3; i++) {
+			// 1. Calculate required distance 'd' to fit all points given current centering (cx, cy)
+			let maxReqD = 0;
+
+			for (const p of rotatedCorners) {
+				// Vector from Camera(cx, cy, d) to Point(p.x, p.y, p.z)
+				// Relative pos: (p.x - cx, p.y - cy, p.z - d)
+				// Depth in front of camera: dist = d - p.z
+				// Screen X: (p.x - cx) / dist
+				// Screen Y: (p.y - cy) / dist
+				// Constraint: |Screen X| <= tan * aspect / padding
+
+				// Derivation:
+				// |p.x - cx| / (D - p.z) <= tan * aspect / padding
+				// D - p.z >= |p.x - cx| * padding / (tan * aspect)
+				// D >= p.z + ...
+
+				const dx = Math.abs(p.x - cx);
+				const dy = Math.abs(p.y - cy);
+
+				const reqDzX = (dx * paddingFactor) / (tanFov2 * aspect);
+				const reqDzY = (dy * paddingFactor) / tanFov2;
+
+				const reqD = p.z + Math.max(reqDzX, reqDzY);
+				maxReqD = Math.max(maxReqD, reqD);
+			}
+
+			// Apply minimum distance constraint
+			const maxDim = Math.max(objectSize.x, objectSize.y, objectSize.z);
+			d = Math.max(maxReqD, maxDim * 0.8, ABSOLUTE_MIN_PERSPECTIVE_DISTANCE);
+
+			// 2. Calculate Screen-Space Bounding Box to find centering error
+			let minU = Infinity, maxU = -Infinity;
+			let minV = Infinity, maxV = -Infinity;
+
+			for (const p of rotatedCorners) {
+				const dist = d - p.z;
+				if (dist < 0.001) continue; // Should not happen with min distance
+
+				const u = (p.x - cx) / dist;
+				const v = (p.y - cy) / dist;
+
+				minU = Math.min(minU, u);
+				maxU = Math.max(maxU, u);
+				minV = Math.min(minV, v);
+				maxV = Math.max(maxV, v);
+			}
+
+			// 3. Adjust cx, cy to center the bounding box (avg U/V should be 0)
+			const centerU = (minU + maxU) / 2;
+			const centerV = (minV + maxV) / 2;
+
+			// We want to shift camera such that centerU/V becomes 0.
+			// Approximate correction: shift camera by center * average_depth
+			// Since dist varies, 'd' is a good enough approximation for convergence.
+			// If centerU > 0 (box is to the right), we move camera right (increase cx).
+			cx += centerU * d;
+			cy += centerV * d;
+
+			// Stop if converged
+			if (Math.abs(centerU) < 0.001 && Math.abs(centerV) < 0.001) break;
+		}
+
+		// Calculate final positions in World Space
+		// Target is offset from geometric center by (cx, cy) in camera plane
+		const targetOffset = camRight.clone().multiplyScalar(cx)
+			.add(camUp.clone().multiplyScalar(cy));
+
+		const target = center.clone().add(targetOffset);
+		const position = target.clone().add(camBack.multiplyScalar(d));
+
+		return { position, target };
 	}
 
 	/**
@@ -1469,7 +1679,7 @@ export class CameraManager extends EventEmitter {
 		const presetName = this.activeCameraKey; // Assume current active camera is isometric or similar ortho
 		const preset =
 			CameraManager.CAMERA_PRESETS[
-				presetName as keyof typeof CameraManager.CAMERA_PRESETS
+			presetName as keyof typeof CameraManager.CAMERA_PRESETS
 			] || CameraManager.CAMERA_PRESETS.isometric;
 
 		// Use preset rotation if available, otherwise a default isometric-like rotation
@@ -1719,6 +1929,73 @@ export class CameraManager extends EventEmitter {
 	 */
 	public isAutoOrbitEnabled(): boolean {
 		return this.autoOrbitEnabled;
+	}
+
+	/**
+	 * Set custom isometric viewing angles
+	 * @param pitchDegrees Vertical angle in degrees (0-90, default ~35.264 for true isometric)
+	 * @param yawDegrees Horizontal rotation in degrees (default 45)
+	 * @param refocus Whether to refocus on schematics after changing angles (default true)
+	 */
+	public setIsometricAngles(
+		pitchDegrees: number,
+		yawDegrees: number = 45,
+		refocus: boolean = true
+	): void {
+		// Clamp pitch to reasonable values
+		pitchDegrees = Math.max(0, Math.min(89, pitchDegrees));
+
+		// Convert to radians
+		const pitchRad = -(pitchDegrees * Math.PI) / 180;
+		const yawRad = (yawDegrees * Math.PI) / 180;
+
+		// Update the preset
+		const isometricPreset = CameraManager.CAMERA_PRESETS.isometric as any;
+		isometricPreset.rotation = [pitchRad, yawRad, 0];
+
+		// If currently in isometric mode, apply the change
+		if (this.activeCameraKey === "isometric") {
+			const rotation = new THREE.Euler(pitchRad, yawRad, 0);
+			this.activeCamera.rotation = [rotation.x, rotation.y, rotation.z];
+
+			// Refocus if requested
+			if (refocus && this.schematicRenderer.schematicManager &&
+				!this.schematicRenderer.schematicManager.isEmpty()) {
+				this.focusOnSchematics({
+					animationDuration: 0.5,
+					easing: (t) => t * t * (3 - 2 * t)
+				});
+			}
+
+			console.log(`Isometric angles updated: pitch=${pitchDegrees}°, yaw=${yawDegrees}°`);
+		}
+	}
+
+	/**
+	 * Reset isometric angles to true isometric view
+	 * @param refocus Whether to refocus on schematics (default true)
+	 */
+	public resetIsometricAngles(refocus: boolean = true): void {
+		const trueIsometricPitch = Math.atan(1 / Math.sqrt(2)) * (180 / Math.PI);
+		this.setIsometricAngles(trueIsometricPitch, 45, refocus);
+	}
+
+	/**
+	 * Get current isometric viewing angles
+	 * @returns Object with pitch and yaw in degrees, or null if not in isometric mode
+	 */
+	public getIsometricAngles(): { pitch: number; yaw: number } | null {
+		if (this.activeCameraKey !== "isometric") {
+			return null;
+		}
+
+		const preset = CameraManager.CAMERA_PRESETS.isometric;
+		if (!preset.rotation) return null;
+
+		return {
+			pitch: -(preset.rotation[0] * 180) / Math.PI,
+			yaw: (preset.rotation[1] * 180) / Math.PI,
+		};
 	}
 
 	public dispose(): void {

@@ -35,6 +35,7 @@ import {
 } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
+import { ImGuiManager } from "./managers/ImGuiManager";
 import { SimulationManager } from "./managers/SimulationManager";
 import { BlockInteractionHandler } from "./managers/highlight/BlockInteractionHandler";
 import { InsignManager } from "./managers/InsignManager";
@@ -58,6 +59,7 @@ export class SchematicRenderer {
 	public cameraManager: CameraManager;
 	public sceneManager: SceneManager;
 	public uiManager: UIManager | undefined;
+	public imGuiManager: ImGuiManager | undefined;
 	public renderManager: RenderManager | undefined;
 	public interactionManager: InteractionManager | undefined;
 	public dragAndDropManager?: DragAndDropManager;
@@ -76,6 +78,7 @@ export class SchematicRenderer {
 	public inspectorManager: InspectorManager | undefined;
 	public materialMap: Map<string, THREE.Material>;
 	public timings: Map<string, number> = new Map();
+	public fps: number = 0;
 	private resourcePackManager: ResourcePackManager;
 	public cubane: Cubane;
 	public state: {
@@ -111,6 +114,7 @@ export class SchematicRenderer {
 		this.sceneManager = new SceneManager(this);
 
 		this.uiManager = new UIManager(this);
+		this.imGuiManager = new ImGuiManager(this);
 
 		// Initialize camera manager
 		this.cameraManager = new CameraManager(this, options.cameraOptions);
@@ -277,6 +281,9 @@ export class SchematicRenderer {
 			this.renderManager = new RenderManager(this);
 			await this.renderManager.initialize();
 
+			// Initialize ImGui
+			await this.imGuiManager?.initialize();
+
 			// Log renderer type
 			if (this.renderManager.isWebGPU) {
 				console.log('%c[SchematicRenderer] Using WebGPU Renderer', 'color: #4caf50; font-weight: bold');
@@ -304,7 +311,10 @@ export class SchematicRenderer {
 
 			// Step 6: Setup camera and interaction
 			showProgress("Finalizing setup...", 0.9);
-			this.adjustCameraToSchematics();
+			// Use the improved focusOnSchematics for better auto-framing
+			if (!this.schematicManager.isEmpty()) {
+				this.cameraManager.focusOnSchematics({ animationDuration: 0 });
+			}
 			this.initializeInteractionComponents();
 
 			// Initialization complete
@@ -341,27 +351,6 @@ export class SchematicRenderer {
 		}
 	}
 
-	private adjustCameraToSchematics(): void {
-		if (!this.schematicManager) {
-			return;
-		}
-
-		if (this.schematicManager.isEmpty()) {
-			this.uiManager?.showEmptyState();
-			return;
-		}
-		const averagePosition =
-			this.schematicManager.getSchematicsAveragePosition();
-		const maxDimensions = this.schematicManager.getMaxSchematicDimensions();
-
-		this.cameraManager.activeCamera.lookAt(averagePosition);
-		(this.cameraManager.activeCamera.position as THREE.Vector3).set(
-			averagePosition.x + maxDimensions.x,
-			averagePosition.y + maxDimensions.y,
-			averagePosition.z + maxDimensions.z
-		);
-		this.cameraManager.update();
-	}
 
 	private initializeInteractionComponents(): void {
 		// Initialize simulation manager if enabled
@@ -435,7 +424,7 @@ export class SchematicRenderer {
 		if (this.options.enableDragAndDrop) {
 			const dragAndDropOptions: DragAndDropManagerOptions = {
 				acceptedFileTypes:
-					this.options.dragAndDropOptions?.acceptedFileTypes || [],
+					this.options.dragAndDropOptions?.acceptedFileTypes || ["schematic", "nbt", "schem", "litematic", "mcstructure"],
 				callbacks: {
 					// Schematic callbacks
 					onSchematicLoaded: this.options.callbacks?.onSchematicLoaded,
@@ -484,9 +473,7 @@ export class SchematicRenderer {
 				await this.cubane.loadResourcePack(blob as Blob);
 				await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
 
-				console.log(
-					`Loaded resource pack ${i + 1}/${resourcePackBlobs.length}`
-				);
+
 			} catch (error) {
 				console.error(`Failed to load resource pack ${i + 1}:`, error);
 			}
@@ -659,12 +646,17 @@ export class SchematicRenderer {
 
 		// Debug logging every 2 seconds
 		this.frameCount++;
-		if (this.options.logFPS && now - this.lastDebugTime > 2000) {
+		if (now - this.lastDebugTime > 2000) {
 			const actualFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
+			this.fps = actualFPS;
 			const renderFPS = (this.frameCount - this.throttledFrames) / ((now - this.lastDebugTime) / 1000);
 			const mode = this.enableAdaptiveFPS ? (this.isIdle ? 'idle' : 'active') : 'fixed';
 			const fpsTarget = currentTargetFPS === 0 ? 'uncapped' : `${currentTargetFPS}`;
-			console.log(`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`);
+
+			if (this.options.logFPS) {
+				console.log(`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`);
+			}
+
 			this.frameCount = 0;
 			this.throttledFrames = 0;
 			this.lastDebugTime = now;
@@ -684,6 +676,10 @@ export class SchematicRenderer {
 		this.highlightManager.update(deltaTime);
 		this.gizmoManager?.update();
 		this.renderManager.render();
+
+		// Render ImGui on overlay canvas (independent of Three.js render cycle)
+		this.imGuiManager?.render();
+
 		this.interactionManager?.update();
 		this.cubane.updateAnimations();
 	}
@@ -1007,6 +1003,79 @@ export class SchematicRenderer {
 	}
 
 	/**
+	 * Set SSAO preset for a specific camera mode
+	 * @param mode Camera mode ('perspective' or 'isometric')
+	 * @param params SSAO parameters
+	 */
+	public setSSAOPreset(
+		mode: "perspective" | "isometric",
+		params: {
+			aoRadius?: number;
+			distanceFalloff?: number;
+			intensity?: number;
+		}
+	): void {
+		if (this.renderManager) {
+			this.renderManager.setSSAOPreset(mode, params);
+		}
+	}
+
+	/**
+	 * Get current SSAO presets
+	 */
+	public getSSAOPresets(): {
+		perspective: { aoRadius: number; distanceFalloff: number; intensity: number };
+		isometric: { aoRadius: number; distanceFalloff: number; intensity: number };
+	} | null {
+		return this.renderManager?.getSSAOPresets() ?? null;
+	}
+
+	/**
+	 * Set SSAO parameters for the current camera mode
+	 * @param params SSAO parameters
+	 */
+	public setSSAOParameters(params: {
+		aoRadius?: number;
+		distanceFalloff?: number;
+		intensity?: number;
+		qualityMode?: "Performance" | "Low" | "Medium" | "High" | "Ultra";
+	}): void {
+		if (this.renderManager) {
+			this.renderManager.setSSAOParameters(params);
+		}
+	}
+
+	/**
+	 * Set custom isometric viewing angles
+	 * @param pitchDegrees Vertical angle in degrees (0-90, default ~35.264 for true isometric)
+	 * @param yawDegrees Horizontal rotation in degrees (default 45)
+	 * @param refocus Whether to refocus on schematics after changing angles (default true)
+	 */
+	public setIsometricAngles(
+		pitchDegrees: number,
+		yawDegrees: number = 45,
+		refocus: boolean = true
+	): void {
+		this.cameraManager.setIsometricAngles(pitchDegrees, yawDegrees, refocus);
+	}
+
+	/**
+	 * Reset isometric angles to true isometric view
+	 * @param refocus Whether to refocus on schematics (default true)
+	 */
+	public resetIsometricAngles(refocus: boolean = true): void {
+		this.cameraManager.resetIsometricAngles(refocus);
+	}
+
+	/**
+	 * Get current isometric viewing angles
+	 * @returns Object with pitch and yaw in degrees, or null if not in isometric mode
+	 */
+	public getIsometricAngles(): { pitch: number; yaw: number } | null {
+		return this.cameraManager.getIsometricAngles();
+	}
+
+	/**
 	 * Initializes simulation for the first schematic
 	 */
 	public async initializeSimulation(): Promise<boolean> {
@@ -1155,6 +1224,7 @@ export class SchematicRenderer {
 		this.renderManager.renderer.dispose();
 		this.dragAndDropManager?.dispose();
 		this.uiManager.dispose();
+		this.imGuiManager?.dispose();
 		this.cameraManager.dispose();
 
 		// Clean up Cubane resources

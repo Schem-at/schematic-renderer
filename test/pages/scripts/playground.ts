@@ -26,7 +26,7 @@ const chestBase64 =
 	"H4sIAAAAAAAA/2VS227TQBCdeBPHdlRaKpD4Ax5II6QKSAt5qYhEJQoRSJSLULS2J7bltdfa3ZDyK/wM4o94QTzC2E5ip1lZ1p6zc87Mzo4H7vsgxoybJGDQ/4BKJzIHAIvB4CU3fMvcMR44V2h4SCwD93r6drHQaD7+o9XCn0gMLfyZYMcjLJUIp2FinCZN79nodPTEgcOST/JoJrhZSJXBEeZRkmO89M/9ZZomZgB2bVealxmhXqXzRqW9fZ0D3Tc8Qzi8qOAJmSRBwkWriOOqiEdPx+PHJ2Ofn4bjs9LZgt51EpoYmAX2K0yi2FTb15SCWOtWRX//UFG/aP+DgTfjAo3BK35DhOtBf00wuJ9ReYHiC3NeLFUhcL6SUtQte9Cc+YIH6TyQeaDQYHlPBvdax0qu8o2SXurhnquOlyJFNfflzZcFD6i3k2XxtUzD4EUTLTAwqPJNSC6ViYcx16ST6WTBhcZhIVeoMKxRadFl8LyxoOnRZtfAfC9wogkLHK44JRAyitoOPQYHjQNPFHE2g6PWDZEH1Rz2d3qmRZLh3BcySOmMHhHcixKUk0rEMXQs+li3R3/btvu248JBFTHNDY0Y0ozQBRywLsMd36ZdA2AzqasHWY9Y9a8ld/datxPe2Ya70Ls0mOmW9vBWz3aU1lZpw2DGC1SjdzyP8OfvughWDt43FLrx2+vWXuVr0/8kU5Gq5AMAAA==";
 const xor =
 	"H4sIAAAAAAAA/21RX0vDMBC/NW3XdezZV1Ef++CLL0IRREHEOVFQocgI7bUNdslITqd+epO2dBssELjc/f7cXWIAD4I3UVANjMH4FbURSoJNTyC6lSRIoAF3puC/iD+0Edu5vgfhA8rK8n0G0xtOfNAIrqYQLsrSIPXo4VjWHYqqJucaP/EGiXDOf2wpHMPkulH5p9Oy77ORN2IOxnzw7TsYBSELByUWOOEYojkSLywlAv+RrxCi98XzccUJYQKzVnBvnBjGvS2Do5WQmGte0mWl+e8yVzLXSO2sDC621Qa/UWdrtUGNRVryxmBS8hzTDW8aFwlZpUZ9Uf3hdsPgZMu1DENK4rLhq3XWCOr4DugxmG2BXOh2sF3jgeyMlqR0Xme9nVSa6mRPz+7r/hBXaMxaeGpEgUk7R3qetA13KeSGumiDfeQE7Y5PDwh2fexZ24/5BzyRvq9UAgAA";
-
+const ssDetector = "H4sIAAAAAAAA/71T74rTQBCfZpM0Ta/2QD/oM9gr1zvKHQf5op6oqC0ceB9KObbJpl1MsmWzpfjBJ/FFfB1fQhDBOkla0/TqP8SdYWEzs/v7/WYy6wK40LjyZyymivsE6m+YTLlIAIAQaD6hiv6IHI5dcF4xRQOMmmBikgHUPkDa/Ywo10JGwWXAlVOi2Gfd026v50A7S/BkOoyoCoWM4ZAlU56w2WJyEdKJ5H4T7IHkGMuocbVxfVytVu8RenMrdW/fc8B8TWMG7af559EgDLnPabSl4m6h4uHZcb9/dH7aP6O9E0QHA6xrHqgZtA2wnzE+nSkguH2JHBi1MklhmDKVSUIpX3B9xfXNBftRJPy3qKc+pBFTihG4F6MuX9JQXXApkptJdgLyalplinKJoRqBx2VMsjnDXspRwCL6zjvphNTHXnmpWKhZJ4NhgRfSKGWduVgyufkaZzUQeLGNFKRKJOxmySUbMZoqL8HPTiKkmnkpD9YI3nEnBy9CS7Y+Ny5+u1cC+iKeU0mVkKOKqFgEzCuSe0SZBO7vEbXpiEXgQZlWVE6ZGq11Zdft39WUqy5qysur1pSH8pqycxlg/S8A9zTpNiAOVz7/FPefYMdqVa/a7tmqGVUjUPWqmVbFf428g1S9atXsitedijeglY/7ZaLwETOcenyeDhjPg+2hL0elCWQo0vU7LjqCe7foGIGDwULNF+qKTxMaQd5Ng/8EKk/+EY+hicfUxGNr4nE08biaeA408dzRxFNbz7bxn3mIJh5LE09dE09DE09TE0/rH3nQvgNq4vvcVgoAAA==";
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
 	const binaryString = atob(base64);
 	const len = binaryString.length;
@@ -54,8 +54,9 @@ const renderer = new SchematicRenderer(
 		// pistonTest: () =>
 		// 	Promise.resolve(base64ToArrayBuffer(pistonTestBase64String)),
 		// schematicBase64: () => Promise.resolve(base64ToArrayBuffer(chestBase64)),
-		xor: () => Promise.resolve(base64ToArrayBuffer(xor)),
+		// xor: () => Promise.resolve(base64ToArrayBuffer(xor)),
 		// diagonalCCA: () => Promise.resolve(base64ToArrayBuffer(diagonalCCA)),
+		ssDetector: () => Promise.resolve(base64ToArrayBuffer(ssDetector)),
 	},
 	{
 		vanillaPack: async () => {
@@ -69,17 +70,23 @@ const renderer = new SchematicRenderer(
 		ffmpeg: ffmpeg,
 		cameraOptions: {
 			// defaultCameraPreset: "isometric",
-			enableZoomInOnLoad: true,
+			// enableZoomInOnLoad: true,
 			// autoOrbitAfterZoom: true,
 		},
 		// enableAutoOrbit: true,
 		gamma: 0.45,
-		enableAdaptiveFPS: false,
+		enableAdaptiveFPS: true,
+		targetFPS: 20,
 
 		// Enable WebGPU if available (falls back to WebGL)
 		webgpuOptions: {
 			preferWebGPU: false, // Try WebGPU first
 			forceWebGPU: false, // Don't force if not supported
+		},
+
+		// Disable post-processing to test ImGui rendering
+		postProcessingOptions: {
+			enabled: true,
 		},
 
 		// Enable the debug inspector GUI (press ` to toggle)
@@ -95,9 +102,6 @@ const renderer = new SchematicRenderer(
 		interactionOptions: {
 			enableSelection: true,
 			enableMovingSchematics: true,
-		},
-		dragAndDropOptions: {
-			acceptedFileTypes: ["schematic", "nbt", "schem", "litematic"],
 		},
 		hdri: "/minecraft_day.hdr",
 

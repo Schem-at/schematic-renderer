@@ -75,6 +75,19 @@ export interface PostProcessingOptions {
 	enableSSAO?: boolean;
 	enableSMAA?: boolean;
 	enableGamma?: boolean;
+	// SSAO presets for different camera modes
+	ssaoPresets?: {
+		perspective?: {
+			aoRadius?: number;
+			distanceFalloff?: number;
+			intensity?: number;
+		};
+		isometric?: {
+			aoRadius?: number;
+			distanceFalloff?: number;
+			intensity?: number;
+		};
+	};
 }
 
 export interface DefinitionRegionOptions {
@@ -285,7 +298,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		enableMovingSchematics: false,
 	},
 	dragAndDropOptions: {
-		acceptedFileTypes: [],
+		acceptedFileTypes: ["schematic", "nbt", "schem", "litematic", "mcstructure"],
 	},
 	gizmoOptions: {
 		enableRotation: false,

@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.1.6",
+	"version": "1.1.15",
 	"license": "AGPL-3.0-only",
 	"description": "A schematic renderer package",
 	"main": "dist/schematic-renderer.umd.js",
@@ -44,6 +44,7 @@
 	"dependencies": {
 		"@ffmpeg/ffmpeg": "^0.12.15",
 		"@ffmpeg/util": "^0.12.2",
+		"@mori2003/jsimgui": "^0.11.0",
 		"chokidar": "^3.6.0",
 		"concurrently": "^8.2.2",
 		"deepmerge": "^4.3.1",
@@ -54,7 +55,7 @@
 		"jszip": "^3.10.1",
 		"lil-gui": "^0.19.2",
 		"n8ao": "^1.10.0",
-		"nucleation": "^0.1.130",
+		"nucleation": "^0.1.137",
 		"pako": "^2.1.0",
 		"postprocessing": "^6.35.4",
 		"simplex-noise": "^4.0.3",

@@ -163,13 +163,12 @@ export class SchematicManager {
 			this.schematicRenderer.uiManager.hideEmptyState();
 		}
 		this.addSchematic(schematicObject);
-		this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
 		if (
 			properties?.focused ||
 			!properties ||
 			properties.focused === undefined
 		) {
-			this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+			this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
 		}
 
 		options?.onProgress?.({
@@ -194,7 +193,6 @@ export class SchematicManager {
 	 * This should be called between test runs to prevent memory leaks
 	 */
 	public performDeepCleanup(): void {
-		console.log('🧹 Performing deep memory cleanup...');
 
 		// Clear all caches and registries
 		clearAllCaches();
@@ -524,7 +522,6 @@ export class SchematicManager {
 				try {
 					const regionNames = schematic.loadDefinitionRegions();
 					if (regionNames.length > 0) {
-						console.log(`[SchematicManager] Auto-loaded ${regionNames.length} definition regions for '${schematic.id}'`);
 					}
 				} catch (e) {
 					console.warn(`[SchematicManager] Failed to auto-load definition regions for '${schematic.id}':`, e);
@@ -571,12 +568,11 @@ export class SchematicManager {
 		if (schematics.length === 0) return averagePosition;
 		for (const schematic of schematics) {
 			const center = schematic.getSchematicCenter();
-			console.log("[SchematicManager] Schematic center:", center);
 			averagePosition.add(center);
 		}
 		averagePosition.divideScalar(schematics.length);
-		averagePosition.subScalar(0.5);
-		console.log("[SchematicManager] Average center position:", averagePosition);
+		// Note: No longer subtracting 0.5 - getSchematicCenter() now properly
+		// calculates the visual center using tight bounds
 		return averagePosition;
 	}
 

@@ -441,14 +441,9 @@ export class SchematicObject extends EventEmitter {
 			return;
 		}
 
-		console.log(`📊 --- Performance Results: ${this.name} ---`);
 
-		const totalTime = sessionData.totalDuration || 0;
-		console.log(`⏱️ Total Time: ${totalTime.toFixed(2)}ms`);
 
 		// Debug log to check data presence
-		console.log(`Debug: Timing Data Length: ${sessionData.timingData?.length || 0}`);
-		console.log(`Debug: Breakdown Length: ${sessionData.breakdown?.length || 0}`);
 
 		// Aggregate metrics from chunk processing data
 		let blockCount = 0;
@@ -460,18 +455,9 @@ export class SchematicObject extends EventEmitter {
 			});
 		}
 
-		console.log(`🧱 Block Count: ${blockCount}`);
-		console.log(`📦 Mesh Count: ${meshCount}`);
 
-		// Memory delta
-		let memoryDelta = 0;
-		if (sessionData.memorySnapshots && sessionData.memorySnapshots.length >= 2) {
-			const start = sessionData.memorySnapshots[0].usedJSHeapSize;
-			const end = sessionData.memorySnapshots[sessionData.memorySnapshots.length - 1].usedJSHeapSize;
-			memoryDelta = end - start;
-		}
 
-		console.log(`🧠 Memory Delta: ${(memoryDelta / 1024 / 1024).toFixed(2)} MB`);
+
 
 		if (sessionData.breakdown && sessionData.breakdown.length > 0) {
 			console.warn("📋 Detailed Breakdown:");
@@ -485,7 +471,6 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		console.log(`-------------------------------------------`);
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -576,7 +561,7 @@ export class SchematicObject extends EventEmitter {
 				filename: options.filename || `${this.name}_schematic.gltf`,
 				binary: options.binary ?? false,
 				includeCustomExtensions: options.includeCustomExtensions ?? false,
-				maxTextureSize: options.maxTextureSize ?? 1024,
+				maxTextureSize: options.maxTextureSize ?? 4096,
 				embedImages: options.embedImages ?? true,
 				animations: options.animations || [],
 			};
@@ -948,14 +933,11 @@ export class SchematicObject extends EventEmitter {
 		this.reportBuildProgress("Initializing pipeline...", 0.05);
 
 		const palettes = this.getPalettes(schematic);
-		const paletteStart = performance.now();
 		performanceMonitor.startOperation("Palette Precomputation");
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 		performanceMonitor.endOperation("Palette Precomputation");
-		console.log(`[SchematicObject] Palette prep took ${(performance.now() - paletteStart).toFixed(2)}ms`);
 
 		this.reportBuildProgress("Creating chunk iterator...", 0.1);
-		console.log(`[SchematicObject] Creating lazy chunk iterator for ${this.id}...`);
 
 		performanceMonitor.startOperation("Chunk Iterator Creation");
 		const iterator = schematic.create_lazy_chunk_iterator(
@@ -970,7 +952,6 @@ export class SchematicObject extends EventEmitter {
 		performanceMonitor.endOperation("Chunk Iterator Creation");
 
 		const totalChunks = iterator.total_chunks();
-		console.log(`[SchematicObject] Chunk iterator created. Total chunks: ${totalChunks}`);
 
 		if (totalChunks === 0) {
 
@@ -1000,8 +981,6 @@ export class SchematicObject extends EventEmitter {
 			totalChunks,
 			0
 		);
-
-		console.log(`[SchematicObject] Processing ${totalChunks} chunks in immediate mode (PARALLEL)...`);
 
 		performanceMonitor.startOperation("Process All Chunks");
 
@@ -1201,7 +1180,6 @@ export class SchematicObject extends EventEmitter {
 		// CRITICAL: Wait for JSZip's async postMessage queue to drain
 		// JSZip uses setImmediate (via postMessage) which continues after await returns
 		await new Promise(resolve => setTimeout(resolve, 100));
-		console.log('[SchematicObject] JSZip queue drained, starting chunk processing...');
 
 		const iterator = schematic.create_lazy_chunk_iterator(
 			chunkDimensions.chunkWidth,
@@ -1281,8 +1259,6 @@ export class SchematicObject extends EventEmitter {
 
 					allChunks.push({ chunk_x, chunk_y, chunk_z, blocks });
 				}
-
-				console.log(`[SchematicObject] Processing ${allChunks.length} chunks in parallel batches...`);
 
 				// Process in batches to avoid overwhelming the worker pool
 				const BATCH_SIZE = 8; // Match worker count
@@ -1410,15 +1386,12 @@ export class SchematicObject extends EventEmitter {
 		this.reportBuildProgress("Initializing batched pipeline...", 0.05);
 
 		const palettes = this.getPalettes(schematic);
-		const paletteStart = performance.now();
 		performanceMonitor.startOperation("Palette Precomputation");
 		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
 		performanceMonitor.endOperation("Palette Precomputation");
-		console.log(`[SchematicObject] Palette prep took ${(performance.now() - paletteStart).toFixed(2)}ms`);
 
 		// STEP 2: Create chunk iterator
 		this.reportBuildProgress("Creating chunk iterator...", 0.1);
-		console.log(`[SchematicObject] Creating lazy chunk iterator for BATCHED mode...`);
 
 		performanceMonitor.startOperation("Chunk Iterator Creation");
 		const iterator = schematic.create_lazy_chunk_iterator(
@@ -1433,7 +1406,6 @@ export class SchematicObject extends EventEmitter {
 		performanceMonitor.endOperation("Chunk Iterator Creation");
 
 		const totalChunks = iterator.total_chunks();
-		console.log(`[SchematicObject] Total chunks to batch: ${totalChunks}`);
 
 		if (totalChunks === 0) {
 			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
@@ -1479,7 +1451,6 @@ export class SchematicObject extends EventEmitter {
 			});
 		}
 
-		console.log(`[SchematicObject] Collected ${allChunks.length} chunks for batch processing`);
 
 		// STEP 4: Process all chunks in batch mode
 		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);
@@ -1505,7 +1476,6 @@ export class SchematicObject extends EventEmitter {
 		// STEP 5: Add meshes to scene
 		this.reportBuildProgress("Adding batched meshes to scene...", 0.95, totalChunks, processedCount);
 
-		console.log(`[SchematicObject] Adding ${batchedMeshes.length} batched meshes to scene progressively...`);
 
 		// Add meshes progressively to avoid GPU upload freeze
 		// Each mesh addition triggers GPU buffer upload, so we spread them out
@@ -1526,16 +1496,11 @@ export class SchematicObject extends EventEmitter {
 				await new Promise<void>(r => requestAnimationFrame(() => r()));
 			}
 
-			if ((i / MESHES_PER_FRAME) % 4 === 0) {
-				console.log(`[SchematicObject] Added ${Math.min(i + MESHES_PER_FRAME, batchedMeshes.length)}/${batchedMeshes.length} meshes to scene...`);
-			}
 		}
 
-		console.log(`[SchematicObject] Updating world matrices...`);
 		this.group.updateMatrixWorld(true);
 
 		const totalTime = performance.now() - overallStartTime;
-		console.log(`[SchematicObject] BATCHED build complete: ${batchedMeshes.length} meshes in ${totalTime.toFixed(0)}ms`);
 
 		this.reportBuildProgress("Build complete!", 1.0, totalChunks, processedCount);
 
@@ -1821,7 +1786,6 @@ export class SchematicObject extends EventEmitter {
 			// Skip regions - regions are parented to the schematic group and have names starting with "region_"
 			// We check 'name' because 'id' is an internal three.js integer
 			if (child.name && child.name.startsWith("region_")) {
-				console.log(`[SchematicObject] Preserving region during rebuild: ${child.name}`);
 				continue;
 			}
 
@@ -2676,17 +2640,38 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	public getSchematicCenter(): THREE.Vector3 {
-		// Use tight bounds for center calculation if available
-		const tightDimensions = this.getTightDimensions();
-		const dimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
-			? tightDimensions
-			: this.getDimensions();
+		const box = this.getTightWorldBox();
+		return box.getCenter(new THREE.Vector3());
+	}
 
-		return new THREE.Vector3(
-			this.position.x + Math.abs(dimensions[0] / 2),
-			this.position.y + Math.abs(dimensions[1] / 2),
-			this.position.z + Math.abs(dimensions[2] / 2)
-		);
+	/**
+	 * Get the world-space bounding box of the schematic's actual block content
+	 */
+	public getTightWorldBox(): THREE.Box3 {
+		const tightMin = this.getTightBoundsMin();
+		const tightDimensions = this.getTightDimensions();
+		const hasTightBounds = tightMin !== null &&
+			tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0;
+
+		const box = new THREE.Box3();
+		if (hasTightBounds) {
+			box.min.set(tightMin[0], tightMin[1], tightMin[2]);
+			box.max.set(
+				tightMin[0] + tightDimensions[0],
+				tightMin[1] + tightDimensions[1],
+				tightMin[2] + tightDimensions[2]
+			);
+		} else {
+			const dims = this.getDimensions();
+			box.min.set(0, 0, 0);
+			box.max.set(dims[0], dims[1], dims[2]);
+		}
+
+		// Apply the group's transform
+		this.group.updateMatrixWorld(true);
+		box.applyMatrix4(this.group.matrixWorld);
+
+		return box;
 	}
 
 	public centerInScene() {

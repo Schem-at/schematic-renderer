@@ -115,10 +115,6 @@ export class WorldMeshBuilder {
 			// Check if GPU compute is enabled in options
 			const gpuOptions = this.schematicRenderer.options.gpuComputeOptions;
 			if (!gpuOptions?.enabled) {
-				console.log('%c[WorldMeshBuilder] GPU Compute: DISABLED', 'color: #ff9800; font-weight: bold');
-				console.log('  → Using Web Worker fallback (12 workers parallel)');
-				console.log('  → To enable GPU compute: set gpuComputeOptions.enabled = true');
-				console.log('  → Note: GPU compute is experimental and may have texture issues');
 				this.initializeWorkers();
 				return false;
 			}
@@ -126,7 +122,6 @@ export class WorldMeshBuilder {
 			// Check if WebGPU is available
 			const isAvailable = await GPUCapabilityManager.isWebGPUAvailable();
 			if (!isAvailable) {
-				console.log('[WorldMeshBuilder] WebGPU not available, using worker fallback');
 				this.initializeWorkers();
 				return false;
 			}
@@ -137,7 +132,6 @@ export class WorldMeshBuilder {
 
 			if (success) {
 				this.useGPUCompute = true;
-				console.log('%c[WorldMeshBuilder] GPU Compute: ENABLED', 'color: #ff9800; font-weight: bold');
 				console.warn('  ⚠️ WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!');
 				console.warn('  ⚠️ Textures will not render correctly (wireframe only).');
 				console.warn('  ⚠️ Set gpuComputeOptions.enabled = false for better performance.');
@@ -166,18 +160,12 @@ export class WorldMeshBuilder {
 	private initializeWorkers() {
 		if (this.workers.length > 0) return;
 
-		const workerType = this.useWasmMeshBuilder ? 'WASM' : 'JavaScript';
-		console.log(`[WorldMeshBuilder] Initializing ${workerType} worker pool with ${this.maxWorkers} workers`);
 
 		// Initialize shared memory pool for zero-copy transfers
 		this.sharedMemoryPool = getSharedMemoryPool();
 		this.useSharedMemory = this.sharedMemoryPool.usingSharedMemory();
 
-		if (this.useSharedMemory) {
-			console.log('%c[WorldMeshBuilder] SharedArrayBuffer enabled - zero-copy transfers active', 'color: #4caf50');
-		} else {
-			console.log('[WorldMeshBuilder] SharedArrayBuffer not available - using standard transfers');
-		}
+
 
 		for (let i = 0; i < this.maxWorkers; i++) {
 			// Use WASM worker if enabled, otherwise use JavaScript worker
@@ -219,7 +207,6 @@ export class WorldMeshBuilder {
 			worker.postMessage({ type: "setGreedyMeshing", enabled });
 		}
 
-		console.log(`[WorldMeshBuilder] Greedy meshing ${enabled ? 'enabled' : 'disabled'}`);
 	}
 
 	/**
@@ -326,11 +313,8 @@ export class WorldMeshBuilder {
 		if (newChunkSize <= 0 || newChunkSize > 64) {
 			throw new Error("Chunk size must be between 1 and 64");
 		}
-		const oldChunkSize = this.chunkSize;
 		this.chunkSize = newChunkSize;
-		console.log(
-			`[WorldMeshBuilder] Chunk size changed from ${oldChunkSize} to ${newChunkSize}`
-		);
+
 	}
 
 	public getChunkSize(): number {
@@ -338,12 +322,7 @@ export class WorldMeshBuilder {
 	}
 
 	public setQuantization(enabled: boolean): void {
-		const oldValue = this.useQuantization;
 		this.useQuantization = enabled;
-		console.log(
-			`[WorldMeshBuilder] Quantization ${enabled ? "enabled" : "disabled"} (was ${oldValue ? "enabled" : "disabled"
-			})`
-		);
 	}
 
 	public getQuantization(): boolean {
@@ -433,7 +412,6 @@ export class WorldMeshBuilder {
 
 	public async precomputePaletteGeometries(palette: any[]): Promise<void> {
 		performanceMonitor.startOperation("precomputePaletteGeometries");
-		console.time("precomputePaletteGeometries");
 
 		// Check if palette is effectively the same
 		if (this.paletteCache?.isReady && this.paletteCache.palette.length === palette.length) {
@@ -450,8 +428,6 @@ export class WorldMeshBuilder {
 			);
 
 			if (firstMatch && lastMatch) {
-				console.log(`[WorldMeshBuilder] Palette cache hit (${palette.length} entries). Skipping precomputation.`);
-				console.timeEnd("precomputePaletteGeometries");
 				performanceMonitor.endOperation("precomputePaletteGeometries");
 				return;
 			}
@@ -459,12 +435,10 @@ export class WorldMeshBuilder {
 
 		// Reset stats on start
 		WorldMeshBuilder.resetStats();
-		console.log(`[WorldMeshBuilder] Precomputing geometry for ${palette.length} palette entries...`);
 
 		// Re-initialize GPU compute if it was disposed (e.g., during cleanup between runs)
 		// This must happen BEFORE worker initialization to allow GPU to take precedence
 		if (!this.gpuInitPromise && this.schematicRenderer.options.gpuComputeOptions?.enabled) {
-			console.log('[WorldMeshBuilder] Re-initializing GPU compute (was disposed)...');
 			this.gpuInitPromise = this._doInitializeGPU();
 		}
 
@@ -597,11 +571,8 @@ export class WorldMeshBuilder {
 
 		// Upload to GPU if using GPU compute, otherwise broadcast to workers
 		if (this.useGPUCompute && this.computeMeshBuilder) {
-			console.log(`[WorldMeshBuilder] Uploading palette to GPU...`);
 			await this.computeMeshBuilder.uploadPaletteData(this.paletteCache);
 		} else {
-			// Broadcast geometry data to ALL workers (fallback path)
-			console.log(`[WorldMeshBuilder] Broadcasting palette to ${this.workers.length} workers...`);
 			this.workers.forEach(worker => {
 				worker.postMessage({
 					type: "updatePalette",
@@ -610,9 +581,6 @@ export class WorldMeshBuilder {
 			});
 		}
 
-		console.log("[WorldMeshBuilder] Palette precomputation complete.");
-		console.timeEnd("precomputePaletteGeometries");
-		performanceMonitor.endOperation("precomputePaletteGeometries");
 
 		// Log summary of build mode
 		if (this.useGPUCompute) {
@@ -661,7 +629,6 @@ export class WorldMeshBuilder {
 			this.initializeWorkers();
 		}
 
-		const startTime = performance.now();
 		const totalChunks = allChunks.length;
 		let globalProcessedCount = 0;
 
@@ -672,7 +639,6 @@ export class WorldMeshBuilder {
 		const allResultMeshes: THREE.Mesh[] = [];
 
 		const numSubBatches = Math.ceil(totalChunks / SUB_BATCH_SIZE);
-		console.log(`[WorldMeshBuilder] Starting BATCH mode: ${totalChunks} chunks in ${numSubBatches} sub-batches (${SUB_BATCH_SIZE} chunks each)...`);
 
 		// Use a single dedicated worker for accumulation
 		const batchWorker = this.workers[0];
@@ -757,7 +723,6 @@ export class WorldMeshBuilder {
 				batchWorker.postMessage({ type: "finishBatch" });
 			});
 
-			console.log(`[WorldMeshBuilder] Sub-batch ${subBatchIdx + 1}/${numSubBatches}: ${batchResult.meshes.length} meshes from ${subBatchChunks.length} chunks`);
 
 			// Create Three.js meshes from this sub-batch's merged data
 			const subBatchMeshes = this.createMeshesFromBatchResult(batchResult);
@@ -774,8 +739,6 @@ export class WorldMeshBuilder {
 			}
 		}
 
-		const elapsed = performance.now() - startTime;
-		console.log(`[WorldMeshBuilder] BATCH mode complete: ${allResultMeshes.length} merged meshes from ${totalChunks} chunks in ${elapsed.toFixed(0)}ms`);
 
 		return allResultMeshes;
 	}
@@ -1256,7 +1219,6 @@ export class WorldMeshBuilder {
 				let spatialCache = (schematicObject as any)._entitySpatialCache as Map<string, any[]> | undefined;
 
 				if (!spatialCache) {
-					// Build spatial index once - O(E)
 					spatialCache = new Map<string, any[]>();
 					for (const [, entity] of blockEntityMap) {
 						const pos = entity.position;
@@ -1267,7 +1229,6 @@ export class WorldMeshBuilder {
 						spatialCache.get(chunkKey)!.push(entity);
 					}
 					(schematicObject as any)._entitySpatialCache = spatialCache;
-					console.log(`[WorldMeshBuilder] Built entity spatial cache: ${blockEntityMap.size} entities in ${spatialCache.size} chunks`);
 				}
 
 				// O(1) lookup for this chunk's entities

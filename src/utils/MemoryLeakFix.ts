@@ -169,8 +169,6 @@ export class MemoryLeakFix {
      * Clear all registries and force cleanup
      */
     public static clearAllCaches(): void {
-        console.log('🧹 Clearing all caches and registries...');
-
         // Clear MaterialRegistry
         MaterialRegistry.clear();
 

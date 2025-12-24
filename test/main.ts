@@ -107,7 +107,7 @@ const renderer = new SchematicRenderer(
 			enableMovingSchematics: true,
 		},
 		dragAndDropOptions: {
-			acceptedFileTypes: ["schematic", "nbt", "schem", "litematic"],
+			acceptedFileTypes: ["schematic", "nbt", "schem", "litematic", "mcstructure"],
 		},
 		hdri: "/minecraft_day.hdr",
 

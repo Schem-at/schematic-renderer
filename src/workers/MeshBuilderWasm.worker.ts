@@ -38,7 +38,6 @@ type ChunkBuildRequest = {
 let meshBuilder: MeshBuilder | null = null;
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
-let useSharedMemory = false;
 let useGreedyMeshing = false;  // Enable greedy meshing optimization
 
 // Batch mode state - accumulates all chunks before returning
@@ -75,17 +74,8 @@ async function initialize(): Promise<void> {
             meshBuilder = new MeshBuilder();
             isInitialized = true;
 
-            // Check if SharedArrayBuffer is available for this worker
-            try {
-                new SharedArrayBuffer(1);
-                useSharedMemory = true;
-            } catch {
-                useSharedMemory = false;
-            }
 
-            const version = get_version();
-            const memMode = useSharedMemory ? 'SharedArrayBuffer' : 'standard';
-            console.log(`[MeshBuilderWasm Worker] Initialized v${version} (${memMode})`);
+
         } catch (error) {
             console.error('[MeshBuilderWasm Worker] Failed to initialize:', error);
             throw error;
@@ -126,7 +116,6 @@ self.onmessage = async (event: MessageEvent) => {
                 break;
             case "setGreedyMeshing":
                 useGreedyMeshing = payload.enabled;
-                console.log(`[MeshBuilderWasm Worker] Greedy meshing ${useGreedyMeshing ? 'enabled' : 'disabled'}`);
                 self.postMessage({ type: "greedyMeshingSet", enabled: useGreedyMeshing });
                 break;
             default:
@@ -190,7 +179,6 @@ function finishBatch() {
     }
 
     const elapsed = performance.now() - startTime;
-    console.log(`[MeshBuilderWasm Worker] Batch finished: ${meshes.length} meshes in ${elapsed.toFixed(2)}ms`);
 
     _batchMode = false;
     batchAccumulators.clear();
@@ -344,7 +332,6 @@ function updatePalette(paletteData: PaletteGeometryData[]) {
         throw new Error("WASM MeshBuilder not initialized");
     }
 
-    const startTime = performance.now();
 
     // Convert palette data to format expected by WASM
     // The WASM module expects: { index, occlusionFlags, category, geometries: [...] }
@@ -365,8 +352,6 @@ function updatePalette(paletteData: PaletteGeometryData[]) {
 
     meshBuilder.update_palette(wasmPaletteData);
 
-    const elapsed = performance.now() - startTime;
-    console.log(`[MeshBuilderWasm Worker] Palette updated in ${elapsed.toFixed(2)}ms (${paletteData.length} entries)`);
 
     self.postMessage({ type: "paletteUpdated", count: paletteData.length });
 }

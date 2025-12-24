@@ -47,12 +47,43 @@ export class RenderManager {
 	private originalBackground: THREE.Texture | THREE.Color | null = null;
 	private isometricBackground: THREE.Color;
 
+	// SSAO presets for different camera modes
+	private ssaoPresets = {
+		perspective: {
+			aoRadius: 1.0,
+			distanceFalloff: 0.4,
+			intensity: 5.0,
+		},
+		isometric: {
+			aoRadius: 0.3,
+			distanceFalloff: 0.1,
+			intensity: 0.8,
+		},
+	};
+
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 		this.eventEmitter = this.schematicRenderer.eventEmitter;
 
 		// Create a pleasant background color for isometric view
 		this.isometricBackground = new THREE.Color(0x87ceeb); // Sky blue
+
+		// Apply custom SSAO presets from options if provided
+		const customSSAOPresets = schematicRenderer.options?.postProcessingOptions?.ssaoPresets;
+		if (customSSAOPresets) {
+			if (customSSAOPresets.perspective) {
+				this.ssaoPresets.perspective = {
+					...this.ssaoPresets.perspective,
+					...customSSAOPresets.perspective,
+				};
+			}
+			if (customSSAOPresets.isometric) {
+				this.ssaoPresets.isometric = {
+					...this.ssaoPresets.isometric,
+					...customSSAOPresets.isometric,
+				};
+			}
+		}
 
 		this.setInitialSize();
 	}
@@ -276,6 +307,8 @@ export class RenderManager {
 		this.composer = null;
 		this._webgpuInitialized = true;
 
+		this.renderer.resetState();
+
 		// Create PMREMGenerator for HDRI
 		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 	}
@@ -303,6 +336,8 @@ export class RenderManager {
 
 		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
 		this.renderer.setPixelRatio(window.devicePixelRatio);
+
+		// this.renderer.resetState();
 
 		this.initComposer();
 		this.initDefaultPasses(this.schematicRenderer.options);
@@ -333,7 +368,7 @@ export class RenderManager {
 	}
 
 	/**
-	 * Handle camera type changes to manage HDRI background appropriately
+	 * Handle camera type changes to manage HDRI background and SSAO appropriately
 	 */
 	private handleCameraChange(cameraType: string): void {
 		const scene = this.schematicRenderer.sceneManager.scene;
@@ -346,13 +381,21 @@ export class RenderManager {
 			// Switch to solid color background for isometric view
 			scene.background = this.isometricBackground;
 
-			console.log("Switched to isometric background");
+			// Adjust SSAO for isometric view (orthographic cameras have different depth)
+			this.setSSAOParameters(this.ssaoPresets.isometric);
+
+			console.log("Switched to isometric mode (background + SSAO adjusted)");
 		} else {
 			// Restore HDRI background for perspective cameras
 			if (this.originalBackground) {
 				scene.background = this.originalBackground;
 				console.log("Restored HDRI background");
 			}
+
+			// Restore perspective SSAO settings
+			this.setSSAOParameters(this.ssaoPresets.perspective);
+
+			console.log("Switched to perspective mode (SSAO restored)");
 		}
 	}
 
@@ -678,6 +721,46 @@ export class RenderManager {
 		}
 	}
 
+	/**
+	 * Customize SSAO presets for different camera modes
+	 * @param mode - Camera mode ('perspective' or 'isometric')
+	 * @param params - SSAO parameters to apply for this mode
+	 */
+	public setSSAOPreset(
+		mode: "perspective" | "isometric",
+		params: {
+			aoRadius?: number;
+			distanceFalloff?: number;
+			intensity?: number;
+		}
+	): void {
+		this.ssaoPresets[mode] = {
+			...this.ssaoPresets[mode],
+			...params,
+		};
+
+		// If we're currently in this mode, apply the changes immediately
+		const currentCameraType = this.isOrthographicCamera() ? "isometric" : "perspective";
+		if (currentCameraType === mode) {
+			this.setSSAOParameters(this.ssaoPresets[mode]);
+		}
+
+		console.log(`SSAO preset updated for ${mode} mode:`, this.ssaoPresets[mode]);
+	}
+
+	/**
+	 * Get current SSAO presets
+	 */
+	public getSSAOPresets(): {
+		perspective: { aoRadius: number; distanceFalloff: number; intensity: number };
+		isometric: { aoRadius: number; distanceFalloff: number; intensity: number };
+	} {
+		return {
+			perspective: { ...this.ssaoPresets.perspective },
+			isometric: { ...this.ssaoPresets.isometric },
+		};
+	}
+
 	public renderSingleFrameAndGetStats(): {
 		renderTimeMs: number;
 		rendererInfo: THREE.WebGLInfo | null;
@@ -779,6 +862,10 @@ export class RenderManager {
 					this.schematicRenderer.cameraManager.activeCamera.camera
 				);
 			}
+
+			// if (!this._isWebGPU) {
+			// 	this.renderer.resetState();
+			// }
 		} catch (error) {
 			console.error("Render error:", error);
 			this.eventEmitter.emit("renderError", { error });
