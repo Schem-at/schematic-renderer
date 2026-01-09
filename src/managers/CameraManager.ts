@@ -689,7 +689,6 @@ export class CameraManager extends EventEmitter {
 			animationDuration = 0,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t), // smooth step
 			skipPathFitting = false,
-			useTightBounds = this.cameraOptions.useTightBounds ?? true, // Use tight bounds by default for better framing
 		} = options;
 
 		// Temporarily disable controls
@@ -699,7 +698,7 @@ export class CameraManager extends EventEmitter {
 		}
 
 		// Get comprehensive schematic bounds
-		const bounds = this.calculateSchematicBounds(useTightBounds);
+		const bounds = this.calculateSchematicBounds();
 		if (!bounds) {
 			console.warn("No valid schematic bounds found");
 			if (controls) controls.enabled = true;
@@ -844,95 +843,55 @@ export class CameraManager extends EventEmitter {
 		aspect: number,
 		padding: number
 	): number {
-		const paddingFactor = 1 + padding * 2; // e.g., 1.3 for 15% padding on each side
+		const paddingFactor = 1 + padding * 2;
 
-		// For orthographic/isometric cameras, we need to consider how the 3D object
-		// projects onto the viewing plane at the camera's rotation angle
 		let projectedWidth: number;
 		let projectedHeight: number;
 
-		if (this.activeCamera.camera.type === "OrthographicCamera") {
-			// Get the camera's rotation to calculate projected dimensions
-			const presetName = this.activeCameraKey;
-			const preset =
-				CameraManager.CAMERA_PRESETS[
-				presetName as keyof typeof CameraManager.CAMERA_PRESETS
-				] || CameraManager.CAMERA_PRESETS.isometric;
+		if (this.activeCamera.camera instanceof THREE.OrthographicCamera) {
+			// Use the actual camera's rotation for projection calculation
+			const viewMatrix = this.activeCamera.camera.matrixWorldInverse;
 
-			if (preset.rotation) {
-				// For an orthographic/isometric camera, we need to find how the 3D bounding box
-				// projects onto the 2D viewing plane. We do this by:
-				// 1. Creating the 8 corners of the bounding box
-				// 2. Transforming them to camera view space (where camera looks down -Z)
-				// 3. Finding the min/max X and Y extents in view space
+			// Create the 8 corners of the WORLD SPACE AABB
+			const halfSize = objectSize.clone().multiplyScalar(0.5);
+			const center = this.schematicRenderer.schematicManager!.getSchematicsAveragePosition();
+			
+			const corners = [
+				new THREE.Vector3(center.x - halfSize.x, center.y - halfSize.y, center.z - halfSize.z),
+				new THREE.Vector3(center.x + halfSize.x, center.y - halfSize.y, center.z - halfSize.z),
+				new THREE.Vector3(center.x - halfSize.x, center.y + halfSize.y, center.z - halfSize.z),
+				new THREE.Vector3(center.x + halfSize.x, center.y + halfSize.y, center.z - halfSize.z),
+				new THREE.Vector3(center.x - halfSize.x, center.y - halfSize.y, center.z + halfSize.z),
+				new THREE.Vector3(center.x + halfSize.x, center.y - halfSize.y, center.z + halfSize.z),
+				new THREE.Vector3(center.x - halfSize.x, center.y + halfSize.y, center.z + halfSize.z),
+				new THREE.Vector3(center.x + halfSize.x, center.y + halfSize.y, center.z + halfSize.z),
+			];
 
-				const rotation = new THREE.Euler(...preset.rotation);
+			let minX = Infinity, maxX = -Infinity;
+			let minY = Infinity, maxY = -Infinity;
 
-				// Create a camera to get the proper view matrix
-				const tempCamera = new THREE.OrthographicCamera();
-				tempCamera.rotation.copy(rotation);
-				tempCamera.updateMatrixWorld();
-
-				// Get the view matrix (inverse of camera's world matrix)
-				const viewMatrix = tempCamera.matrixWorldInverse;
-
-				// Create the 8 corners of the object's bounding box (in world space)
-				const halfSize = objectSize.clone().multiplyScalar(0.5);
-				const corners = [
-					new THREE.Vector3(-halfSize.x, -halfSize.y, -halfSize.z),
-					new THREE.Vector3(halfSize.x, -halfSize.y, -halfSize.z),
-					new THREE.Vector3(-halfSize.x, halfSize.y, -halfSize.z),
-					new THREE.Vector3(halfSize.x, halfSize.y, -halfSize.z),
-					new THREE.Vector3(-halfSize.x, -halfSize.y, halfSize.z),
-					new THREE.Vector3(halfSize.x, -halfSize.y, halfSize.z),
-					new THREE.Vector3(-halfSize.x, halfSize.y, halfSize.z),
-					new THREE.Vector3(halfSize.x, halfSize.y, halfSize.z),
-				];
-
-				// Transform corners to camera view space
-				const viewSpaceCorners = corners.map((corner) =>
-					corner.clone().applyMatrix4(viewMatrix)
-				);
-
-				// Find the bounding box in view space
-				// In view space: X is horizontal (right), Y is vertical (up), Z is depth (into screen)
-				let minX = Infinity, maxX = -Infinity;
-				let minY = Infinity, maxY = -Infinity;
-
-				for (const corner of viewSpaceCorners) {
-					minX = Math.min(minX, corner.x);
-					maxX = Math.max(maxX, corner.x);
-					minY = Math.min(minY, corner.y);
-					maxY = Math.max(maxY, corner.y);
-				}
-
-				projectedWidth = (maxX - minX) * paddingFactor;
-				projectedHeight = (maxY - minY) * paddingFactor;
-
-				console.log(`[CameraManager] Isometric projection: width=${projectedWidth.toFixed(2)}, height=${projectedHeight.toFixed(2)}, aspect=${aspect.toFixed(2)}`);
-			} else {
-				// Fallback to simple calculation if no rotation specified
-				projectedWidth = objectSize.x * paddingFactor;
-				projectedHeight = objectSize.y * paddingFactor;
+			for (const corner of corners) {
+				const viewSpaceCorner = corner.clone().applyMatrix4(viewMatrix);
+				minX = Math.min(minX, viewSpaceCorner.x);
+				maxX = Math.max(maxX, viewSpaceCorner.x);
+				minY = Math.min(minY, viewSpaceCorner.y);
+				maxY = Math.max(maxY, viewSpaceCorner.y);
 			}
+
+			projectedWidth = (maxX - minX) * paddingFactor;
+			projectedHeight = (maxY - minY) * paddingFactor;
 		} else {
-			// For non-orthographic cameras (shouldn't happen, but safety fallback)
 			projectedWidth = objectSize.x * paddingFactor;
 			projectedHeight = objectSize.y * paddingFactor;
 		}
 
-		// Determine the orthographic camera's required frustum height
-		// This depends on whether width or height is the constraining dimension
 		let requiredFrustumHeight;
 		if (projectedWidth / aspect > projectedHeight) {
-			// Width is the constraining dimension relative to viewport proportions
 			requiredFrustumHeight = projectedWidth / aspect;
 		} else {
-			// Height is the constraining dimension
 			requiredFrustumHeight = projectedHeight;
 		}
 
-		// Ensure a minimum visible height to prevent extreme zoom on very small objects
 		return Math.max(requiredFrustumHeight, ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT);
 	}
 
@@ -960,7 +919,7 @@ export class CameraManager extends EventEmitter {
 			// First, zoom in cinematically
 			await this.zoomInToSchematics({
 				duration: zoomDuration,
-				padding: 0.15, // Default padding for zoom
+				padding: 0.08, // Reduced padding for tighter zoom
 				skipPathFitting: true, // Path will be fitted before orbit starts
 			});
 
@@ -1036,7 +995,7 @@ export class CameraManager extends EventEmitter {
 			await this.zoomToOrbitPosition({
 				// zoomToOrbitPosition handles its own logic
 				duration: this.cameraOptions.zoomInDuration || 2.0,
-				padding: 0.15,
+				padding: 0.08,
 				startFromCurrentPosition: true, // Typically zoom from current view
 				startOrbitAfterZoom: this.cameraOptions.autoOrbitAfterZoom || false,
 			});
@@ -1045,7 +1004,7 @@ export class CameraManager extends EventEmitter {
 			await this.focusOnSchematics({
 				// This will fit the path
 				animationDuration: 0,
-				padding: 0.15,
+				padding: 0.08,
 				skipPathFitting: false, // Ensure path is fitted
 			});
 			// focusOnSchematics now handles starting orbit if it was previously enabled or if options dictate it
@@ -1181,7 +1140,7 @@ export class CameraManager extends EventEmitter {
 		} = {}
 	): Promise<void> {
 		const {
-			padding = 0.15,
+			padding = 0.08,
 			duration = 2.0,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t),
 			startDistance = 3.0,
@@ -1194,7 +1153,7 @@ export class CameraManager extends EventEmitter {
 		console.log("Starting cinematic zoom-in to schematics");
 
 		// Get the optimal target position first (without animation)
-		const bounds = this.calculateSchematicBounds(true); // Use tight bounds by default
+		const bounds = this.calculateSchematicBounds(); // Use tight bounds by default
 		if (!bounds) return;
 
 		const { center, size } = bounds;
@@ -1460,9 +1419,9 @@ export class CameraManager extends EventEmitter {
 		});
 	}
 
-	private calculateSchematicBounds(useTightBounds: boolean = true): {
+	private calculateSchematicBounds(): {
 		center: THREE.Vector3;
-		size: THREE.Vector3; // Represents dimensions (width, height, depth)
+		size: THREE.Vector3; // World-space dimensions of the AABB
 		boundingBox: THREE.Box3;
 	} | null {
 		if (
@@ -1472,21 +1431,18 @@ export class CameraManager extends EventEmitter {
 			return null;
 		}
 
-		const center =
-			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
-		const dimensions = useTightBounds
-			? this.schematicRenderer.schematicManager.getMaxSchematicTightDimensions()
-			: this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+		// Use the new world-space bounding box calculation
+		const boundingBox = this.schematicRenderer.schematicManager.getGlobalTightWorldBox();
+		if (boundingBox.isEmpty()) return null;
 
-		console.log(`[CameraManager] Using ${useTightBounds ? 'TIGHT' : 'ALLOCATED'} bounds for framing:`, dimensions);
+		const center = boundingBox.getCenter(new THREE.Vector3());
+		const size = boundingBox.getSize(new THREE.Vector3());
 
-		const halfSize = dimensions.clone().multiplyScalar(0.5);
-		const boundingBox = new THREE.Box3(
-			center.clone().sub(halfSize),
-			center.clone().add(halfSize)
+		console.log(
+			`[CameraManager] World-space bounds: center=${center.toArray()}, size=${size.toArray()}`
 		);
 
-		return { center, size: dimensions, boundingBox };
+		return { center, size, boundingBox };
 	}
 
 	/**
@@ -1618,9 +1574,9 @@ export class CameraManager extends EventEmitter {
 				maxReqD = Math.max(maxReqD, reqD);
 			}
 
-			// Apply minimum distance constraint
+			// Apply minimum distance constraint - reduced from 0.8 to 0.1 to allow tighter framing
 			const maxDim = Math.max(objectSize.x, objectSize.y, objectSize.z);
-			d = Math.max(maxReqD, maxDim * 0.8, ABSOLUTE_MIN_PERSPECTIVE_DISTANCE);
+			d = Math.max(maxReqD, maxDim * 0.1, ABSOLUTE_MIN_PERSPECTIVE_DISTANCE);
 
 			// 2. Calculate Screen-Space Bounding Box to find centering error
 			let minU = Infinity, maxU = -Infinity;
@@ -1720,7 +1676,7 @@ export class CameraManager extends EventEmitter {
 		const {
 			duration = 2.0,
 			// @ts-ignore
-			padding = 0.15,
+			padding = 0.08,
 			startFromCurrentPosition = true,
 			startOrbitAfterZoom = false,
 			easing = (t: number) => t * t * (3.0 - 2.0 * t),

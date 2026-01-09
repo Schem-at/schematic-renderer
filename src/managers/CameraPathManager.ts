@@ -70,7 +70,7 @@ export class CameraPathManager {
 		}
 
 		const {
-			padding = 0.1, // 10% padding by default
+			padding = 0.08, // Reduced padding for tighter framing
 			minRadius = 5,
 			maxRadius = 100,
 			heightFactor = 0.6, // Height relative to radius
@@ -146,27 +146,16 @@ export class CameraPathManager {
 			return null;
 		}
 
-		// Use existing SchematicManager methods to get bounds
-		const center =
-			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
-		const maxDimensions =
-			this.schematicRenderer.schematicManager.getMaxSchematicDimensions();
+		// Use the tight world box for more accurate fitting
+		const boundingBox = this.schematicRenderer.schematicManager.getGlobalTightWorldBox();
+		if (boundingBox.isEmpty()) return null;
 
-		// Create bounding box from center and dimensions
-		const halfSize = new THREE.Vector3(
-			maxDimensions.x / 2,
-			maxDimensions.y / 2,
-			maxDimensions.z / 2
-		);
-
-		const boundingBox = new THREE.Box3(
-			center.clone().sub(halfSize),
-			center.clone().add(halfSize)
-		);
+		const center = boundingBox.getCenter(new THREE.Vector3());
+		const size = boundingBox.getSize(new THREE.Vector3());
 
 		return {
 			center,
-			size: maxDimensions,
+			size,
 			boundingBox,
 		};
 	}

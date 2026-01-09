@@ -563,17 +563,22 @@ export class SchematicManager {
 
 	public getSchematicsAveragePosition(): THREE.Vector3 {
 		if (this.isEmpty()) return new THREE.Vector3();
-		const averagePosition = new THREE.Vector3();
+		const box = this.getGlobalTightWorldBox();
+		return box.getCenter(new THREE.Vector3());
+	}
+
+	/**
+	 * Get the combined world-space bounding box of all schematics
+	 */
+	public getGlobalTightWorldBox(): THREE.Box3 {
+		const globalBox = new THREE.Box3();
 		const schematics = this.getAllSchematics();
-		if (schematics.length === 0) return averagePosition;
+
 		for (const schematic of schematics) {
-			const center = schematic.getSchematicCenter();
-			averagePosition.add(center);
+			globalBox.union(schematic.getTightWorldBox());
 		}
-		averagePosition.divideScalar(schematics.length);
-		// Note: No longer subtracting 0.5 - getSchematicCenter() now properly
-		// calculates the visual center using tight bounds
-		return averagePosition;
+
+		return globalBox;
 	}
 
 	public getMaxSchematicDimensions(): THREE.Vector3 {
