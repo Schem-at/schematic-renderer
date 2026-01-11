@@ -661,7 +661,8 @@ export class SchematicManager {
 			options
 		);
 		this.addSchematic(schematicObject);
-		this.sceneManager.schematicRenderer.cameraManager.focusOnSchematics();
+		// Note: focusOnSchematics is NOT called here - caller is responsible for camera control
+		// This avoids duplicate focus calls during initialization
 
 		// Emit an event to notify that a schematic has been loaded
 		this.eventEmitter.emit("schematicLoaded", { id: name });

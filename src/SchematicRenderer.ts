@@ -547,84 +547,58 @@ export class SchematicRenderer {
 		});
 		
 		// Set atlas rebuild callback to reload resources
+		// This is called when packs are toggled/changed, so always force reload
 		this.resourcePackManager.setAtlasRebuildCallback(async () => {
-			console.log('[SchematicRenderer] Atlas rebuild callback invoked');
-			await this.reloadResourcePacksIntoCubane();
+			console.log('[SchematicRenderer] Atlas rebuild callback invoked - forcing reload');
+			await this.reloadResourcePacksIntoCubane(true); // Force reload when packs change
 		});
 	}
 
 	/**
 	 * Reload all enabled resource packs into Cubane
+	 * @param force - Force reload even if Cubane already has packs loaded
 	 */
-	private async reloadResourcePacksIntoCubane(): Promise<void> {
+	private async reloadResourcePacksIntoCubane(force: boolean = false): Promise<void> {
 		if (!this.cubane) return;
 		
 		try {
-			const assetLoader = this.cubane.getAssetLoader() as any;
-			
-			// Clear existing packs from Cubane
-			// First try the proper method, fall back to accessing the internal map
-			if (typeof assetLoader?.clearResourcePacks === 'function') {
-				assetLoader.clearResourcePacks();
-			} else if (assetLoader?.resourcePacks instanceof Map) {
-				// Direct access to private map (fallback)
-				assetLoader.resourcePacks.clear();
-			}
-			
-			// Clear caches that depend on resource packs
-			if (typeof assetLoader?.clearAtlasCache === 'function') {
-				assetLoader.clearAtlasCache();
-			}
-			
-			// Clear other caches
-			assetLoader?.blockStateCache?.clear?.();
-			assetLoader?.modelCache?.clear?.();
-			assetLoader?.stringCache?.clear?.();
-			assetLoader?.textureCache?.forEach?.((t: any) => t.dispose?.());
-			assetLoader?.textureCache?.clear?.();
-			assetLoader?.textureUVMap?.clear?.();
-			// CRITICAL: Clear materialCache - materials hold references to the old texture atlas!
-			assetLoader?.materialCache?.forEach?.((m: any) => m.dispose?.());
-			assetLoader?.materialCache?.clear?.();
-			console.log('[SchematicRenderer] Cleared Cubane caches including materialCache');
-			
-			// Get enabled packs in priority order with their blobs
 			const enabledPacks = this.resourcePackManager.getEnabledPacksWithBlobs();
+			
+			// Only skip on initial load (not forced) if Cubane already has the same number of packs
+			if (!force) {
+				const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
+				if (cubanePackCount > 0 && cubanePackCount >= enabledPacks.length) {
+					console.log(`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) loaded, skipping reload`);
+					return;
+				}
+			}
 			
 			// IMPORTANT: In Cubane/Minecraft, packs loaded LAST override earlier packs.
 			// Our priority system: lower number = higher priority = should override others.
 			// So we need to REVERSE the order: load low-priority packs first, high-priority last.
 			const packsToLoad = [...enabledPacks].reverse();
 			
-			console.log(`Reloading ${packsToLoad.length} enabled resource pack(s)...`);
-			console.log('Pack loading order (first loaded = base, last loaded = overrides):');
-			packsToLoad.forEach((p, i) => console.log(`  ${i + 1}. ${p.name} (priority: ${p.priority})`));
+			console.log(`[SchematicRenderer] Reloading ${packsToLoad.length} resource pack(s) into Cubane...`);
 			
-			// Load each pack into Cubane (last pack loaded = highest priority = overrides earlier)
-			for (const pack of packsToLoad) {
-				try {
-					await this.cubane.loadResourcePack(pack.blob);
-					console.log(`  ✓ Loaded: ${pack.name}`);
-				} catch (error) {
-					console.error(`  ✗ Failed to reload pack ${pack.name}:`, error);
-				}
-			}
+			// Use batch mode to clear and reload all packs at once (single atlas rebuild at end)
+			this.cubane.beginPackBatchUpdate();
 			
-			// Rebuild texture atlas - MUST clear existing atlas first!
-			// buildTextureAtlas() returns cached atlas if one exists, so we need to:
-			// 1. Use rebuildTextureAtlas() if available, OR
-			// 2. Clear textureAtlas before calling buildTextureAtlas()
-			if (typeof assetLoader?.rebuildTextureAtlas === 'function') {
-				console.log('Rebuilding texture atlas (using rebuildTextureAtlas)...');
-				await assetLoader.rebuildTextureAtlas();
-			} else if (typeof assetLoader?.buildTextureAtlas === 'function') {
-				// Clear existing atlas first so buildTextureAtlas creates a new one
-				if (assetLoader.textureAtlas) {
-					assetLoader.textureAtlas.dispose();
-					assetLoader.textureAtlas = null;
+			try {
+				// Clear existing packs first (important when packs are disabled)
+				await this.cubane.removeAllPacks();
+				
+				// Load enabled packs
+				for (const pack of packsToLoad) {
+					try {
+						await this.cubane.loadResourcePack(pack.blob);
+						console.log(`  ✓ Loaded: ${pack.name}`);
+					} catch (error) {
+						console.error(`  ✗ Failed to load pack ${pack.name}:`, error);
+					}
 				}
-				console.log('Rebuilding texture atlas (cleared + buildTextureAtlas)...');
-				await assetLoader.buildTextureAtlas();
+			} finally {
+				// End batch mode - this triggers a single atlas rebuild with all packs
+				await this.cubane.endPackBatchUpdate();
 			}
 			
 			// Clear MaterialRegistry cache so new textures are used
@@ -684,6 +658,13 @@ export class SchematicRenderer {
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	): Promise<void> {
 		await this.resourcePackManager.initPromise;
+		
+		// Check if Cubane already has packs loaded (from auto-restore)
+		const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
+		if (cubanePackCount > 0) {
+			console.log(`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) from auto-restore, skipping initial pack loading`);
+			return;
+		}
 
 		// Get resource pack blobs from your existing system
 		const resourcePackBlobs =
@@ -691,19 +672,28 @@ export class SchematicRenderer {
 				defaultResourcePacks || {}
 			);
 
-		// Load each resource pack into Cubane
-		// Cubane loads packs in order, with later packs having higher priority
-		for (let i = 0; i < resourcePackBlobs.length; i++) {
-			const blob = resourcePackBlobs[i];
+		if (resourcePackBlobs.length === 0) {
+			console.log('[SchematicRenderer] No resource packs to load');
+			return;
+		}
 
-			try {
-				await this.cubane.loadResourcePack(blob as Blob);
-				await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
-
-
-			} catch (error) {
-				console.error(`Failed to load resource pack ${i + 1}:`, error);
+		console.log(`[SchematicRenderer] Loading ${resourcePackBlobs.length} resource pack(s)...`);
+		
+		// Use batch mode to load all packs at once (single atlas rebuild at the end)
+		this.cubane.beginPackBatchUpdate();
+		
+		try {
+			for (let i = 0; i < resourcePackBlobs.length; i++) {
+				const blob = resourcePackBlobs[i];
+				try {
+					await this.cubane.loadResourcePack(blob as Blob);
+				} catch (error) {
+					console.error(`Failed to load resource pack ${i + 1}:`, error);
+				}
 			}
+		} finally {
+			// End batch mode - triggers single atlas rebuild with all packs
+			await this.cubane.endPackBatchUpdate();
 		}
 
 		// Store the blobs for backward compatibility if needed

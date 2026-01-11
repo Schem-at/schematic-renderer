@@ -395,8 +395,11 @@ export class SchematicObject extends EventEmitter {
 		this._propertyWatcherTimer = setTimeout(checkForChanges, 250);
 	}
 
-	// Helper method to get cached dimensions (allocated space)
-	private getDimensions(): [number, number, number] {
+	/**
+	 * Get schematic dimensions (allocated space).
+	 * Returns [width, height, length] tuple.
+	 */
+	public getDimensions(): [number, number, number] {
 		if (!this._cachedDimensions) {
 			let dimensions = this.schematicWrapper.get_dimensions();
 			this._cachedDimensions = [dimensions[0], dimensions[1], dimensions[2]];

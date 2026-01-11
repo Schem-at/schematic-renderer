@@ -29,7 +29,12 @@ export class GizmoManager {
 		(this.transformControls as any).depthTest = false;
 		(this.transformControls as any).depthWrite = false;
 		(this.transformControls as any).renderOrder = 999;
-		this.schematicRenderer.sceneManager.scene.add(this.transformControls);
+		// TransformControls returns the gizmo helper from .getHelper(), not itself
+		// Adding TransformControls directly will cause "object not an instance of THREE.Object3D" error
+		const gizmoHelper = this.transformControls.getHelper?.() ?? this.transformControls;
+		if (gizmoHelper instanceof THREE.Object3D) {
+			this.schematicRenderer.sceneManager.scene.add(gizmoHelper);
+		}
 
 		// Disable camera controls when transforming
 		this.transformControls.addEventListener(

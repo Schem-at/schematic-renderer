@@ -176,6 +176,18 @@ export interface WasmMeshBuilderOptions {
 	 * @default false (until fully tested)
 	 */
 	greedyMeshingEnabled?: boolean;
+
+	/**
+	 * Maximum number of worker threads to use for mesh building.
+	 * 
+	 * For small schematics, fewer workers (2-4) can actually be faster due to
+	 * reduced initialization overhead. For large schematics, more workers help.
+	 * 
+	 * Set to 0 to use automatic detection (capped at 8).
+	 * 
+	 * @default 0 (automatic - uses min(hardwareConcurrency, 8))
+	 */
+	maxWorkers?: number;
 }
 
 export interface WebGPURendererOptions {

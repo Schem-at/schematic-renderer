@@ -65,7 +65,8 @@ export class WorldMeshBuilder {
 		string,
 		{ resolve: (value: any) => void; reject: (reason?: any) => void; worker: Worker }
 	>();
-	private maxWorkers: number = navigator.hardwareConcurrency || 4;
+	// Cap at 8 workers - more than that has diminishing returns and increases startup overhead
+	private maxWorkers: number = Math.min(navigator.hardwareConcurrency || 4, 8);
 
 	// Chunk size configuration for buffer sizing
 	private chunkSize: number = 16; // Default Minecraft chunk size
@@ -93,6 +94,11 @@ export class WorldMeshBuilder {
 		this.schematicRenderer = schematicRenderer;
 		// Check WASM option (enabled by default)
 		this.useWasmMeshBuilder = schematicRenderer.options.wasmMeshBuilderOptions?.enabled ?? true;
+		// Check for custom maxWorkers setting
+		const configuredMaxWorkers = schematicRenderer.options.wasmMeshBuilderOptions?.maxWorkers;
+		if (configuredMaxWorkers && configuredMaxWorkers > 0) {
+			this.maxWorkers = configuredMaxWorkers;
+		}
 		// Try GPU compute first, fall back to workers
 		this.initializeGPUCompute();
 	}

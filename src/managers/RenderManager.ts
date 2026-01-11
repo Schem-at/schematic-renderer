@@ -9,6 +9,75 @@ import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
+// HDRI Cache using IndexedDB
+const HDRI_CACHE_DB_NAME = 'schematic-renderer-hdri-cache';
+const HDRI_CACHE_STORE_NAME = 'hdri-textures';
+const HDRI_CACHE_VERSION = 1;
+
+let hdriCacheDb: IDBDatabase | null = null;
+
+async function openHdriCacheDb(): Promise<IDBDatabase> {
+	if (hdriCacheDb) return hdriCacheDb;
+	
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open(HDRI_CACHE_DB_NAME, HDRI_CACHE_VERSION);
+		
+		request.onerror = () => reject(request.error);
+		request.onsuccess = () => {
+			hdriCacheDb = request.result;
+			resolve(hdriCacheDb);
+		};
+		
+		request.onupgradeneeded = (event) => {
+			const db = (event.target as IDBOpenDBRequest).result;
+			if (!db.objectStoreNames.contains(HDRI_CACHE_STORE_NAME)) {
+				db.createObjectStore(HDRI_CACHE_STORE_NAME, { keyPath: 'url' });
+			}
+		};
+	});
+}
+
+async function getCachedHdri(url: string): Promise<ArrayBuffer | null> {
+	try {
+		const db = await openHdriCacheDb();
+		return new Promise((resolve) => {
+			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, 'readonly');
+			const store = transaction.objectStore(HDRI_CACHE_STORE_NAME);
+			const request = store.get(url);
+			
+			request.onsuccess = () => {
+				if (request.result) {
+					console.log(`[HDRI Cache] Cache hit for: ${url}`);
+					resolve(request.result.data);
+				} else {
+					resolve(null);
+				}
+			};
+			request.onerror = () => resolve(null);
+		});
+	} catch {
+		return null;
+	}
+}
+
+async function cacheHdri(url: string, data: ArrayBuffer): Promise<void> {
+	try {
+		const db = await openHdriCacheDb();
+		return new Promise((resolve) => {
+			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, 'readwrite');
+			const store = transaction.objectStore(HDRI_CACHE_STORE_NAME);
+			store.put({ url, data, timestamp: Date.now() });
+			transaction.oncomplete = () => {
+				console.log(`[HDRI Cache] Cached: ${url}`);
+				resolve();
+			};
+			transaction.onerror = () => resolve();
+		});
+	} catch {
+		// Ignore cache errors
+	}
+}
+
 // WebGPU imports (conditional - loaded dynamically)
 let WebGPURenderer: any = null;
 // @ts-expect-error Reserved for future WebGPU post-processing support
@@ -443,68 +512,105 @@ export class RenderManager {
 	}
 
 	private loadHDRI(hdriPath: string, backgroundOnly: boolean): void {
+		// Try to load from cache first
+		this.loadHDRIWithCache(hdriPath, backgroundOnly);
+	}
+
+	private async loadHDRIWithCache(hdriPath: string, backgroundOnly: boolean): Promise<void> {
 		const hdriLoader = new RGBELoader();
-
-		hdriLoader.load(
-			hdriPath,
-			(texture) => {
-				if (this.disposed) {
-					texture.dispose();
+		
+		// Check cache first
+		const cachedData = await getCachedHdri(hdriPath);
+		
+		if (cachedData) {
+			// Load from cached ArrayBuffer using Blob URL
+			try {
+				const blob = new Blob([cachedData], { type: 'application/octet-stream' });
+				const blobUrl = URL.createObjectURL(blob);
+				try {
+					const texture = await hdriLoader.loadAsync(blobUrl);
+					this.applyHDRITexture(texture, backgroundOnly, hdriPath);
 					return;
+				} finally {
+					URL.revokeObjectURL(blobUrl);
 				}
-
-				if (this.isPMREMGeneratorDisposed()) {
-					this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-				}
-
-				const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
-				this.currentEnvMap = envMap;
-				texture.dispose();
-
-				if (backgroundOnly) {
-					const backgroundTexture = new THREE.WebGLCubeRenderTarget(
-						1024
-					).fromEquirectangularTexture(this.renderer, texture);
-
-					// Only set HDRI background if not in isometric mode
-					if (!this.isOrthographicCamera()) {
-						this.schematicRenderer.sceneManager.scene.background =
-							backgroundTexture.texture;
-						// Store as original background for camera switching
-						this.originalBackground = backgroundTexture.texture;
-					} else {
-						// Store for later use when switching back to perspective
-						this.originalBackground = backgroundTexture.texture;
-						// Keep isometric background
-						this.schematicRenderer.sceneManager.scene.background =
-							this.isometricBackground;
-					}
-				} else {
-					this.schematicRenderer.sceneManager.scene.environment = envMap;
-					if (!this.isOrthographicCamera()) {
-						this.schematicRenderer.sceneManager.scene.background = envMap;
-						this.originalBackground = envMap;
-					} else {
-						this.originalBackground = envMap;
-						this.schematicRenderer.sceneManager.scene.background =
-							this.isometricBackground;
-					}
-				}
-
-				this.pmremGenerator.dispose();
-				this.eventEmitter.emit("hdriLoaded", { path: hdriPath });
-			},
-			(progress) => {
-				this.eventEmitter.emit("hdriProgress", {
-					loaded: progress.loaded,
-					total: progress.total,
-				});
-			},
-			(error) => {
-				console.error("HDRI loading failed:", error);
-				this.eventEmitter.emit("hdriError", { error });
+			} catch (error) {
+				console.warn('[HDRI Cache] Failed to load cached data, fetching fresh:', error);
 			}
-		);
+		}
+		
+		// Fetch fresh and cache
+		try {
+			const response = await fetch(hdriPath);
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			
+			const arrayBuffer = await response.arrayBuffer();
+			
+			// Cache the raw data
+			cacheHdri(hdriPath, arrayBuffer);
+			
+			// Load using Blob URL (ensures proper texture setup)
+			const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+			const blobUrl = URL.createObjectURL(blob);
+			try {
+				const texture = await hdriLoader.loadAsync(blobUrl);
+				this.applyHDRITexture(texture, backgroundOnly, hdriPath);
+			} finally {
+				URL.revokeObjectURL(blobUrl);
+			}
+		} catch (error) {
+			console.error("HDRI loading failed:", error);
+			this.eventEmitter.emit("hdriError", { error });
+		}
+	}
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private applyHDRITexture(texture: any, backgroundOnly: boolean, hdriPath: string): void {
+		if (this.disposed) {
+			texture.dispose();
+			return;
+		}
+
+		if (this.isPMREMGeneratorDisposed()) {
+			this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+		}
+
+		const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
+		this.currentEnvMap = envMap;
+
+		if (backgroundOnly) {
+			const backgroundTexture = new THREE.WebGLCubeRenderTarget(
+				1024
+			).fromEquirectangularTexture(this.renderer, texture);
+
+			// Only set HDRI background if not in isometric mode
+			if (!this.isOrthographicCamera()) {
+				this.schematicRenderer.sceneManager.scene.background =
+					backgroundTexture.texture;
+				// Store as original background for camera switching
+				this.originalBackground = backgroundTexture.texture;
+			} else {
+				// Store for later use when switching back to perspective
+				this.originalBackground = backgroundTexture.texture;
+				// Keep isometric background
+				this.schematicRenderer.sceneManager.scene.background =
+					this.isometricBackground;
+			}
+		} else {
+			this.schematicRenderer.sceneManager.scene.environment = envMap;
+			if (!this.isOrthographicCamera()) {
+				this.schematicRenderer.sceneManager.scene.background = envMap;
+				this.originalBackground = envMap;
+			} else {
+				this.originalBackground = envMap;
+				this.schematicRenderer.sceneManager.scene.background =
+					this.isometricBackground;
+			}
+		}
+
+		texture.dispose();
+		this.pmremGenerator.dispose();
+		this.eventEmitter.emit("hdriLoaded", { path: hdriPath });
 	}
 
 	/**
@@ -696,6 +802,28 @@ export class RenderManager {
 		if (gammaEffect) {
 			gammaEffect.setGamma(value);
 		}
+	}
+
+	/**
+	 * Enable or disable SSAO at runtime
+	 * Useful for auto-disabling on small schematics or performance optimization
+	 */
+	public setSSAOEnabled(enabled: boolean): void {
+		const ssaoPass = this.passes.get("ssao");
+		if (ssaoPass) {
+			ssaoPass.enabled = enabled;
+			if (!enabled) {
+				console.log("[RenderManager] SSAO disabled for performance");
+			}
+		}
+	}
+
+	/**
+	 * Check if SSAO is currently enabled
+	 */
+	public isSSAOEnabled(): boolean {
+		const ssaoPass = this.passes.get("ssao");
+		return ssaoPass?.enabled ?? false;
 	}
 
 	public setSSAOParameters(params: {
