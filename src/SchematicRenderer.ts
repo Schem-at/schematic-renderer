@@ -22,11 +22,25 @@ import {
 	SchematicManagerOptions,
 } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
+import { MaterialRegistry } from "./MaterialRegistry";
 import { EventEmitter } from "events";
 import {
 	ResourcePackManager,
 	DefaultPackCallback,
 } from "./managers/ResourcePackManager";
+import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
+import { ResourcePackUI } from "./ui/ResourcePackUI";
+import { ExportUI } from "./ui/ExportUI";
+import type {
+	PacksChangedEvent,
+	PackToggledEvent,
+	PackAddedEvent,
+	PackRemovedEvent,
+	LoadProgressEvent,
+	LoadCompleteEvent,
+	LoadErrorEvent,
+	PackErrorEvent,
+} from "./types/resourcePack";
 
 import { GizmoManager } from "./managers/GizmoManager";
 import {
@@ -35,7 +49,6 @@ import {
 } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
-import { ImGuiManager } from "./managers/ImGuiManager";
 import { SimulationManager } from "./managers/SimulationManager";
 import { BlockInteractionHandler } from "./managers/highlight/BlockInteractionHandler";
 import { InsignManager } from "./managers/InsignManager";
@@ -59,7 +72,6 @@ export class SchematicRenderer {
 	public cameraManager: CameraManager;
 	public sceneManager: SceneManager;
 	public uiManager: UIManager | undefined;
-	public imGuiManager: ImGuiManager | undefined;
 	public renderManager: RenderManager | undefined;
 	public interactionManager: InteractionManager | undefined;
 	public dragAndDropManager?: DragAndDropManager;
@@ -80,6 +92,9 @@ export class SchematicRenderer {
 	public timings: Map<string, number> = new Map();
 	public fps: number = 0;
 	private resourcePackManager: ResourcePackManager;
+	public packs!: ResourcePackManagerProxy;
+	public resourcePackUI: ResourcePackUI | undefined;
+	public exportUI: ExportUI | undefined;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -114,7 +129,6 @@ export class SchematicRenderer {
 		this.sceneManager = new SceneManager(this);
 
 		this.uiManager = new UIManager(this);
-		this.imGuiManager = new ImGuiManager(this);
 
 		// Initialize camera manager
 		this.cameraManager = new CameraManager(this, options.cameraOptions);
@@ -131,8 +145,35 @@ export class SchematicRenderer {
 		this.sceneManager.updateHelpers();
 		this.eventEmitter.emit("sceneReady");
 
-		// Initialize ResourcePackManager
-		this.resourcePackManager = new ResourcePackManager();
+		// Initialize ResourcePackManager with options
+		this.resourcePackManager = new ResourcePackManager(this.options.resourcePackOptions);
+		
+		// Create proxy for external API access
+		this.packs = new ResourcePackManagerProxy(this.resourcePackManager);
+		
+		// Wire up resource pack callbacks
+		this.setupResourcePackCallbacks();
+		
+		// Initialize Resource Pack UI if enabled
+		if (this.options.resourcePackOptions?.enableUI !== false) {
+			this.resourcePackUI = new ResourcePackUI(
+				this.resourcePackManager,
+				this.canvas,
+				this.options.resourcePackOptions
+			);
+		}
+
+		// Initialize Export UI
+		this.exportUI = new ExportUI(
+			this.canvas,
+			() => this.schematicManager?.getFirstSchematic() || null,
+			{
+				enableUI: true,
+				uiPosition: "top-right",
+				enableKeyboardShortcuts: true,
+				toggleUIShortcut: "KeyE",
+			}
+		);
 
 		this.state = {
 			cameraPosition: new THREE.Vector3(),
@@ -280,9 +321,6 @@ export class SchematicRenderer {
 			// Initialize RenderManager (async for WebGPU support)
 			this.renderManager = new RenderManager(this);
 			await this.renderManager.initialize();
-
-			// Initialize ImGui
-			await this.imGuiManager?.initialize();
 
 			// Log renderer type
 			if (this.renderManager.isWebGPU) {
@@ -451,6 +489,195 @@ export class SchematicRenderer {
 				dragAndDropOptions
 			);
 		}
+	}
+
+	/**
+	 * Set up callbacks for resource pack events
+	 */
+	private setupResourcePackCallbacks(): void {
+		const callbacks = this.options.callbacks;
+		const rpCallbacks = this.options.resourcePackOptions;
+		
+		// Pack changed events
+		this.resourcePackManager.on('packsChanged', (event: PacksChangedEvent) => {
+			callbacks?.onPacksChanged?.(event.reason);
+			rpCallbacks?.onPacksChanged?.(event);
+		});
+		
+		// Pack toggled events
+		this.resourcePackManager.on('packToggled', (event: PackToggledEvent) => {
+			callbacks?.onPackToggled?.(event.packId, event.enabled);
+			rpCallbacks?.onPackToggled?.(event.packId, event.enabled);
+		});
+		
+		// Atlas rebuild events
+		this.resourcePackManager.on('atlasRebuilt', (event: { textureCount: number }) => {
+			callbacks?.onAtlasRebuilt?.(event.textureCount);
+			rpCallbacks?.onAtlasRebuilt?.();
+		});
+		
+		// Pack added events
+		this.resourcePackManager.on('packAdded', (event: PackAddedEvent) => {
+			rpCallbacks?.onPackAdded?.(event);
+		});
+		
+		// Pack removed events
+		this.resourcePackManager.on('packRemoved', (event: PackRemovedEvent) => {
+			rpCallbacks?.onPackRemoved?.(event.packId);
+		});
+		
+		// Load progress events
+		this.resourcePackManager.on('loadProgress', (event: LoadProgressEvent) => {
+			rpCallbacks?.onLoadProgress?.(event);
+		});
+		
+		// Load complete events
+		this.resourcePackManager.on('loadComplete', (event: LoadCompleteEvent) => {
+			rpCallbacks?.onLoadComplete?.(event);
+		});
+		
+		// Load error events
+		this.resourcePackManager.on('loadError', (event: LoadErrorEvent) => {
+			rpCallbacks?.onLoadError?.(event);
+		});
+		
+		// Error events
+		this.resourcePackManager.on('error', (event: PackErrorEvent) => {
+			rpCallbacks?.onError?.(event);
+		});
+		
+		// Set atlas rebuild callback to reload resources
+		this.resourcePackManager.setAtlasRebuildCallback(async () => {
+			console.log('[SchematicRenderer] Atlas rebuild callback invoked');
+			await this.reloadResourcePacksIntoCubane();
+		});
+	}
+
+	/**
+	 * Reload all enabled resource packs into Cubane
+	 */
+	private async reloadResourcePacksIntoCubane(): Promise<void> {
+		if (!this.cubane) return;
+		
+		try {
+			const assetLoader = this.cubane.getAssetLoader() as any;
+			
+			// Clear existing packs from Cubane
+			// First try the proper method, fall back to accessing the internal map
+			if (typeof assetLoader?.clearResourcePacks === 'function') {
+				assetLoader.clearResourcePacks();
+			} else if (assetLoader?.resourcePacks instanceof Map) {
+				// Direct access to private map (fallback)
+				assetLoader.resourcePacks.clear();
+			}
+			
+			// Clear caches that depend on resource packs
+			if (typeof assetLoader?.clearAtlasCache === 'function') {
+				assetLoader.clearAtlasCache();
+			}
+			
+			// Clear other caches
+			assetLoader?.blockStateCache?.clear?.();
+			assetLoader?.modelCache?.clear?.();
+			assetLoader?.stringCache?.clear?.();
+			assetLoader?.textureCache?.forEach?.((t: any) => t.dispose?.());
+			assetLoader?.textureCache?.clear?.();
+			assetLoader?.textureUVMap?.clear?.();
+			// CRITICAL: Clear materialCache - materials hold references to the old texture atlas!
+			assetLoader?.materialCache?.forEach?.((m: any) => m.dispose?.());
+			assetLoader?.materialCache?.clear?.();
+			console.log('[SchematicRenderer] Cleared Cubane caches including materialCache');
+			
+			// Get enabled packs in priority order with their blobs
+			const enabledPacks = this.resourcePackManager.getEnabledPacksWithBlobs();
+			
+			// IMPORTANT: In Cubane/Minecraft, packs loaded LAST override earlier packs.
+			// Our priority system: lower number = higher priority = should override others.
+			// So we need to REVERSE the order: load low-priority packs first, high-priority last.
+			const packsToLoad = [...enabledPacks].reverse();
+			
+			console.log(`Reloading ${packsToLoad.length} enabled resource pack(s)...`);
+			console.log('Pack loading order (first loaded = base, last loaded = overrides):');
+			packsToLoad.forEach((p, i) => console.log(`  ${i + 1}. ${p.name} (priority: ${p.priority})`));
+			
+			// Load each pack into Cubane (last pack loaded = highest priority = overrides earlier)
+			for (const pack of packsToLoad) {
+				try {
+					await this.cubane.loadResourcePack(pack.blob);
+					console.log(`  ✓ Loaded: ${pack.name}`);
+				} catch (error) {
+					console.error(`  ✗ Failed to reload pack ${pack.name}:`, error);
+				}
+			}
+			
+			// Rebuild texture atlas - MUST clear existing atlas first!
+			// buildTextureAtlas() returns cached atlas if one exists, so we need to:
+			// 1. Use rebuildTextureAtlas() if available, OR
+			// 2. Clear textureAtlas before calling buildTextureAtlas()
+			if (typeof assetLoader?.rebuildTextureAtlas === 'function') {
+				console.log('Rebuilding texture atlas (using rebuildTextureAtlas)...');
+				await assetLoader.rebuildTextureAtlas();
+			} else if (typeof assetLoader?.buildTextureAtlas === 'function') {
+				// Clear existing atlas first so buildTextureAtlas creates a new one
+				if (assetLoader.textureAtlas) {
+					assetLoader.textureAtlas.dispose();
+					assetLoader.textureAtlas = null;
+				}
+				console.log('Rebuilding texture atlas (cleared + buildTextureAtlas)...');
+				await assetLoader.buildTextureAtlas();
+			}
+			
+			// Clear MaterialRegistry cache so new textures are used
+			MaterialRegistry.clear();
+			
+			// Invalidate WorldMeshBuilder cache so new textures are used
+			if (this.worldMeshBuilder) {
+				this.worldMeshBuilder.invalidateCache();
+			}
+			
+			// Rebuild all loaded schematics with new textures
+			await this.rebuildAllSchematics();
+			
+			// Trigger event for external listeners
+			this.eventEmitter.emit('resourcePacksReloaded');
+			console.log('Resource pack reload complete');
+		} catch (error) {
+			console.error('Failed to reload resource packs into Cubane:', error);
+		}
+	}
+	
+	/**
+	 * Rebuild all loaded schematics (e.g., after resource pack changes)
+	 */
+	public async rebuildAllSchematics(): Promise<void> {
+		if (!this.schematicManager) return;
+		
+		const schematics = this.schematicManager.getAllSchematics();
+		console.log(`Rebuilding ${schematics.length} schematic(s) with updated textures...`);
+		
+		for (const schematic of schematics) {
+			try {
+				await schematic.rebuildMesh();
+			} catch (error) {
+				console.error(`Failed to rebuild schematic ${schematic.name}:`, error);
+			}
+		}
+		
+		// Mark scene as needing update
+		if (this.sceneManager?.scene) {
+			this.sceneManager.scene.traverse((obj) => {
+				if ((obj as any).material) {
+					const mat = (obj as any).material;
+					if (Array.isArray(mat)) {
+						mat.forEach((m: any) => { if (m) m.needsUpdate = true; });
+					} else {
+						mat.needsUpdate = true;
+					}
+				}
+			});
+		}
+		
+		console.log('Schematic rebuild complete');
 	}
 
 	private async initializeResourcePacks(
@@ -676,9 +903,6 @@ export class SchematicRenderer {
 		this.highlightManager.update(deltaTime);
 		this.gizmoManager?.update();
 		this.renderManager.render();
-
-		// Render ImGui on overlay canvas (independent of Three.js render cycle)
-		this.imGuiManager?.render();
 
 		this.interactionManager?.update();
 		this.cubane.updateAnimations();
@@ -1224,8 +1448,16 @@ export class SchematicRenderer {
 		this.renderManager.renderer.dispose();
 		this.dragAndDropManager?.dispose();
 		this.uiManager.dispose();
-		this.imGuiManager?.dispose();
 		this.cameraManager.dispose();
+		
+		// Clean up resource pack UI
+		this.resourcePackUI?.dispose();
+		
+		// Clean up export UI
+		this.exportUI?.dispose();
+		
+		// Clean up resource pack manager
+		this.resourcePackManager.dispose();
 
 		// Clean up Cubane resources
 		this.cubane.dispose();

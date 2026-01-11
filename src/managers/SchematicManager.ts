@@ -184,21 +184,25 @@ export class SchematicManager {
 		);
 		await Promise.all(promises);
 
-		// After removing all schematics, perform comprehensive cleanup
-		this.performDeepCleanup();
+		// After removing all schematics, perform cleanup
+		// Note: We do NOT call performDeepCleanup() here because it disrupts
+		// the mesh building for the next schematic. The individual removeSchematic
+		// calls already clean up their own resources.
 	}
 
 	/**
 	 * Performs comprehensive memory cleanup after schematic operations
 	 * This should be called between test runs to prevent memory leaks
+	 * NOTE: Does NOT dispose WorldMeshBuilder as it's shared and needed for future builds
 	 */
 	public performDeepCleanup(): void {
 
 		// Clear all caches and registries
 		clearAllCaches();
 
-		// Dispose palette cache
-		this.worldMeshBuilder.dispose();
+		// DON'T dispose WorldMeshBuilder here - it's shared and needed for future schematic builds
+		// Only invalidate its cache so new textures are used
+		this.worldMeshBuilder.invalidateCache();
 
 		// Clear buffer pool
 		GeometryBufferPool.clear();

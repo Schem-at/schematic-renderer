@@ -17,8 +17,9 @@ import { SceneManager } from "./SceneManager";
 import { resetPerformanceMetrics } from "../monitoring";
 import { SchematicRenderer } from "../SchematicRenderer";
 import type { BlockData } from "../types";
-import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { performanceMonitor } from "../performance/PerformanceMonitor";
+import { SchematicExporter } from "../export/SchematicExporter";
+import type { ExportOptions, ExportFormat, ExportResult } from "../types/export";
 
 // Define chunk data interface to fix TypeScript errors
 
@@ -541,7 +542,93 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	/**
+	 * Export the schematic using the new modular export system
+	 * 
+	 * @param options Export options including format, quality, and callbacks
+	 * @returns Promise resolving to the export result
+	 * 
+	 * @example
+	 * // Basic GLB export (recommended)
+	 * await schematic.export({ format: 'glb' });
+	 * 
+	 * @example
+	 * // Export with options
+	 * await schematic.export({
+	 *   format: 'gltf',
+	 *   quality: 'high',
+	 *   normalMode: 'flip',
+	 *   filename: 'my_schematic',
+	 *   onProgress: (p) => console.log(`${p.progress * 100}%: ${p.message}`)
+	 * });
+	 */
+	public async export(options: ExportOptions = {}): Promise<ExportResult> {
+		// Wait for meshes to be ready
+		await this.meshesReady;
+
+		const exporter = new SchematicExporter();
+
+		// Set up progress callback to use UI manager if available
+		const originalProgress = options.onProgress;
+		if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
+			this.schematicRenderer.uiManager.showProgressBar(`Exporting ${this.name}`);
+			
+			exporter.on("exportProgress", (progress) => {
+				this.schematicRenderer.uiManager?.updateProgress(progress.progress, progress.message);
+				originalProgress?.(progress);
+			});
+
+			exporter.on("exportComplete", () => {
+				setTimeout(() => {
+					this.schematicRenderer.uiManager?.hideProgressBar();
+				}, 1000);
+			});
+
+			exporter.on("exportError", () => {
+				this.schematicRenderer.uiManager?.hideProgressBar();
+			});
+		}
+
+		// Merge default options
+		const exportOptions: ExportOptions = {
+			filename: options.filename || `${this.name}_schematic`,
+			format: options.format || "glb",
+			quality: options.quality || "high",
+			normalMode: options.normalMode || "double-sided", // Default to double-sided for max compatibility
+			...options,
+		};
+
+		try {
+			const result = await exporter.export(this.group, exportOptions);
+			
+			// Auto-download if no onComplete callback is provided
+			if (!options.onComplete) {
+				exporter.download(result);
+				// Clean up URL after a delay
+				setTimeout(() => exporter.revokeUrl(result), 5000);
+			}
+
+			console.log(`Successfully exported schematic "${this.name}" as ${result.filename}`);
+			return result;
+		} catch (error) {
+			console.error("Error exporting schematic:", error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Export as GLB (binary GLTF) - recommended for most use cases
+	 * @param filename Optional filename (without extension)
+	 */
+	public async exportAsGLB(filename?: string): Promise<ExportResult> {
+		return this.export({
+			format: "glb",
+			filename: filename || this.name,
+		});
+	}
+
+	/**
 	 * Exports the schematic as a GLTF file
+	 * @deprecated Use export() or exportAsGLB() instead for better normal handling
 	 * @param options Export options
 	 * @returns Promise that resolves when export is complete
 	 */
@@ -555,162 +642,17 @@ export class SchematicObject extends EventEmitter {
 			animations?: THREE.AnimationClip[];
 		} = {}
 	): Promise<void> {
-		try {
-			// Default options
-			const exportOptions = {
-				filename: options.filename || `${this.name}_schematic.gltf`,
-				binary: options.binary ?? false,
-				includeCustomExtensions: options.includeCustomExtensions ?? false,
-				maxTextureSize: options.maxTextureSize ?? 4096,
-				embedImages: options.embedImages ?? true,
-				animations: options.animations || [],
-			};
-
-			// Wait for meshes to be ready
-			await this.meshesReady;
-
-			// Show progress if available
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.showProgressBar(
-					`Exporting ${this.name}`
-				);
-				this.schematicRenderer.uiManager.updateProgress(
-					0.1,
-					"Preparing export..."
-				);
-			}
-
-			// Create exporter
-			const exporter = new GLTFExporter();
-
-			// Clone the group to avoid modifying the original
-			const exportGroup = this.group.clone();
-
-			// Update progress
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.updateProgress(
-					0.3,
-					"Processing geometry..."
-				);
-			}
-
-			// Export to GLTF
-			const result = await new Promise<ArrayBuffer | object>(
-				(resolve, reject) => {
-					exporter.parse(
-						exportGroup,
-						(gltf) => resolve(gltf),
-						(error) => reject(error),
-						{
-							binary: exportOptions.binary,
-							includeCustomExtensions: exportOptions.includeCustomExtensions,
-							maxTextureSize: exportOptions.maxTextureSize,
-							embedImages: exportOptions.embedImages,
-							animations: exportOptions.animations,
-						}
-					);
-				}
-			);
-
-			// Update progress
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.updateProgress(
-					0.8,
-					"Creating download..."
-				);
-			}
-
-			// Download the file
-			await this.downloadGLTF(
-				result,
-				exportOptions.filename,
-				exportOptions.binary
-			);
-
-			// Complete progress
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.updateProgress(
-					1.0,
-					"Export complete!"
-				);
-				setTimeout(() => {
-					this.schematicRenderer.uiManager?.hideProgressBar();
-				}, 1000);
-			}
-
-			console.log(
-				`Successfully exported schematic "${this.name}" as ${exportOptions.filename}`
-			);
-		} catch (error) {
-			console.error("Error exporting GLTF:", error);
-
-			// Hide progress bar on error
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.hideProgressBar();
-			}
-
-			throw error;
-		}
-	}
-
-	/**
-	 * Downloads the GLTF data as a file
-	 */
-	private async downloadGLTF(
-		gltfData: ArrayBuffer | object,
-		filename: string,
-		isBinary: boolean
-	): Promise<void> {
-		let blob: Blob;
-		let actualFilename = filename;
-
-		if (isBinary) {
-			// Binary GLTF (.glb)
-			blob = new Blob([gltfData as ArrayBuffer], {
-				type: "application/octet-stream",
-			});
-			if (!actualFilename.endsWith(".glb")) {
-				actualFilename = actualFilename.replace(/\.[^/.]+$/, "") + ".glb";
-			}
-		} else {
-			// Text GLTF (.gltf)
-			const jsonString = JSON.stringify(gltfData, null, 2);
-			blob = new Blob([jsonString], {
-				type: "application/json",
-			});
-			if (!actualFilename.endsWith(".gltf")) {
-				actualFilename = actualFilename.replace(/\.[^/.]+$/, "") + ".gltf";
-			}
-		}
-
-		// Create download link
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement("a");
-		link.href = url;
-		link.download = actualFilename;
-
-		// Trigger download
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-
-		// Clean up
-		URL.revokeObjectURL(url);
+		// Map old API to new export system
+		const format: ExportFormat = options.binary ? "glb" : "gltf";
+		
+		await this.export({
+			filename: options.filename || `${this.name}_schematic`,
+			format,
+			includeCustomExtensions: options.includeCustomExtensions,
+			maxTextureSize: options.maxTextureSize,
+			embedTextures: options.embedImages,
+			animations: options.animations,
+		});
 	}
 
 	private async buildMeshes(): Promise<void> {

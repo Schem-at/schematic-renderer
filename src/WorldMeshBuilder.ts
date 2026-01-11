@@ -410,6 +410,24 @@ export class WorldMeshBuilder {
 		}
 	}
 
+	/**
+	 * Invalidate the palette cache to force re-computation of geometries.
+	 * Call this when textures/materials change (e.g., resource pack change).
+	 */
+	public invalidateCache(): void {
+		console.log('[WorldMeshBuilder] Invalidating cache');
+		if (this.paletteCache) {
+			this.paletteCache.blockData.forEach((blockData) => {
+				blockData.materialGroups.forEach((group) => {
+					if (group.baseGeometry) {
+						group.baseGeometry.dispose();
+					}
+				});
+			});
+			this.paletteCache = null;
+		}
+	}
+
 	public async precomputePaletteGeometries(palette: any[]): Promise<void> {
 		performanceMonitor.startOperation("precomputePaletteGeometries");
 
@@ -1795,5 +1813,6 @@ export class WorldMeshBuilder {
 		this.freeWorkers = [];
 
 		console.log("[WorldMeshBuilder] Disposed palette cache, GPU compute, and workers.");
+		console.log("[WorldMeshBuilder] dispose() called from:", new Error().stack);
 	}
 }

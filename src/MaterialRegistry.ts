@@ -185,6 +185,9 @@ export class MaterialRegistry {
 	}
 
 	private clearAll(): void {
+		// Log stack trace to find caller
+		console.log("[MaterialRegistry] clearAll called from:", new Error().stack);
+		
 		// Dispose all materials
 		this.materials.forEach((material) => {
 			material.dispose();

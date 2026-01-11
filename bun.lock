@@ -6,7 +6,6 @@
       "dependencies": {
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
-        "@mori2003/jsimgui": "^0.11.0",
         "chokidar": "^3.6.0",
         "concurrently": "^8.2.2",
         "deepmerge": "^4.3.1",
@@ -17,7 +16,7 @@
         "jszip": "^3.10.1",
         "lil-gui": "^0.19.2",
         "n8ao": "^1.10.0",
-        "nucleation": "^0.1.136",
+        "nucleation": "^0.1.141",
         "pako": "^2.1.0",
         "postprocessing": "^6.35.4",
         "simplex-noise": "^4.0.3",
@@ -139,8 +138,6 @@
     "@microsoft/tsdoc": ["@microsoft/tsdoc@0.15.1", "", {}, ""],
 
     "@microsoft/tsdoc-config": ["@microsoft/tsdoc-config@0.17.1", "", { "dependencies": { "@microsoft/tsdoc": "0.15.1", "ajv": "~8.12.0", "jju": "~1.4.0", "resolve": "~1.22.2" } }, ""],
-
-    "@mori2003/jsimgui": ["@mori2003/jsimgui@0.11.0", "", {}, "sha512-UN6LHuQoQqDgM2X94nnruLL4XJSvxf8YZJ0yrhV1sJVKNbWrxXxFO9jC3rkFU5mr3d43VryO+2m3ioMg7O0Fiw=="],
 
     "@originjs/vite-plugin-commonjs": ["@originjs/vite-plugin-commonjs@1.0.3", "", { "dependencies": { "esbuild": "^0.14.14" } }, ""],
 
@@ -870,7 +867,7 @@
 
     "normalize-path": ["normalize-path@3.0.0", "", {}, ""],
 
-    "nucleation": ["nucleation@0.1.136", "", {}, "sha512-LIz9+KtcW6wCymHlva4HPX907zciZOySuD3jmf7pNIDkATqy+HLqmofqFn8WtTQihMa4oMJvRU+uKCvC9dfUGA=="],
+    "nucleation": ["nucleation@0.1.142", "", {}, "sha512-6mO6I2R8LtOYZtx+4uDgsBipYyjyaIKH7Z0E6ZuVVqnGiX7k1P1lREFd2za2v0L2DARC7VO5yqCadcX3bqvA1w=="],
 
     "oauth-sign": ["oauth-sign@0.9.0", "", {}, ""],
 

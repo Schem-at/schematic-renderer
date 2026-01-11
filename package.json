@@ -44,7 +44,6 @@
 	"dependencies": {
 		"@ffmpeg/ffmpeg": "^0.12.15",
 		"@ffmpeg/util": "^0.12.2",
-		"@mori2003/jsimgui": "^0.11.0",
 		"chokidar": "^3.6.0",
 		"concurrently": "^8.2.2",
 		"deepmerge": "^4.3.1",

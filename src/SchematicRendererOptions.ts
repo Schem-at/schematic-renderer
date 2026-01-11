@@ -6,6 +6,7 @@ import { GizmoManagerOptions } from "./managers/GizmoManager";
 import { CameraManagerOptions } from "./managers/CameraManager";
 import { SelectableObject } from "./managers/SelectableObject";
 import { SchematicRenderer } from "./SchematicRenderer";
+import { ResourcePackOptions } from "./types/resourcePack";
 
 export interface ProgressBarOptions {
 	showLabel?: boolean;
@@ -259,6 +260,8 @@ export interface SchematicRendererOptions {
 	webgpuOptions?: WebGPURendererOptions;
 	// Definition region display options (for regions stored in schematic metadata)
 	definitionRegionOptions?: DefinitionRegionOptions;
+	// Resource pack management options
+	resourcePackOptions?: ResourcePackOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -358,6 +361,16 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		showEdges: true,
 		showLabels: true,
 	},
+	resourcePackOptions: {
+		enableUI: true, // Enable resource pack management UI
+		uiPosition: "top-right", // UI position
+		autoRebuild: true, // Auto-rebuild atlas when packs change
+		showIcons: true, // Show pack icons in UI
+		enableDragReorder: true, // Enable drag-and-drop reordering
+		enableKeyboardShortcuts: true, // Enable keyboard shortcuts
+		toggleUIShortcut: "KeyP", // Press P to toggle UI
+		maxPacks: 0, // 0 = unlimited
+	},
 	resourcePackBlobs: {},
 };
 
@@ -381,6 +394,14 @@ export interface Callbacks {
 	onResourcePackDropped?: (file: File) => void | Promise<void>;
 	onResourcePackDropSuccess?: (file: File) => void | Promise<void>;
 	onResourcePackDropFailed?: (file: File, error: Error) => void | Promise<void>;
+	/** Called when any pack change occurs that affects rendering */
+	onPacksChanged?: (reason: string) => void | Promise<void>;
+	/** Called when atlas is rebuilt */
+	onAtlasRebuilt?: (textureCount: number) => void | Promise<void>;
+	/** Called when pack order changes */
+	onPackOrderChanged?: (packIds: string[]) => void | Promise<void>;
+	/** Called when a pack is toggled */
+	onPackToggled?: (packId: string, enabled: boolean) => void | Promise<void>;
 
 	// Interaction callbacks
 	onObjectSelected?: (object: SelectableObject) => void;

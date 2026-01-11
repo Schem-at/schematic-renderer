@@ -9,6 +9,10 @@ export { InsignRegionHighlight } from "./managers/highlight/InsignRegionHighligh
 export { InsignIoHoverHandler } from "./managers/highlight/InsignIoHoverHandler";
 export { KeyboardControls } from "./managers/KeyboardControls";
 export { InspectorManager } from "./managers/InspectorManager";
+export { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
+export { ResourcePackUI } from "./ui/ResourcePackUI";
+export { ExportUI } from "./ui/ExportUI";
+export { SchematicExporter } from "./export/SchematicExporter";
 export type { SimulationConfig, SimulationState, SyncMode } from "./managers/SimulationManager";
 export type { SchematicRendererOptions, KeyboardControlsOptions, DebugOptions, GPUComputeOptions, WasmMeshBuilderOptions } from "./SchematicRendererOptions";
 export type { InsignRegionStyle, InsignRegionOptions } from "./managers/highlight/InsignRegionHighlight";
@@ -18,6 +22,55 @@ export type { InsignIoStyle } from "./managers/highlight/InsignIoHighlight";
 export { InsignIoHighlight } from "./managers/highlight/InsignIoHighlight";
 export type { OverlayContent, OverlaySection, OverlayItem, OverlayPosition } from "./managers/OverlayManager";
 export type { DslMap, DslEntry, BoxPair } from "./types/insign";
+
+// Export types
+export type {
+	ExportFormat,
+	ExportQuality,
+	ExportOptions,
+	ExportProgress,
+	ExportResult,
+	ExportError,
+	ExportErrorCode,
+	ExportUIOptions,
+	ExportPreset,
+	ExportEventType,
+	ExportEventMap,
+	ExportEventHandler,
+	ExportProgressCallback,
+	ExportCompleteCallback,
+	ExportErrorCallback,
+	NormalMode,
+	TextureMode,
+	QualityPreset,
+} from "./types/export";
+
+// Resource pack types
+export type {
+	ResourcePackInfo,
+	PackFetchOptions,
+	PackValidationResult,
+	PackConfig,
+	AssetConflict,
+	PackMemoryUsage,
+	StoredResourcePack,
+	PackEventMap as ResourcePackEventMap,
+	PackEventType as ResourcePackEventType,
+	PackEventHandler as ResourcePackEventHandler,
+	ResourcePackOptions,
+	PackAddedEvent,
+	PackRemovedEvent,
+	PackToggledEvent,
+	PackOrderChangedEvent,
+	PacksChangedEvent,
+	AtlasRebuildingEvent,
+	AtlasRebuiltEvent,
+	LoadProgressEvent,
+	LoadStartEvent,
+	LoadCompleteEvent,
+	LoadErrorEvent,
+	PackErrorEvent,
+} from "./types/resourcePack";
 
 // Re-export nucleation to provide single WASM instance across the app
 export * from "./nucleationExports";
