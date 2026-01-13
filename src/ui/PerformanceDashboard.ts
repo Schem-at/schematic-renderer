@@ -79,6 +79,10 @@ export class PerformanceDashboard {
             this.show();
         }
     }
+
+    public isShowing(): boolean {
+        return this.isVisible;
+    }
     
     private startUpdating(): void {
         if (this.updateInterval) return;

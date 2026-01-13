@@ -523,23 +523,17 @@ export class RenderManager {
 		const cachedData = await getCachedHdri(hdriPath);
 		
 		if (cachedData) {
-			// Load from cached ArrayBuffer using Blob URL
+			// Load from cached ArrayBuffer
 			try {
-				const blob = new Blob([cachedData], { type: 'application/octet-stream' });
-				const blobUrl = URL.createObjectURL(blob);
-				try {
-					const texture = await hdriLoader.loadAsync(blobUrl);
-					this.applyHDRITexture(texture, backgroundOnly, hdriPath);
-					return;
-				} finally {
-					URL.revokeObjectURL(blobUrl);
-				}
+				const texture = hdriLoader.parse(cachedData);
+				this.applyHDRITexture(texture, backgroundOnly, hdriPath);
+				return;
 			} catch (error) {
-				console.warn('[HDRI Cache] Failed to load cached data, fetching fresh:', error);
+				console.warn('[HDRI Cache] Failed to parse cached data, fetching fresh:', error);
 			}
 		}
 		
-		// Fetch fresh and cache
+		// Fetch and cache
 		try {
 			const response = await fetch(hdriPath);
 			if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -549,15 +543,9 @@ export class RenderManager {
 			// Cache the raw data
 			cacheHdri(hdriPath, arrayBuffer);
 			
-			// Load using Blob URL (ensures proper texture setup)
-			const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-			const blobUrl = URL.createObjectURL(blob);
-			try {
-				const texture = await hdriLoader.loadAsync(blobUrl);
-				this.applyHDRITexture(texture, backgroundOnly, hdriPath);
-			} finally {
-				URL.revokeObjectURL(blobUrl);
-			}
+			// Parse and apply
+			const texture = hdriLoader.parse(arrayBuffer);
+			this.applyHDRITexture(texture, backgroundOnly, hdriPath);
 		} catch (error) {
 			console.error("HDRI loading failed:", error);
 			this.eventEmitter.emit("hdriError", { error });

@@ -108,14 +108,17 @@ export class CameraManager extends EventEmitter {
 			fov: 45, // FOV for orthographic camera
 			controlSettings: {
 				enableDamping: true,
-				dampingFactor: 0.1,
-				minDistance: 10,
-				maxDistance: 100,
+				dampingFactor: 0.08, // Smoother damping
+				minDistance: 5,
+				maxDistance: 500,
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true,
-				minPolarAngle: Math.PI / 6, // 30 degrees - allow more vertical movement
-				maxPolarAngle: Math.PI / 2.2, // ~82 degrees
+				panSpeed: 1.0,
+				rotateSpeed: 0.8,
+				zoomSpeed: 1.2,
+				minPolarAngle: Math.PI / 8, // 22.5 degrees - allow more vertical freedom
+				maxPolarAngle: Math.PI / 2.1, // ~86 degrees
 			},
 		},
 		perspective: {
@@ -125,10 +128,17 @@ export class CameraManager extends EventEmitter {
 			controlType: "orbit" as const,
 			fov: 60, // Default FOV for perspective camera
 			controlSettings: {
-				enableDamping: false,
+				enableDamping: true, // Enable smooth damping for nice feel
+				dampingFactor: 0.08, // Smooth but responsive
+				minDistance: 1,
+				maxDistance: 1000,
 				enableZoom: true,
 				enableRotate: true,
 				enablePan: true,
+				panSpeed: 1.0,
+				rotateSpeed: 0.8,
+				zoomSpeed: 1.2,
+				// No polar angle restrictions for perspective - full freedom
 			},
 		},
 		perspective_fpv: {

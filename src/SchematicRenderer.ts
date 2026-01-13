@@ -31,6 +31,8 @@ import {
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
 import { ResourcePackUI } from "./ui/ResourcePackUI";
 import { ExportUI } from "./ui/ExportUI";
+import { RenderSettingsUI } from "./ui/RenderSettingsUI";
+import { CaptureUI } from "./ui/CaptureUI";
 import type {
 	PacksChangedEvent,
 	PackToggledEvent,
@@ -95,6 +97,8 @@ export class SchematicRenderer {
 	public packs!: ResourcePackManagerProxy;
 	public resourcePackUI: ResourcePackUI | undefined;
 	public exportUI: ExportUI | undefined;
+	public renderSettingsUI: RenderSettingsUI | undefined;
+	public captureUI: CaptureUI | undefined;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -174,6 +178,31 @@ export class SchematicRenderer {
 				toggleUIShortcut: "KeyE",
 			}
 		);
+
+		// Initialize Render Settings UI
+		this.renderSettingsUI = new RenderSettingsUI(this, {
+			enableUI: true,
+			uiPosition: "top-right",
+			enableKeyboardShortcuts: true,
+			toggleUIShortcut: "KeyR",
+			onSettingsChange: (settings) => {
+				this.options.callbacks?.onRenderSettingsChanged?.(settings);
+			},
+		});
+
+		// Initialize Capture UI
+		this.captureUI = new CaptureUI(this, {
+			enableUI: true,
+			uiPosition: "top-right",
+			enableKeyboardShortcuts: true,
+			toggleUIShortcut: "KeyC",
+			onScreenshotTaken: (blob, filename) => {
+				this.options.callbacks?.onScreenshotTaken?.(blob, filename);
+			},
+			onRecordingComplete: (blob, filename) => {
+				this.options.callbacks?.onRecordingComplete?.(blob, filename);
+			},
+		});
 
 		this.state = {
 			cameraPosition: new THREE.Vector3(),
@@ -1383,6 +1412,282 @@ export class SchematicRenderer {
 		}
 	}
 
+	// ===== CAPTURE API =====
+
+	/**
+	 * Take a screenshot of the current view
+	 * @param options Screenshot options (width, height, quality, format)
+	 * @returns Promise<Blob> The screenshot as a Blob
+	 */
+	public async takeScreenshot(options?: {
+		width?: number;
+		height?: number;
+		quality?: number;
+		format?: "image/png" | "image/jpeg";
+	}): Promise<Blob> {
+		return this.cameraManager.recordingManager.takeScreenshot(options);
+	}
+
+	/**
+	 * Take a screenshot and automatically download it
+	 * @param filename Filename (without extension)
+	 * @param options Screenshot options
+	 */
+	public async downloadScreenshot(
+		filename: string = "schematic_screenshot",
+		options?: {
+			width?: number;
+			height?: number;
+			quality?: number;
+			format?: "image/png" | "image/jpeg";
+		}
+	): Promise<void> {
+		const format = options?.format ?? "image/png";
+		const blob = await this.takeScreenshot(options);
+		const extension = format === "image/png" ? "png" : "jpg";
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `${filename}.${extension}`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	/**
+	 * Start video recording along the camera path
+	 * @param duration Duration in seconds
+	 * @param options Recording options
+	 */
+	public async startRecording(
+		duration: number,
+		options?: {
+			width?: number;
+			height?: number;
+			frameRate?: number;
+			quality?: number;
+			onProgress?: (progress: number) => void;
+			onComplete?: (blob: Blob) => void;
+		}
+	): Promise<void> {
+		return this.cameraManager.recordingManager.startRecording(duration, options);
+	}
+
+	/**
+	 * Stop the current recording
+	 */
+	public stopRecording(): void {
+		this.cameraManager.recordingManager.stopRecording();
+	}
+
+	/**
+	 * Check if currently recording
+	 */
+	public isRecording(): boolean {
+		return this.cameraManager.recordingManager.isRecording;
+	}
+
+	// ===== RENDER SETTINGS API =====
+
+	/**
+	 * Set the background color (for non-HDRI backgrounds)
+	 * @param color Color as hex string (e.g., "#87ceeb") or number (e.g., 0x87ceeb)
+	 */
+	public setBackgroundColor(color: string | number): void {
+		this.sceneManager.setBackgroundColor(color);
+		this.renderManager?.setIsometricBackgroundColor(color);
+	}
+
+	/**
+	 * Set camera mode (perspective, isometric, or first-person)
+	 * @param mode Camera mode
+	 */
+	public setCameraMode(mode: "perspective" | "isometric" | "perspective_fpv"): void {
+		this.cameraManager.switchCameraPreset(mode);
+	}
+
+	/**
+	 * Get current camera mode
+	 */
+	public getCameraMode(): string {
+		return (this.cameraManager as any).activeCameraKey;
+	}
+
+	/**
+	 * Enable or disable SSAO (ambient occlusion)
+	 * @param enabled Whether SSAO should be enabled
+	 */
+	public setSSAOEnabled(enabled: boolean): void {
+		this.renderManager?.setSSAOEnabled(enabled);
+	}
+
+
+	/**
+	 * Check if SSAO is enabled
+	 */
+	public isSSAOEnabled(): boolean {
+		return this.renderManager?.isSSAOEnabled() ?? false;
+	}
+
+	/**
+	 * Enable or disable the grid helper
+	 * @param visible Whether the grid should be visible
+	 */
+	public setGridVisible(visible: boolean): void {
+		this.sceneManager.showGrid = visible;
+	}
+
+	/**
+	 * Enable or disable the axes helper
+	 * @param visible Whether the axes should be visible
+	 */
+	public setAxesVisible(visible: boolean): void {
+		this.sceneManager.showAxes = visible;
+	}
+
+	// ===== CAMERA PATH API =====
+
+	/**
+	 * Show or hide the camera path visualization
+	 * @param visible Whether the path should be visible
+	 * @param pathName Name of the path (default: "circularPath")
+	 */
+	public setCameraPathVisible(visible: boolean, pathName: string = "circularPath"): void {
+		if (visible) {
+			this.cameraManager.showPathVisualization(pathName);
+		} else {
+			this.cameraManager.hidePathVisualization(pathName);
+		}
+	}
+
+	/**
+	 * Fit the camera path to frame all loaded schematics
+	 * @param pathName Name of the path (default: "circularPath")
+	 */
+	public fitCameraPath(pathName: string = "circularPath"): void {
+		this.cameraManager.cameraPathManager.fitCircularPathToSchematics(pathName);
+	}
+
+	/**
+	 * Animate the camera along a path (for previews or recordings)
+	 * @param options Animation options
+	 */
+	public async animateCameraAlongPath(options?: {
+		pathName?: string;
+		totalFrames?: number;
+		targetFps?: number;
+		onUpdate?: (progress: number) => void;
+		onComplete?: () => void;
+	}): Promise<void> {
+		return this.cameraManager.animateCameraAlongPath(options);
+	}
+
+	// ===== UI VISIBILITY API =====
+
+	/**
+	 * Show the render settings UI panel
+	 */
+	public showRenderSettings(): void {
+		this.renderSettingsUI?.show();
+	}
+
+	/**
+	 * Hide the render settings UI panel
+	 */
+	public hideRenderSettings(): void {
+		this.renderSettingsUI?.hide();
+	}
+
+	/**
+	 * Toggle the render settings UI panel
+	 */
+	public toggleRenderSettings(): void {
+		this.renderSettingsUI?.toggle();
+	}
+
+	/**
+	 * Show the capture UI panel
+	 */
+	public showCaptureUI(): void {
+		this.captureUI?.show();
+	}
+
+	/**
+	 * Hide the capture UI panel
+	 */
+	public hideCaptureUI(): void {
+		this.captureUI?.hide();
+	}
+
+	/**
+	 * Toggle the capture UI panel
+	 */
+	public toggleCaptureUI(): void {
+		this.captureUI?.toggle();
+	}
+
+	/**
+	 * Show the export UI panel
+	 */
+	public showExportUI(): void {
+		this.exportUI?.show();
+	}
+
+	/**
+	 * Hide the export UI panel
+	 */
+	public hideExportUI(): void {
+		this.exportUI?.hide();
+	}
+
+	/**
+	 * Toggle the export UI panel
+	 */
+	public toggleExportUI(): void {
+		this.exportUI?.toggle();
+	}
+
+	/**
+	 * Show the resource pack UI panel
+	 */
+	public showResourcePackUI(): void {
+		this.resourcePackUI?.show();
+	}
+
+	/**
+	 * Hide the resource pack UI panel
+	 */
+	public hideResourcePackUI(): void {
+		this.resourcePackUI?.hide();
+	}
+
+	/**
+	 * Toggle the resource pack UI panel
+	 */
+	public toggleResourcePackUI(): void {
+		this.resourcePackUI?.toggle();
+	}
+
+	/**
+	 * Get all available UI panels
+	 */
+	public getUIState(): {
+		renderSettings: boolean;
+		capture: boolean;
+		export: boolean;
+		resourcePack: boolean;
+		performanceDashboard: boolean;
+	} {
+		return {
+			renderSettings: this.renderSettingsUI?.isShowing() ?? false,
+			capture: this.captureUI?.isShowing() ?? false,
+			export: this.exportUI?.isShowing() ?? false,
+			resourcePack: this.resourcePackUI?.isShowing() ?? false,
+			performanceDashboard: performanceDashboard.isShowing(),
+		};
+	}
+
 	public dispose(): void {
 		// Mark as disposed to stop animation loop
 		this.isDisposed = true;
@@ -1445,6 +1750,12 @@ export class SchematicRenderer {
 		
 		// Clean up export UI
 		this.exportUI?.dispose();
+		
+		// Clean up render settings UI
+		this.renderSettingsUI?.dispose();
+		
+		// Clean up capture UI
+		this.captureUI?.dispose();
 		
 		// Clean up resource pack manager
 		this.resourcePackManager.dispose();

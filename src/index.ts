@@ -12,6 +12,9 @@ export { InspectorManager } from "./managers/InspectorManager";
 export { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
 export { ResourcePackUI } from "./ui/ResourcePackUI";
 export { ExportUI } from "./ui/ExportUI";
+export { RenderSettingsUI } from "./ui/RenderSettingsUI";
+export { CaptureUI } from "./ui/CaptureUI";
+export { BaseUI, UIColors, UIStyles } from "./ui/UIComponents";
 export { SchematicExporter } from "./export/SchematicExporter";
 export type { SimulationConfig, SimulationState, SyncMode } from "./managers/SimulationManager";
 export type { SchematicRendererOptions, KeyboardControlsOptions, DebugOptions, GPUComputeOptions, WasmMeshBuilderOptions } from "./SchematicRendererOptions";
@@ -44,6 +47,26 @@ export type {
 	TextureMode,
 	QualityPreset,
 } from "./types/export";
+
+// Render settings types
+export type {
+	RenderSettingsUIOptions,
+	RenderSettings,
+} from "./ui/RenderSettingsUI";
+
+// Capture types
+export type {
+	CaptureUIOptions,
+	ScreenshotSettings,
+	RecordingSettings,
+	CameraPathSettings,
+} from "./ui/CaptureUI";
+
+// UI component types
+export type {
+	UIPosition,
+	BaseUIOptions,
+} from "./ui/UIComponents";
 
 // Resource pack types
 export type {
