@@ -35,8 +35,7 @@
 		}
 	},
 	"files": [
-		"dist",
-		"vendor"
+		"dist"
 	],
 	"scripts": {
 		"start": "vite",
@@ -98,7 +97,7 @@
 		"vitest": "^4.0.13"
 	},
 	"dependencies": {
-		"cubane": "file:./vendor/cubane-1.0.17.tgz",
+		"cubane": "^1.0.19",
 		"@ffmpeg/ffmpeg": "^0.12.15",
 		"@ffmpeg/util": "^0.12.2",
 		"chokidar": "^3.6.0",
