@@ -222,7 +222,7 @@ export interface WebGPURendererOptions {
 export interface SchematicRendererOptions {
 	backgroundColor?: number | string; // Accepts hex color or CSS color string
 	hdri?: string;
-	resourcePackBlobs?: any;
+	resourcePackBlobs?: Blob[];
 	ffmpeg?: any;
 	gamma?: number;
 	chunkSideLength?: number; // Length of each chunk side in blocks
@@ -383,7 +383,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		toggleUIShortcut: "KeyP", // Press P to toggle UI
 		maxPacks: 0, // 0 = unlimited
 	},
-	resourcePackBlobs: {},
+	resourcePackBlobs: [],
 };
 
 export interface Callbacks {

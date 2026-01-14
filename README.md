@@ -45,6 +45,28 @@ bun add schematic-renderer
 
 ## Basic Usage
 
+### Constructor Signature
+
+The `SchematicRenderer` constructor has the following signature:
+
+```typescript
+new SchematicRenderer(
+  canvas: HTMLCanvasElement,
+  schematicData?: { [id: string]: () => Promise<ArrayBuffer> },
+  defaultResourcePacks?: Record<string, () => Promise<Blob>>,
+  options?: SchematicRendererOptions
+)
+```
+
+**Parameters:**
+
+- `canvas` - The HTML canvas element to render to
+- `schematicData` - (Optional) An object mapping schematic IDs to async functions that return ArrayBuffers. Pass `{}` if not preloading schematics.
+- `defaultResourcePacks` - (Optional) An object mapping pack names to async functions that return Blobs. Pass `{}` if not preloading resource packs.
+- `options` - (Optional) Configuration options for the renderer
+
+> **Important:** If you want to pass options but not preload schematics or resource packs, you must explicitly pass empty objects `{}` for the second and third parameters.
+
 ### HTML Example
 
 ```html
@@ -75,12 +97,14 @@ bun add schematic-renderer
 			const canvas = document.getElementById("canvas");
 
 			// Initialize the renderer
+			// Note: Pass empty objects {} for schematicData and defaultResourcePacks
+			// if you're not preloading any, so options is in the correct position
 			const renderer = new SchematicRenderer.SchematicRenderer(
 				canvas,
-				{},
-				{},
+				{}, // schematicData - empty, we'll load via drag & drop
+				{}, // defaultResourcePacks - empty
 				{
-					// Enable useful features
+					// Options (4th parameter)
 					enableDragAndDrop: true,
 					showGrid: true,
 					cameraOptions: {
@@ -94,6 +118,50 @@ bun add schematic-renderer
 		</script>
 	</body>
 </html>
+```
+
+### Preloading Schematics
+
+If you want to preload schematics at initialization:
+
+```javascript
+const renderer = new SchematicRenderer.SchematicRenderer(
+	canvas,
+	{
+		// Keys are schematic IDs, values are async functions returning ArrayBuffer
+		myHouse: async () => {
+			const response = await fetch("/schematics/house.schem");
+			return response.arrayBuffer();
+		},
+		myFarm: async () => {
+			const response = await fetch("/schematics/farm.litematic");
+			return response.arrayBuffer();
+		},
+	},
+	{}, // No default resource packs
+	{
+		showGrid: true,
+	}
+);
+```
+
+### Preloading Resource Packs
+
+```javascript
+const renderer = new SchematicRenderer.SchematicRenderer(
+	canvas,
+	{}, // No preloaded schematics
+	{
+		// Keys are pack names, values are async functions returning Blob
+		faithful: async () => {
+			const response = await fetch("/packs/faithful.zip");
+			return response.blob();
+		},
+	},
+	{
+		showGrid: true,
+	}
+);
 ```
 
 ## Configuration Options
@@ -187,9 +255,7 @@ const options = {
 			console.log(`Loading ${file.name}: ${progress * 100}%`);
 		},
 		onInvalidFileType: (file) => {
-			alert(
-				"Invalid file type! Please drop .schem, .schematic, .litematic, or .zip"
-			);
+			alert("Invalid file type! Please drop .schem, .schematic, .litematic, or .zip");
 		},
 
 		// --- Schematics ---
@@ -219,8 +285,7 @@ const options = {
 		// --- Simulation (Redstone) ---
 		onSimulationInitialized: (id) => console.log("Sim ready"),
 		onSimulationTicked: (tick) => console.log(`Tick: ${tick}`),
-		onBlockInteracted: (x, y, z) =>
-			console.log(`Clicked block at ${x},${y},${z}`),
+		onBlockInteracted: (x, y, z) => console.log(`Clicked block at ${x},${y},${z}`),
 	},
 };
 ```
@@ -231,20 +296,22 @@ const options = {
 
 ```javascript
 // Load a schematic from URL
-await renderer.schematicManager.loadSchematicFromURL(
-	"path/to/house.schem",
-	"MyHouse"
-);
+await renderer.schematicManager.loadSchematicFromURL("path/to/house.schem", "MyHouse");
 
 // Focus camera on content
 renderer.cameraManager.focusOnSchematics();
 
-// Take a screenshot
-renderer.captureScreenshot({
+// Take a screenshot (returns a Promise<Blob>)
+const blob = await renderer.takeScreenshot({
+	format: "image/png", // or "image/jpeg"
+	quality: 0.9, // 0-1, only for jpeg
+	width: 1920, // optional, defaults to canvas size
+	height: 1080, // optional, defaults to canvas size
+});
+
+// Take a screenshot and automatically download it
+await renderer.downloadScreenshot("my_screenshot", {
 	format: "image/png",
-	callback: (blob) => {
-		/* save blob */
-	},
 });
 
 // Toggle debug inspector
@@ -390,7 +457,17 @@ bun run dev
 
 # Build for production (outputs to /dist)
 bun run build
+
+# Run tests
+bun run test
+
+# Run linting
+bun run lint
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute to this project.
 
 ## License
 
