@@ -57,7 +57,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to npm with provenance
-        run: npm publish --access public --provenance
+        run: npm publish --access public --provenance --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -88,6 +88,6 @@ jobs:
           registry-url: "https://npm.pkg.github.com"
 
       - name: Publish to GitHub Packages
-        run: npm publish
+        run: npm publish --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

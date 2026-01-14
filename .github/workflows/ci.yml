@@ -42,6 +42,9 @@ jobs:
       - name: Type check
         run: bun run typecheck
 
+      - name: Type check (build config)
+        run: tsc --project tsconfig.build.json --noEmit
+
   test:
     name: Test
     runs-on: ubuntu-latest
