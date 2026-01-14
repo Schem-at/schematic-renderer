@@ -69,7 +69,10 @@ export class ExportUI {
 		container.className = "export-ui";
 
 		// Position styles
-		const positions: Record<string, { top?: string; right?: string; bottom?: string; left?: string }> = {
+		const positions: Record<
+			string,
+			{ top?: string; right?: string; bottom?: string; left?: string }
+		> = {
 			"top-left": { top: "10px", left: "10px" },
 			"top-right": { top: "10px", right: "10px" },
 			"bottom-left": { bottom: "10px", left: "10px" },
@@ -136,11 +139,6 @@ export class ExportUI {
 			alignItems: "center",
 			gap: "8px",
 		});
-
-		const icon = document.createElement("span");
-		icon.textContent = "📦";
-		icon.style.fontSize = "16px";
-		titleContainer.appendChild(icon);
 
 		const title = document.createElement("span");
 		title.textContent = "Export Schematic";
@@ -292,7 +290,8 @@ export class ExportUI {
 
 		const helpIcon = document.createElement("span");
 		helpIcon.textContent = "ℹ️";
-		helpIcon.title = "Fixes inside-out/see-through faces. 'Flip Winding' reverses triangle order. 'Double-sided' renders both sides (safest).";
+		helpIcon.title =
+			"Fixes inside-out/see-through faces. 'Flip Winding' reverses triangle order. 'Double-sided' renders both sides (safest).";
 		helpIcon.style.cursor = "help";
 		helpIcon.style.fontSize = "12px";
 		labelContainer.appendChild(helpIcon);
@@ -327,28 +326,25 @@ export class ExportUI {
 		});
 
 		// Center at origin
-		optionsGrid.appendChild(
-			this.createCheckbox("centerOrigin", "Center at origin", false)
-		);
+		optionsGrid.appendChild(this.createCheckbox("centerOrigin", "Center at origin", false));
 
 		// Optimize
-		optionsGrid.appendChild(
-			this.createCheckbox("optimize", "Optimize mesh", true)
-		);
+		optionsGrid.appendChild(this.createCheckbox("optimize", "Optimize mesh", true));
 
 		// Embed textures
-		optionsGrid.appendChild(
-			this.createCheckbox("embedTextures", "Embed textures", true)
-		);
+		optionsGrid.appendChild(this.createCheckbox("embedTextures", "Embed textures", true));
 
 		// Visible only
-		optionsGrid.appendChild(
-			this.createCheckbox("visibleOnly", "Visible only", true)
-		);
+		optionsGrid.appendChild(this.createCheckbox("visibleOnly", "Visible only", true));
 
 		// Force opaque - fixes depth sorting issues
 		optionsGrid.appendChild(
-			this.createCheckbox("forceOpaque", "Force opaque", false, "Removes all transparency - fixes depth sorting issues in viewers")
+			this.createCheckbox(
+				"forceOpaque",
+				"Force opaque",
+				false,
+				"Removes all transparency - fixes depth sorting issues in viewers"
+			)
 		);
 
 		section.appendChild(optionsGrid);
@@ -509,7 +505,12 @@ export class ExportUI {
 		return select;
 	}
 
-	private createCheckbox(id: string, label: string, checked: boolean, tooltip?: string): HTMLLabelElement {
+	private createCheckbox(
+		id: string,
+		label: string,
+		checked: boolean,
+		tooltip?: string
+	): HTMLLabelElement {
 		const container = document.createElement("label");
 		Object.assign(container.style, {
 			display: "flex",
@@ -519,7 +520,7 @@ export class ExportUI {
 			fontSize: "12px",
 			color: "rgba(255, 255, 255, 0.7)",
 		});
-		
+
 		if (tooltip) {
 			container.title = tooltip;
 		}
@@ -542,11 +543,7 @@ export class ExportUI {
 		return container;
 	}
 
-	private createIconButton(
-		icon: string,
-		title: string,
-		onClick: () => void
-	): HTMLButtonElement {
+	private createIconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
 		const btn = document.createElement("button");
 		btn.textContent = icon;
 		btn.title = title;
@@ -614,11 +611,16 @@ export class ExportUI {
 	}
 
 	private getExportOptions(): ExportOptions {
-		const centerOrigin = (this.container.querySelector("#export-centerOrigin") as HTMLInputElement)?.checked ?? false;
-		const optimize = (this.container.querySelector("#export-optimize") as HTMLInputElement)?.checked ?? true;
-		const embedTextures = (this.container.querySelector("#export-embedTextures") as HTMLInputElement)?.checked ?? true;
-		const visibleOnly = (this.container.querySelector("#export-visibleOnly") as HTMLInputElement)?.checked ?? true;
-		const forceOpaque = (this.container.querySelector("#export-forceOpaque") as HTMLInputElement)?.checked ?? false;
+		const centerOrigin =
+			(this.container.querySelector("#export-centerOrigin") as HTMLInputElement)?.checked ?? false;
+		const optimize =
+			(this.container.querySelector("#export-optimize") as HTMLInputElement)?.checked ?? true;
+		const embedTextures =
+			(this.container.querySelector("#export-embedTextures") as HTMLInputElement)?.checked ?? true;
+		const visibleOnly =
+			(this.container.querySelector("#export-visibleOnly") as HTMLInputElement)?.checked ?? true;
+		const forceOpaque =
+			(this.container.querySelector("#export-forceOpaque") as HTMLInputElement)?.checked ?? false;
 
 		return {
 			filename: this.filenameInput.value || "schematic_export",

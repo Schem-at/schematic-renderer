@@ -1,27 +1,41 @@
 /**
  * InspectorManager
- * 
+ *
  * Provides a debug GUI panel using lil-gui for inspecting and tweaking
  * the SchematicRenderer in real-time. This is a first-class citizen of
  * the renderer that can be enabled via options.
- * 
+ *
  * When WebGPU mode is active, also integrates the Three.js Inspector
  * for GPU profiling and debugging.
  */
 
-import GUI from 'lil-gui';
-import * as THREE from 'three';
-import type { SchematicRenderer } from '../SchematicRenderer';
-import type { DebugOptions } from '../SchematicRendererOptions';
+// Lazy-load lil-gui to reduce initial bundle size
+// import GUI from 'lil-gui';
+import * as THREE from "three";
+import type { SchematicRenderer } from "../SchematicRenderer";
+import type { DebugOptions } from "../SchematicRendererOptions";
+
+// Dynamic import for debug GUI
+let GUI: any = null;
+let guiLoaded = false;
+
+async function loadGUI() {
+	if (guiLoaded) return;
+	console.log("[InspectorManager] Lazy-loading debug GUI (lil-gui)...");
+	const lilGui = await import("lil-gui");
+	GUI = lilGui.default || lilGui.GUI;
+	guiLoaded = true;
+	console.log("[InspectorManager] Debug GUI loaded");
+}
 
 export interface InspectorPanel {
 	name: string;
-	folder: GUI;
+	folder: any; // GUI type from lil-gui
 }
 
 export class InspectorManager {
 	private renderer: SchematicRenderer;
-	private gui: GUI | null = null;
+	private gui: any | null = null;
 	private options: DebugOptions;
 	private panels: Map<string, InspectorPanel> = new Map();
 	private isVisible: boolean = true;
@@ -33,7 +47,7 @@ export class InspectorManager {
 		this.options = {
 			enableInspector: true,
 			showOnStartup: true,
-			...options
+			...options,
 		};
 
 		if (this.options.enableInspector) {
@@ -41,16 +55,19 @@ export class InspectorManager {
 		}
 	}
 
-	private initialize(): void {
+	private async initialize(): Promise<void> {
+		// Lazy-load lil-gui only when inspector is enabled
+		await loadGUI();
+
 		// Create main GUI (lil-gui - works with both WebGL and WebGPU)
 		this.gui = new GUI({
-			title: '🔧 Schematic Renderer',
-			width: 300
+			title: "🔧 Schematic Renderer",
+			width: 300,
 		});
 
 		// Style the GUI container
 		if (this.gui.domElement.parentElement) {
-			this.gui.domElement.parentElement.style.zIndex = '9999';
+			this.gui.domElement.parentElement.style.zIndex = "9999";
 		}
 
 		// Initialize state object for two-way binding
@@ -97,15 +114,18 @@ export class InspectorManager {
 			const canvasParent = this.renderer.canvas.parentElement;
 			if (canvasParent && inspector.domElement) {
 				// Style the inspector to be positioned at the bottom
-				inspector.domElement.style.position = 'absolute';
-				inspector.domElement.style.bottom = '0';
-				inspector.domElement.style.left = '0';
-				inspector.domElement.style.right = '0';
-				inspector.domElement.style.zIndex = '9998';
+				inspector.domElement.style.position = "absolute";
+				inspector.domElement.style.bottom = "0";
+				inspector.domElement.style.left = "0";
+				inspector.domElement.style.right = "0";
+				inspector.domElement.style.zIndex = "9998";
 
 				canvasParent.appendChild(inspector.domElement);
 
-				console.log('%c[InspectorManager] Three.js Inspector attached (WebGPU mode)', 'color: #4caf50');
+				console.log(
+					"%c[InspectorManager] Three.js Inspector attached (WebGPU mode)",
+					"color: #4caf50"
+				);
 			}
 		}
 	}
@@ -131,9 +151,11 @@ export class InspectorManager {
 
 		this.state = {
 			// Renderer
-			backgroundColor: '#' + (sceneManager.scene.background instanceof THREE.Color
-				? sceneManager.scene.background.getHexString()
-				: '1a1a2e'),
+			backgroundColor:
+				"#" +
+				(sceneManager.scene.background instanceof THREE.Color
+					? sceneManager.scene.background.getHexString()
+					: "1a1a2e"),
 			gamma: this.renderer.options.gamma ?? 0.5,
 
 			// Scene
@@ -155,7 +177,7 @@ export class InspectorManager {
 
 			// GPU
 			gpuCompute: this.renderer.options.gpuComputeOptions?.enabled ?? false,
-			meshBuildingMode: this.renderer.options.meshBuildingMode ?? 'incremental',
+			meshBuildingMode: this.renderer.options.meshBuildingMode ?? "incremental",
 			greedyMeshing: this.renderer.options.wasmMeshBuilderOptions?.greedyMeshingEnabled ?? false,
 		};
 	}
@@ -163,16 +185,18 @@ export class InspectorManager {
 	private addRendererPanel(): void {
 		if (!this.gui) return;
 
-		const folder = this.gui.addFolder('Renderer');
+		const folder = this.gui.addFolder("Renderer");
 
-		folder.addColor(this.state, 'backgroundColor')
-			.name('Background')
+		folder
+			.addColor(this.state, "backgroundColor")
+			.name("Background")
 			.onChange((value: string) => {
 				this.renderer.sceneManager.scene.background = new THREE.Color(value);
 			});
 
-		folder.add(this.state, 'gamma', 0, 2, 0.1)
-			.name('Gamma')
+		folder
+			.add(this.state, "gamma", 0, 2, 0.1)
+			.name("Gamma")
 			.onChange((value: number) => {
 				// Update gamma correction if effect exists
 				if (this.renderer.renderManager) {
@@ -180,40 +204,48 @@ export class InspectorManager {
 				}
 			});
 
-		folder.add({
-			screenshot: () => this.takeScreenshot()
-		}, 'screenshot').name('📷 Screenshot');
+		folder
+			.add(
+				{
+					screenshot: () => this.takeScreenshot(),
+				},
+				"screenshot"
+			)
+			.name("📷 Screenshot");
 
-		this.panels.set('renderer', { name: 'Renderer', folder });
+		this.panels.set("renderer", { name: "Renderer", folder });
 	}
 
 	private addScenePanel(): void {
 		if (!this.gui) return;
 
-		const folder = this.gui.addFolder('Scene');
+		const folder = this.gui.addFolder("Scene");
 
-		folder.add(this.state, 'showGrid')
-			.name('Show Grid')
+		folder
+			.add(this.state, "showGrid")
+			.name("Show Grid")
 			.onChange((value: boolean) => {
 				this.renderer.options.showGrid = value;
 				this.renderer.sceneManager.updateHelpers();
 			});
 
-		folder.add(this.state, 'showAxes')
-			.name('Show Axes')
+		folder
+			.add(this.state, "showAxes")
+			.name("Show Axes")
 			.onChange((value: boolean) => {
 				this.renderer.options.showAxes = value;
 				this.renderer.sceneManager.updateHelpers();
 			});
 
-		folder.add(this.state, 'wireframe')
-			.name('Wireframe')
+		folder
+			.add(this.state, "wireframe")
+			.name("Wireframe")
 			.onChange((value: boolean) => {
 				this.setWireframeMode(value);
 			});
 
 		// Scene info
-		const infoFolder = folder.addFolder('Info');
+		const infoFolder = folder.addFolder("Info");
 
 		// Update info periodically
 		const rendererRef = this.renderer;
@@ -221,7 +253,7 @@ export class InspectorManager {
 			if (rendererRef.renderManager) {
 				const info = (rendererRef.renderManager as any).renderer?.info;
 				if (info) {
-					infoFolder.controllers.forEach(c => c.updateDisplay());
+					infoFolder.controllers.forEach((c: any) => c.updateDisplay());
 				}
 			}
 		};
@@ -230,45 +262,49 @@ export class InspectorManager {
 		const drawCallsObj = {
 			get objects() {
 				return (rendererRef.renderManager as any)?.renderer?.info?.render?.calls ?? 0;
-			}
+			},
 		};
-		infoFolder.add(drawCallsObj, 'objects').name('Draw Calls').disable().listen();
+		infoFolder.add(drawCallsObj, "objects").name("Draw Calls").disable().listen();
 
 		setInterval(updateInfo, 1000);
 
 		folder.close();
-		this.panels.set('scene', { name: 'Scene', folder });
+		this.panels.set("scene", { name: "Scene", folder });
 	}
 
 	private addCameraPanel(): void {
 		if (!this.gui) return;
 
-		const folder = this.gui.addFolder('Camera');
+		const folder = this.gui.addFolder("Camera");
 		const camera = this.renderer.cameraManager.activeCamera.camera as THREE.PerspectiveCamera;
 
-		folder.add(this.state, 'fov', 10, 120, 1)
-			.name('FOV')
+		folder
+			.add(this.state, "fov", 10, 120, 1)
+			.name("FOV")
 			.onChange((value: number) => {
 				camera.fov = value;
 				camera.updateProjectionMatrix();
 			});
 
-		folder.add(this.state, 'near', 0.01, 10, 0.01)
-			.name('Near Clip')
+		folder
+			.add(this.state, "near", 0.01, 10, 0.01)
+			.name("Near Clip")
 			.onChange((value: number) => {
 				camera.near = value;
 				camera.updateProjectionMatrix();
 			});
 
-		folder.add(this.state, 'far', 100, 10000, 100)
-			.name('Far Clip')
+		folder
+			.add(this.state, "far", 100, 10000, 100)
+			.name("Far Clip")
 			.onChange((value: number) => {
 				camera.far = value;
 				camera.updateProjectionMatrix();
 			});
 
-		folder.add(this.state, 'autoOrbit')
-			.name('Auto Orbit')
+		folder
+			.add(this.state, "autoOrbit")
+			.name("Auto Orbit")
 			.onChange((value: boolean) => {
 				if (value) {
 					this.renderer.cameraManager.startAutoOrbit();
@@ -277,14 +313,15 @@ export class InspectorManager {
 				}
 			});
 
-		folder.add(this.state, 'orbitSpeed', 1, 60, 1)
-			.name('Orbit Duration (s)')
+		folder
+			.add(this.state, "orbitSpeed", 1, 60, 1)
+			.name("Orbit Duration (s)")
 			.onChange((value: number) => {
 				this.renderer.cameraManager.setAutoOrbitDuration(value);
 			});
 
 		// Camera position display
-		const posFolder = folder.addFolder('Position');
+		const posFolder = folder.addFolder("Position");
 		const pos = { x: 0, y: 0, z: 0 };
 
 		const updateCameraPos = () => {
@@ -293,43 +330,51 @@ export class InspectorManager {
 			pos.z = parseFloat(camera.position.z.toFixed(2));
 		};
 
-		posFolder.add(pos, 'x').name('X').disable().listen();
-		posFolder.add(pos, 'y').name('Y').disable().listen();
-		posFolder.add(pos, 'z').name('Z').disable().listen();
+		posFolder.add(pos, "x").name("X").disable().listen();
+		posFolder.add(pos, "y").name("Y").disable().listen();
+		posFolder.add(pos, "z").name("Z").disable().listen();
 
 		setInterval(updateCameraPos, 100);
 
-		folder.add({
-			resetCamera: () => this.renderer.cameraManager.focusOnSchematics()
-		}, 'resetCamera').name('🔄 Reset Camera');
+		folder
+			.add(
+				{
+					resetCamera: () => this.renderer.cameraManager.focusOnSchematics(),
+				},
+				"resetCamera"
+			)
+			.name("🔄 Reset Camera");
 
 		folder.close();
-		this.panels.set('camera', { name: 'Camera', folder });
+		this.panels.set("camera", { name: "Camera", folder });
 	}
 
 	private addPerformancePanel(): void {
 		if (!this.gui) return;
 
-		const folder = this.gui.addFolder('Performance');
+		const folder = this.gui.addFolder("Performance");
 
-		folder.add(this.state, 'targetFPS', 1, 144, 1)
-			.name('Target FPS')
+		folder
+			.add(this.state, "targetFPS", 1, 144, 1)
+			.name("Target FPS")
 			.onChange((value: number) => {
 				if (this.renderer.renderManager) {
 					(this.renderer.renderManager as any).setTargetFPS?.(value);
 				}
 			});
 
-		folder.add(this.state, 'idleFPS', 1, 30, 1)
-			.name('Idle FPS')
+		folder
+			.add(this.state, "idleFPS", 1, 30, 1)
+			.name("Idle FPS")
 			.onChange((value: number) => {
 				if (this.renderer.renderManager) {
 					(this.renderer.renderManager as any).setIdleFPS?.(value);
 				}
 			});
 
-		folder.add(this.state, 'adaptiveFPS')
-			.name('Adaptive FPS')
+		folder
+			.add(this.state, "adaptiveFPS")
+			.name("Adaptive FPS")
 			.onChange((value: boolean) => {
 				if (this.renderer.renderManager) {
 					(this.renderer.renderManager as any).setAdaptiveFPS?.(value);
@@ -337,7 +382,7 @@ export class InspectorManager {
 			});
 
 		// Live stats
-		const statsFolder = folder.addFolder('Stats');
+		const statsFolder = folder.addFolder("Stats");
 		const stats = { fps: 0, ms: 0, memory: 0 };
 		const rendererRef = this.renderer;
 
@@ -352,41 +397,44 @@ export class InspectorManager {
 			}
 		};
 
-		statsFolder.add(stats, 'fps').name('FPS').disable().listen();
-		statsFolder.add(stats, 'ms').name('Frame (ms)').disable().listen();
-		statsFolder.add(stats, 'memory').name('Memory (MB)').disable().listen();
+		statsFolder.add(stats, "fps").name("FPS").disable().listen();
+		statsFolder.add(stats, "ms").name("Frame (ms)").disable().listen();
+		statsFolder.add(stats, "memory").name("Memory (MB)").disable().listen();
 
 		setInterval(updateStats, 500);
 
 		folder.close();
-		this.panels.set('performance', { name: 'Performance', folder });
+		this.panels.set("performance", { name: "Performance", folder });
 	}
 
 	private addGPUPanel(): void {
 		if (!this.gui) return;
 
-		const folder = this.gui.addFolder('GPU / Mesh Building');
+		const folder = this.gui.addFolder("GPU / Mesh Building");
 
-		folder.add(this.state, 'gpuCompute')
-			.name('GPU Compute (Experimental)')
+		folder
+			.add(this.state, "gpuCompute")
+			.name("GPU Compute (Experimental)")
 			.onChange((value: boolean) => {
-				console.log(`[Inspector] GPU Compute: ${value ? 'enabled' : 'disabled'}`);
+				console.log(`[Inspector] GPU Compute: ${value ? "enabled" : "disabled"}`);
 				// Note: This requires rebuilding schematics to take effect
 				if (this.renderer.options.gpuComputeOptions) {
 					this.renderer.options.gpuComputeOptions.enabled = value;
 				}
 			});
 
-		folder.add(this.state, 'meshBuildingMode', ['immediate', 'incremental', 'instanced', 'batched'])
-			.name('Build Mode')
+		folder
+			.add(this.state, "meshBuildingMode", ["immediate", "incremental", "instanced", "batched"])
+			.name("Build Mode")
 			.onChange((value: string) => {
 				console.log(`[Inspector] Mesh building mode: ${value}`);
 			});
 
-		folder.add(this.state, 'greedyMeshing')
-			.name('Greedy Meshing')
+		folder
+			.add(this.state, "greedyMeshing")
+			.name("Greedy Meshing")
 			.onChange((value: boolean) => {
-				console.log(`[Inspector] Greedy meshing: ${value ? 'enabled' : 'disabled'}`);
+				console.log(`[Inspector] Greedy meshing: ${value ? "enabled" : "disabled"}`);
 				if (this.renderer.worldMeshBuilder) {
 					this.renderer.worldMeshBuilder.setGreedyMeshing(value);
 				}
@@ -396,13 +444,13 @@ export class InspectorManager {
 			});
 
 		// GPU info
-		const infoFolder = folder.addFolder('GPU Info');
+		const infoFolder = folder.addFolder("GPU Info");
 		const isWebGPUActive = this.renderer.renderManager?.isWebGPU ?? false;
 		const gpuInfo = {
-			renderer: 'Unknown',
-			vendor: 'Unknown',
-			webgpu: 'Checking...',
-			activeRenderer: isWebGPUActive ? '🚀 WebGPU' : '🔷 WebGL'
+			renderer: "Unknown",
+			vendor: "Unknown",
+			webgpu: "Checking...",
+			activeRenderer: isWebGPUActive ? "🚀 WebGPU" : "🔷 WebGL",
 		};
 
 		// Get GPU info based on renderer type
@@ -411,12 +459,12 @@ export class InspectorManager {
 			if (rm?.renderer) {
 				if (isWebGPUActive) {
 					// WebGPU doesn't have the same debug info API
-					gpuInfo.renderer = 'WebGPU Renderer';
-					gpuInfo.vendor = 'GPU Adapter';
+					gpuInfo.renderer = "WebGPU Renderer";
+					gpuInfo.vendor = "GPU Adapter";
 				} else {
 					// WebGL debug info
 					const gl = rm.renderer.getContext();
-					const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+					const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
 					if (debugInfo) {
 						gpuInfo.renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
 						gpuInfo.vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
@@ -429,30 +477,33 @@ export class InspectorManager {
 
 		// Check WebGPU availability
 		if (isWebGPUActive) {
-			gpuInfo.webgpu = '✅ Active';
+			gpuInfo.webgpu = "✅ Active";
 		} else if (navigator.gpu) {
-			navigator.gpu.requestAdapter().then(adapter => {
-				gpuInfo.webgpu = adapter ? '✅ Available (not used)' : '❌ No adapter';
-			}).catch(() => {
-				gpuInfo.webgpu = '❌ Not supported';
-			});
+			navigator.gpu
+				.requestAdapter()
+				.then((adapter) => {
+					gpuInfo.webgpu = adapter ? "✅ Available (not used)" : "❌ No adapter";
+				})
+				.catch(() => {
+					gpuInfo.webgpu = "❌ Not supported";
+				});
 		} else {
-			gpuInfo.webgpu = '❌ Not supported';
+			gpuInfo.webgpu = "❌ Not supported";
 		}
 
-		infoFolder.add(gpuInfo, 'activeRenderer').name('Active Renderer').disable();
-		infoFolder.add(gpuInfo, 'renderer').name('GPU').disable();
-		infoFolder.add(gpuInfo, 'vendor').name('Vendor').disable();
-		infoFolder.add(gpuInfo, 'webgpu').name('WebGPU Status').disable();
+		infoFolder.add(gpuInfo, "activeRenderer").name("Active Renderer").disable();
+		infoFolder.add(gpuInfo, "renderer").name("GPU").disable();
+		infoFolder.add(gpuInfo, "vendor").name("Vendor").disable();
+		infoFolder.add(gpuInfo, "webgpu").name("WebGPU Status").disable();
 
 		folder.close();
-		this.panels.set('gpu', { name: 'GPU', folder });
+		this.panels.set("gpu", { name: "GPU", folder });
 	}
 
 	/**
 	 * Add a custom panel with controls
 	 */
-	private addCustomPanel(config: NonNullable<DebugOptions['customPanels']>[number]): void {
+	private addCustomPanel(config: NonNullable<DebugOptions["customPanels"]>[number]): void {
 		if (!this.gui) return;
 
 		const folder = this.gui.addFolder(config.name);
@@ -460,28 +511,26 @@ export class InspectorManager {
 		for (const control of config.controls) {
 			const controlState: Record<string, any> = {};
 			controlState[control.name] = control.value;
-			const onChange = control.onChange || (() => { });
+			const onChange = control.onChange || (() => {});
 
 			switch (control.type) {
-				case 'number':
-					folder.add(controlState, control.name, control.min, control.max, control.step)
+				case "number":
+					folder
+						.add(controlState, control.name, control.min, control.max, control.step)
 						.onChange(onChange);
 					break;
-				case 'boolean':
-					folder.add(controlState, control.name)
-						.onChange(onChange);
+				case "boolean":
+					folder.add(controlState, control.name).onChange(onChange);
 					break;
-				case 'color':
-					folder.addColor(controlState, control.name)
-						.onChange(onChange);
+				case "color":
+					folder.addColor(controlState, control.name).onChange(onChange);
 					break;
-				case 'button':
+				case "button":
 					folder.add({ [control.name]: onChange }, control.name);
 					break;
-				case 'select':
+				case "select":
 					if (control.options) {
-						folder.add(controlState, control.name, control.options)
-							.onChange(onChange);
+						folder.add(controlState, control.name, control.options).onChange(onChange);
 					}
 					break;
 			}
@@ -493,7 +542,7 @@ export class InspectorManager {
 	/**
 	 * Add a folder to the GUI programmatically
 	 */
-	public addFolder(name: string): GUI | null {
+	public addFolder(name: string): any | null {
 		if (!this.gui) return null;
 		const folder = this.gui.addFolder(name);
 		this.panels.set(name.toLowerCase(), { name, folder });
@@ -503,14 +552,14 @@ export class InspectorManager {
 	/**
 	 * Get a folder by name
 	 */
-	public getFolder(name: string): GUI | null {
+	public getFolder(name: string): any | null {
 		return this.panels.get(name.toLowerCase())?.folder ?? null;
 	}
 
 	/**
 	 * Get the main GUI instance
 	 */
-	public getGUI(): GUI | null {
+	public getGUI(): any | null {
 		return this.gui;
 	}
 
@@ -518,8 +567,8 @@ export class InspectorManager {
 		this.renderer.sceneManager.scene.traverse((obj) => {
 			if (obj instanceof THREE.Mesh) {
 				const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-				materials.forEach(mat => {
-					if (mat && 'wireframe' in mat) {
+				materials.forEach((mat) => {
+					if (mat && "wireframe" in mat) {
 						(mat as THREE.MeshBasicMaterial).wireframe = enabled;
 					}
 				});
@@ -534,9 +583,9 @@ export class InspectorManager {
 		if (rm.renderer) {
 			const camera = this.renderer.cameraManager.activeCamera.camera;
 			rm.renderer.render(this.renderer.sceneManager.scene, camera);
-			const dataUrl = rm.renderer.domElement.toDataURL('image/png');
+			const dataUrl = rm.renderer.domElement.toDataURL("image/png");
 
-			const link = document.createElement('a');
+			const link = document.createElement("a");
 			link.download = `schematic-${Date.now()}.png`;
 			link.href = dataUrl;
 			link.click();
@@ -544,9 +593,9 @@ export class InspectorManager {
 	}
 
 	private setupKeyboardShortcut(): void {
-		document.addEventListener('keydown', (e) => {
+		document.addEventListener("keydown", (e) => {
 			// Toggle GUI with backtick/tilde key
-			if (e.key === '`' || e.key === '~') {
+			if (e.key === "`" || e.key === "~") {
 				this.toggle();
 			}
 		});

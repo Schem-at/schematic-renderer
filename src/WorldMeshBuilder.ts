@@ -83,7 +83,15 @@ export class WorldMeshBuilder {
 	private useWasmMeshBuilder: boolean = false;
 
 	// Timing stats for performance debugging
-	private _timingStats: { count: number; worker: number; buffer: number; tile: number; maxWorker: number; maxBuffer: number; maxTile: number } | null = null;
+	private _timingStats: {
+		count: number;
+		worker: number;
+		buffer: number;
+		tile: number;
+		maxWorker: number;
+		maxBuffer: number;
+		maxTile: number;
+	} | null = null;
 
 	// SharedArrayBuffer for zero-copy transfers
 	private sharedMemoryPool: SharedMemoryPool | null = null;
@@ -138,18 +146,20 @@ export class WorldMeshBuilder {
 
 			if (success) {
 				this.useGPUCompute = true;
-				console.warn('  ⚠️ WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!');
-				console.warn('  ⚠️ Textures will not render correctly (wireframe only).');
-				console.warn('  ⚠️ Set gpuComputeOptions.enabled = false for better performance.');
+				console.warn(
+					"  ⚠️ WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!"
+				);
+				console.warn("  ⚠️ Textures will not render correctly (wireframe only).");
+				console.warn("  ⚠️ Set gpuComputeOptions.enabled = false for better performance.");
 				return true;
 			} else {
-				console.warn('[WorldMeshBuilder] GPU compute init failed, using worker fallback');
+				console.warn("[WorldMeshBuilder] GPU compute init failed, using worker fallback");
 				this.computeMeshBuilder = null;
 				this.initializeWorkers();
 				return false;
 			}
 		} catch (error) {
-			console.warn('[WorldMeshBuilder] GPU compute error, using worker fallback:', error);
+			console.warn("[WorldMeshBuilder] GPU compute error, using worker fallback:", error);
 			this.computeMeshBuilder = null;
 			this.initializeWorkers();
 			return false;
@@ -166,12 +176,9 @@ export class WorldMeshBuilder {
 	private initializeWorkers() {
 		if (this.workers.length > 0) return;
 
-
 		// Initialize shared memory pool for zero-copy transfers
 		this.sharedMemoryPool = getSharedMemoryPool();
 		this.useSharedMemory = this.sharedMemoryPool.usingSharedMemory();
-
-
 
 		for (let i = 0; i < this.maxWorkers; i++) {
 			// Use WASM worker if enabled, otherwise use JavaScript worker
@@ -212,7 +219,6 @@ export class WorldMeshBuilder {
 		for (const worker of this.workers) {
 			worker.postMessage({ type: "setGreedyMeshing", enabled });
 		}
-
 	}
 
 	/**
@@ -228,7 +234,7 @@ export class WorldMeshBuilder {
 		totalSort: 0,
 		totalMerge: 0,
 		totalWorkerTime: 0,
-		chunkCount: 0
+		chunkCount: 0,
 	};
 
 	static resetStats() {
@@ -237,12 +243,13 @@ export class WorldMeshBuilder {
 			totalSort: 0,
 			totalMerge: 0,
 			totalWorkerTime: 0,
-			chunkCount: 0
+			chunkCount: 0,
 		};
 	}
 
 	// Batch mode state
-	private batchPendingChunks: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
+	private batchPendingChunks: Map<string, { resolve: () => void; reject: (err: any) => void }> =
+		new Map();
 	private batchFinishResolve: ((data: any) => void) | null = null;
 	// @ts-expect-error Reserved for error handling in batch mode
 	private _batchFinishReject: ((err: any) => void) | null = null;
@@ -260,7 +267,9 @@ export class WorldMeshBuilder {
 
 				if (WorldMeshBuilder.stats.chunkCount % 50 === 0) {
 					const avg = (val: number) => (val / WorldMeshBuilder.stats.chunkCount).toFixed(2);
-					console.log(`[WorkerStats] Avg (n=${WorldMeshBuilder.stats.chunkCount}): Setup ${avg(WorldMeshBuilder.stats.totalSetup)}ms, Sort ${avg(WorldMeshBuilder.stats.totalSort)}ms, Merge ${avg(WorldMeshBuilder.stats.totalMerge)}ms, Total ${avg(WorldMeshBuilder.stats.totalWorkerTime)}ms`);
+					console.log(
+						`[WorkerStats] Avg (n=${WorldMeshBuilder.stats.chunkCount}): Setup ${avg(WorldMeshBuilder.stats.totalSetup)}ms, Sort ${avg(WorldMeshBuilder.stats.totalSort)}ms, Merge ${avg(WorldMeshBuilder.stats.totalMerge)}ms, Total ${avg(WorldMeshBuilder.stats.totalWorkerTime)}ms`
+					);
 				}
 			}
 
@@ -320,7 +329,6 @@ export class WorldMeshBuilder {
 			throw new Error("Chunk size must be between 1 and 64");
 		}
 		this.chunkSize = newChunkSize;
-
 	}
 
 	public getChunkSize(): number {
@@ -335,7 +343,6 @@ export class WorldMeshBuilder {
 		return this.useQuantization;
 	}
 
-
 	// Removed unused isBlockOccluding method
 
 	private async computeOcclusionFlags(blockString: string): Promise<number> {
@@ -349,12 +356,12 @@ export class WorldMeshBuilder {
 
 			let flags = 0;
 			const mapping: Record<string, number> = {
-				"west": 0,
-				"east": 1,
-				"down": 2,
-				"up": 3,
-				"north": 4,
-				"south": 5
+				west: 0,
+				east: 1,
+				down: 2,
+				up: 3,
+				north: 4,
+				south: 5,
 			};
 
 			// @ts-ignore
@@ -368,7 +375,7 @@ export class WorldMeshBuilder {
 				if (Array.isArray(faces)) {
 					for (const face of faces) {
 						// Check opacity
-						if (face.material && (face.material.transparent && face.material.opacity < 1.0)) {
+						if (face.material && face.material.transparent && face.material.opacity < 1.0) {
 							isOpaque = false;
 							break;
 						}
@@ -378,20 +385,24 @@ export class WorldMeshBuilder {
 							const [min, max] = face.elementBounds;
 							// min and max are [x, y, z] in 0..16 coordinates typically
 
-							let width = 0, height = 0;
+							let width = 0,
+								height = 0;
 
-							if (dir === 'up' || dir === 'down') { // Check X and Z
+							if (dir === "up" || dir === "down") {
+								// Check X and Z
 								width = max[0] - min[0];
 								height = max[2] - min[2];
-							} else if (dir === 'north' || dir === 'south') { // Check X and Y
+							} else if (dir === "north" || dir === "south") {
+								// Check X and Y
 								width = max[0] - min[0];
 								height = max[1] - min[1];
-							} else if (dir === 'east' || dir === 'west') { // Check Y and Z
+							} else if (dir === "east" || dir === "west") {
+								// Check Y and Z
 								width = max[1] - min[1];
 								height = max[2] - min[2];
 							}
 
-							// Assume 16 is the full block size. 
+							// Assume 16 is the full block size.
 							// Allow small epsilon for float precision.
 							if (width > 15.9 && height > 15.9) {
 								isFullFace = true;
@@ -406,7 +417,7 @@ export class WorldMeshBuilder {
 				}
 
 				if (isOpaque && isFullFace) {
-					flags |= (1 << bit);
+					flags |= 1 << bit;
 				}
 			}
 
@@ -421,7 +432,7 @@ export class WorldMeshBuilder {
 	 * Call this when textures/materials change (e.g., resource pack change).
 	 */
 	public invalidateCache(): void {
-		console.log('[WorldMeshBuilder] Invalidating cache');
+		console.log("[WorldMeshBuilder] Invalidating cache");
 		if (this.paletteCache) {
 			this.paletteCache.blockData.forEach((blockData) => {
 				blockData.materialGroups.forEach((group) => {
@@ -441,15 +452,17 @@ export class WorldMeshBuilder {
 		if (this.paletteCache?.isReady && this.paletteCache.palette.length === palette.length) {
 			// Quick heuristic check: if length is same and first/last items match, assume same palette
 			// (Since palette order is usually deterministic from WASM)
-			const firstMatch = palette.length === 0 || (
-				palette[0].name === this.paletteCache.palette[0].name &&
-				JSON.stringify(palette[0].properties) === JSON.stringify(this.paletteCache.palette[0].properties)
-			);
+			const firstMatch =
+				palette.length === 0 ||
+				(palette[0].name === this.paletteCache.palette[0].name &&
+					JSON.stringify(palette[0].properties) ===
+						JSON.stringify(this.paletteCache.palette[0].properties));
 			const lastIdx = palette.length - 1;
-			const lastMatch = palette.length === 0 || (
-				palette[lastIdx].name === this.paletteCache.palette[lastIdx].name &&
-				JSON.stringify(palette[lastIdx].properties) === JSON.stringify(this.paletteCache.palette[lastIdx].properties)
-			);
+			const lastMatch =
+				palette.length === 0 ||
+				(palette[lastIdx].name === this.paletteCache.palette[lastIdx].name &&
+					JSON.stringify(palette[lastIdx].properties) ===
+						JSON.stringify(this.paletteCache.palette[lastIdx].properties));
 
 			if (firstMatch && lastMatch) {
 				performanceMonitor.endOperation("precomputePaletteGeometries");
@@ -491,11 +504,7 @@ export class WorldMeshBuilder {
 
 			try {
 				// Get geometry from Cubane (Main Thread)
-				const cubaneObj = await this.cubane.getBlockMesh(
-					blockString,
-					biome,
-					true
-				);
+				const cubaneObj = await this.cubane.getBlockMesh(blockString, biome, true);
 				const extractedGeometries = cubaneObj
 					? this.extractAllMeshData(cubaneObj)
 					: this.extractAllMeshData(this.createFallbackObject3D(blockString));
@@ -562,10 +571,7 @@ export class WorldMeshBuilder {
 
 		// Process with concurrency limit
 		while (currentIndex < palette.length || workerPromises.length > 0) {
-			while (
-				workerPromises.length < CONCURRENCY_LIMIT &&
-				currentIndex < palette.length
-			) {
+			while (workerPromises.length < CONCURRENCY_LIMIT && currentIndex < palette.length) {
 				const index = currentIndex++;
 				const promise = processBlock(index).then(() => {
 					const idx = workerPromises.indexOf(promise);
@@ -575,7 +581,7 @@ export class WorldMeshBuilder {
 			}
 
 			if (workerPromises.length > 0) {
-				await Promise.race(workerPromises.map((p) => p.catch(() => { })));
+				await Promise.race(workerPromises.map((p) => p.catch(() => {})));
 			} else if (currentIndex >= palette.length) {
 				break;
 			}
@@ -597,7 +603,7 @@ export class WorldMeshBuilder {
 		if (this.useGPUCompute && this.computeMeshBuilder) {
 			await this.computeMeshBuilder.uploadPaletteData(this.paletteCache);
 		} else {
-			this.workers.forEach(worker => {
+			this.workers.forEach((worker) => {
 				worker.postMessage({
 					type: "updatePalette",
 					paletteData: paletteGeometryData,
@@ -605,16 +611,27 @@ export class WorldMeshBuilder {
 			});
 		}
 
-
 		// Log summary of build mode
 		if (this.useGPUCompute) {
-			console.log('%c[Performance Mode] GPU Compute (NOT RECOMMENDED - slower)', 'background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px');
+			console.log(
+				"%c[Performance Mode] GPU Compute (NOT RECOMMENDED - slower)",
+				"background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px"
+			);
 		} else if (this.useWasmMeshBuilder && this.useSharedMemory) {
-			console.log(`%c[Performance Mode] WASM + SharedArrayBuffer (${this.workers.length}x parallel, zero-copy) ✓✓ OPTIMAL`, 'background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px');
+			console.log(
+				`%c[Performance Mode] WASM + SharedArrayBuffer (${this.workers.length}x parallel, zero-copy) ✓✓ OPTIMAL`,
+				"background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px"
+			);
 		} else if (this.useWasmMeshBuilder) {
-			console.log(`%c[Performance Mode] WASM Workers (${this.workers.length}x parallel)`, 'background: #8bc34a; color: white; padding: 2px 6px; border-radius: 3px');
+			console.log(
+				`%c[Performance Mode] WASM Workers (${this.workers.length}x parallel)`,
+				"background: #8bc34a; color: white; padding: 2px 6px; border-radius: 3px"
+			);
 		} else {
-			console.log(`%c[Performance Mode] JavaScript Workers (${this.workers.length}x parallel)`, 'background: #2196f3; color: white; padding: 2px 6px; border-radius: 3px');
+			console.log(
+				`%c[Performance Mode] JavaScript Workers (${this.workers.length}x parallel)`,
+				"background: #2196f3; color: white; padding: 2px 6px; border-radius: 3px"
+			);
 		}
 	}
 
@@ -625,7 +642,7 @@ export class WorldMeshBuilder {
 		}
 
 		// Wait for a worker to become free
-		return new Promise<Worker>(resolve => {
+		return new Promise<Worker>((resolve) => {
 			this.workerQueue.push(resolve);
 		});
 	}
@@ -633,16 +650,21 @@ export class WorldMeshBuilder {
 	/**
 	 * Process all chunks in batch mode - returns merged meshes
 	 * instead of one mesh per chunk. This reduces main thread work significantly.
-	 * 
+	 *
 	 * CRITICAL: We split into sub-batches to avoid creating meshes that are too large.
 	 * Without this, a 256³ schematic creates 3 meshes with millions of vertices = crash.
-	 * 
+	 *
 	 * @param allChunks - Iterator or array of chunk data
 	 * @param onProgress - Optional progress callback
 	 * @returns Promise with merged meshes
 	 */
 	public async processChunksBatched(
-		allChunks: Array<{ blocks: Int32Array | number[][]; chunk_x: number; chunk_y: number; chunk_z: number }>,
+		allChunks: Array<{
+			blocks: Int32Array | number[][];
+			chunk_x: number;
+			chunk_y: number;
+			chunk_z: number;
+		}>,
 		onProgress?: (processed: number, total: number) => void
 	): Promise<THREE.Mesh[]> {
 		if (!this.paletteCache?.isReady) {
@@ -695,7 +717,9 @@ export class WorldMeshBuilder {
 				}
 
 				// Calculate origin
-				let minX = Infinity, minY = Infinity, minZ = Infinity;
+				let minX = Infinity,
+					minY = Infinity,
+					minZ = Infinity;
 				for (let i = 0; i < blocksArray.length; i += 4) {
 					minX = Math.min(minX, blocksArray[i]);
 					minY = Math.min(minY, blocksArray[i + 1]);
@@ -722,15 +746,18 @@ export class WorldMeshBuilder {
 							type: "buildChunkBatched",
 							chunkId,
 							sharedInputBuffer: sharedBuffer,
-							chunkOrigin: [originX, originY, originZ]
+							chunkOrigin: [originX, originY, originZ],
 						});
 					} else {
-						batchWorker.postMessage({
-							type: "buildChunkBatched",
-							chunkId,
-							blocks: blocksArray,
-							chunkOrigin: [originX, originY, originZ]
-						}, [blocksArray.buffer]);
+						batchWorker.postMessage(
+							{
+								type: "buildChunkBatched",
+								chunkId,
+								blocks: blocksArray,
+								chunkOrigin: [originX, originY, originZ],
+							},
+							[blocksArray.buffer]
+						);
 					}
 				});
 
@@ -747,7 +774,6 @@ export class WorldMeshBuilder {
 				batchWorker.postMessage({ type: "finishBatch" });
 			});
 
-
 			// Create Three.js meshes from this sub-batch's merged data
 			const subBatchMeshes = this.createMeshesFromBatchResult(batchResult);
 			allResultMeshes.push(...subBatchMeshes);
@@ -755,14 +781,13 @@ export class WorldMeshBuilder {
 			// Let browser breathe between sub-batches - use requestAnimationFrame for real breathing
 			// This allows the browser to render and process events
 			if (subBatchIdx < numSubBatches - 1) {
-				await new Promise<void>(r => {
+				await new Promise<void>((r) => {
 					requestAnimationFrame(() => {
 						setTimeout(r, 0);
 					});
 				});
 			}
 		}
-
 
 		return allResultMeshes;
 	}
@@ -868,7 +893,7 @@ export class WorldMeshBuilder {
 
 		const newGroups: any[] = [];
 		let currentIndexOffset = 0;
-		let currentVertexOffset = 0; // Only relevant if not using indices (unlikely)
+		const currentVertexOffset = 0; // Only relevant if not using indices (unlikely)
 
 		// 3. Iterate materials and rebuild buffers
 		for (const [materialIndex, groups] of groupsByMaterial.entries()) {
@@ -909,7 +934,7 @@ export class WorldMeshBuilder {
 			newGroups.push({
 				start: groupStart,
 				count: groupCount,
-				materialIndex: materialIndex
+				materialIndex: materialIndex,
 			});
 		}
 
@@ -928,7 +953,7 @@ export class WorldMeshBuilder {
 				uvs: uvs, // Unchanged
 				indices: newIndices, // REORDERED
 				groups: newGroups, // OPTIMIZED
-				category: meshData.category
+				category: meshData.category,
 			};
 		}
 
@@ -948,13 +973,11 @@ export class WorldMeshBuilder {
 			max: THREE.Vector3;
 			enabled?: boolean;
 		}
-	): Promise<{ geometries: ChunkGeometryData[], origin: number[] }> {
+	): Promise<{ geometries: ChunkGeometryData[]; origin: number[] }> {
 		const chunkId = `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`;
 
 		if (!this.paletteCache?.isReady) {
-			throw new Error(
-				"Palette cache not ready. Call precomputePaletteGeometries() first."
-			);
+			throw new Error("Palette cache not ready. Call precomputePaletteGeometries() first.");
 		}
 
 		if (chunkData.blocks.length === 0) return { geometries: [], origin: [0, 0, 0] };
@@ -1016,11 +1039,11 @@ export class WorldMeshBuilder {
 				if (gpuResult) {
 					return {
 						geometries: gpuResult.geometries,
-						origin: gpuResult.origin
+						origin: gpuResult.origin,
 					};
 				}
 			} catch (error) {
-				console.warn('[WorldMeshBuilder] GPU compute failed, falling back to workers:', error);
+				console.warn("[WorldMeshBuilder] GPU compute failed, falling back to workers:", error);
 				// Fall through to worker path
 			}
 		}
@@ -1072,7 +1095,7 @@ export class WorldMeshBuilder {
 					}
 					reject(err);
 				},
-				worker: worker
+				worker: worker,
 			});
 
 			// Use SharedArrayBuffer for zero-copy transfer if available
@@ -1090,7 +1113,7 @@ export class WorldMeshBuilder {
 					type: "buildChunk",
 					chunkId,
 					sharedInputBuffer: sharedBuffer, // Worker reads from this directly
-					chunkOrigin: [originX, originY, originZ]
+					chunkOrigin: [originX, originY, originZ],
 				});
 			} else {
 				// Fallback: transfer via postMessage (copies data)
@@ -1099,12 +1122,15 @@ export class WorldMeshBuilder {
 					transferList.push(workerBlocks.buffer);
 				}
 
-				worker.postMessage({
-					type: "buildChunk",
-					chunkId,
-					blocks: workerBlocks,
-					chunkOrigin: [originX, originY, originZ]
-				}, transferList);
+				worker.postMessage(
+					{
+						type: "buildChunk",
+						chunkId,
+						blocks: workerBlocks,
+						chunkOrigin: [originX, originY, originZ],
+					},
+					transferList
+				);
 			}
 		});
 
@@ -1112,7 +1138,7 @@ export class WorldMeshBuilder {
 			const workerResult = await workerPromise;
 			return {
 				geometries: workerResult.meshes as ChunkGeometryData[],
-				origin: workerResult.origin || [originX, originY, originZ]
+				origin: workerResult.origin || [originX, originY, originZ],
 			};
 		} catch (error) {
 			console.error("Error building chunk geometry:", error);
@@ -1138,9 +1164,7 @@ export class WorldMeshBuilder {
 		const chunkId = `${chunkData.chunk_x},${chunkData.chunk_y},${chunkData.chunk_z}`;
 
 		if (!this.paletteCache?.isReady) {
-			throw new Error(
-				"Palette cache not ready. Call precomputePaletteGeometries() first."
-			);
+			throw new Error("Palette cache not ready. Call precomputePaletteGeometries() first.");
 		}
 
 		if (chunkData.blocks.length === 0) return [];
@@ -1221,14 +1245,19 @@ export class WorldMeshBuilder {
 
 				const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
 
-				if (blockName && (blockName.includes("sign") || blockName.includes("chest") || blockName.includes("banner"))) {
+				if (
+					blockName &&
+					(blockName.includes("sign") ||
+						blockName.includes("chest") ||
+						blockName.includes("banner"))
+				) {
 					tileEntityBlocks.push({
 						x: pos[0],
 						y: pos[1],
 						z: pos[2],
 						paletteIndex: -1,
 						blockName: blockName,
-						nbtData: entity // The entity structure from WASM is compatible enough or we use it as is
+						nbtData: entity, // The entity structure from WASM is compatible enough or we use it as is
 					});
 				}
 			}
@@ -1240,7 +1269,9 @@ export class WorldMeshBuilder {
 			// For very large entity maps, skip to avoid O(E*C) complexity
 			if (blockEntityMap.size > 0 && blockEntityMap.size < 10000) {
 				// Use spatial cache if available, otherwise build it once
-				let spatialCache = (schematicObject as any)._entitySpatialCache as Map<string, any[]> | undefined;
+				let spatialCache = (schematicObject as any)._entitySpatialCache as
+					| Map<string, any[]>
+					| undefined;
 
 				if (!spatialCache) {
 					spatialCache = new Map<string, any[]>();
@@ -1264,14 +1295,19 @@ export class WorldMeshBuilder {
 						const pos = entity.position;
 						const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
 
-						if (blockName && (blockName.includes("sign") || blockName.includes("chest") || blockName.includes("banner"))) {
+						if (
+							blockName &&
+							(blockName.includes("sign") ||
+								blockName.includes("chest") ||
+								blockName.includes("banner"))
+						) {
 							tileEntityBlocks.push({
 								x: pos[0],
 								y: pos[1],
 								z: pos[2],
 								paletteIndex: -1,
 								blockName: blockName,
-								nbtData: entity
+								nbtData: entity,
 							});
 						}
 					}
@@ -1290,12 +1326,12 @@ export class WorldMeshBuilder {
 		const timings = {
 			workerDispatch: 0,
 			bufferGeometry: 0,
-			tileEntities: 0
+			tileEntities: 0,
 		};
 		let timingStart = performance.now();
 
 		// Try GPU compute first, then fall back to workers
-		let buildResult: { meshes: any[], origin: number[] } | null = null;
+		let buildResult: { meshes: any[]; origin: number[] } | null = null;
 
 		// GPU Compute path
 		if (this.useGPUCompute && this.computeMeshBuilder?.isReady) {
@@ -1309,11 +1345,11 @@ export class WorldMeshBuilder {
 				if (gpuResult) {
 					buildResult = {
 						meshes: gpuResult.geometries,
-						origin: gpuResult.origin
+						origin: gpuResult.origin,
 					};
 				}
 			} catch (error) {
-				console.warn('[WorldMeshBuilder] GPU compute failed, falling back to workers:', error);
+				console.warn("[WorldMeshBuilder] GPU compute failed, falling back to workers:", error);
 				// Fall through to worker path
 			}
 		}
@@ -1339,7 +1375,9 @@ export class WorldMeshBuilder {
 
 				const getFreeWorkerTime = performance.now() - getFreeWorkerStart;
 				if (getFreeWorkerTime > 10) {
-					console.warn(`[WorkerPool] getFreeWorker took ${getFreeWorkerTime.toFixed(0)}ms (free: ${this.freeWorkers.length}/${this.workers.length}, queue: ${this.workerQueue.length})`);
+					console.warn(
+						`[WorkerPool] getFreeWorker took ${getFreeWorkerTime.toFixed(0)}ms (free: ${this.freeWorkers.length}/${this.workers.length}, queue: ${this.workerQueue.length})`
+					);
 				}
 
 				// Add timeout to prevent hanging
@@ -1372,7 +1410,7 @@ export class WorldMeshBuilder {
 						}
 						reject(err);
 					},
-					worker: worker
+					worker: worker,
 				});
 
 				// TIMING: Record when we send the message
@@ -1394,7 +1432,7 @@ export class WorldMeshBuilder {
 						chunkId,
 						sharedInputBuffer: sharedBuffer,
 						chunkOrigin: [originX, originY, originZ],
-						_sendTime: sendTime // Pass timestamp for round-trip measurement
+						_sendTime: sendTime, // Pass timestamp for round-trip measurement
 					});
 				} else {
 					// Fallback: transfer via postMessage (copies data)
@@ -1403,12 +1441,15 @@ export class WorldMeshBuilder {
 						transferList.push(workerBlocks.buffer);
 					}
 
-					worker.postMessage({
-						type: "buildChunk",
-						chunkId,
-						blocks: workerBlocks,
-						chunkOrigin: [originX, originY, originZ]
-					}, transferList);
+					worker.postMessage(
+						{
+							type: "buildChunk",
+							chunkId,
+							blocks: workerBlocks,
+							chunkOrigin: [originX, originY, originZ],
+						},
+						transferList
+					);
 				}
 			});
 
@@ -1422,7 +1463,7 @@ export class WorldMeshBuilder {
 			const workerResult = buildResult;
 
 			if (!workerResult) {
-				console.warn('[WorldMeshBuilder] No build result available');
+				console.warn("[WorldMeshBuilder] No build result available");
 				return resultMeshes;
 			}
 
@@ -1460,18 +1501,11 @@ export class WorldMeshBuilder {
 					// Groups
 					if (meshData.groups) {
 						for (const group of meshData.groups) {
-							geometry.addGroup(
-								group.start,
-								group.count,
-								group.materialIndex
-							);
+							geometry.addGroup(group.start, group.count, group.materialIndex);
 						}
 					}
 
-					const mesh = new THREE.Mesh(
-						geometry,
-						this.paletteCache.globalMaterials
-					);
+					const mesh = new THREE.Mesh(geometry, this.paletteCache.globalMaterials);
 					mesh.name = `${meshData.category}_chunk`;
 
 					// Apply de-quantization scale for position
@@ -1489,10 +1523,7 @@ export class WorldMeshBuilder {
 						);
 					}
 
-					this.configureMeshForCategory(
-						mesh,
-						meshData.category as keyof ChunkMeshes
-					);
+					this.configureMeshForCategory(mesh, meshData.category as keyof ChunkMeshes);
 					resultMeshes.push(mesh);
 				}
 			}
@@ -1510,7 +1541,7 @@ export class WorldMeshBuilder {
 					if (blockName) {
 						blockString = blockName;
 						// Note: We might need properties. get_block returns just name?
-						// get_block returns full state string "minecraft:chest[facing=north]" usually? 
+						// get_block returns full state string "minecraft:chest[facing=north]" usually?
 						// Actually nucleation get_block returns just name or state?
 						// Let's assume we might need to fetch full state if get_block returns only "minecraft:chest"
 
@@ -1553,7 +1584,15 @@ export class WorldMeshBuilder {
 
 		// Log detailed timing every 10 chunks
 		if (!this._timingStats) {
-			this._timingStats = { count: 0, worker: 0, buffer: 0, tile: 0, maxWorker: 0, maxBuffer: 0, maxTile: 0 };
+			this._timingStats = {
+				count: 0,
+				worker: 0,
+				buffer: 0,
+				tile: 0,
+				maxWorker: 0,
+				maxBuffer: 0,
+				maxTile: 0,
+			};
 		}
 		this._timingStats.count++;
 		this._timingStats.worker += timings.workerDispatch;
@@ -1565,7 +1604,9 @@ export class WorldMeshBuilder {
 
 		if (this._timingStats.count % 10 === 0) {
 			const n = this._timingStats.count;
-			console.log(`[ChunkTiming n=${n}] avg: worker=${(this._timingStats.worker / n).toFixed(1)}ms, buffer=${(this._timingStats.buffer / n).toFixed(1)}ms, tile=${(this._timingStats.tile / n).toFixed(1)}ms | max: w=${this._timingStats.maxWorker.toFixed(0)}, b=${this._timingStats.maxBuffer.toFixed(0)}, t=${this._timingStats.maxTile.toFixed(0)}`);
+			console.log(
+				`[ChunkTiming n=${n}] avg: worker=${(this._timingStats.worker / n).toFixed(1)}ms, buffer=${(this._timingStats.buffer / n).toFixed(1)}ms, tile=${(this._timingStats.tile / n).toFixed(1)}ms | max: w=${this._timingStats.maxWorker.toFixed(0)}, b=${this._timingStats.maxBuffer.toFixed(0)}, t=${this._timingStats.maxTile.toFixed(0)}`
+			);
 		}
 
 		return resultMeshes;
@@ -1576,10 +1617,7 @@ export class WorldMeshBuilder {
 		let blockString = blockState.name || "minecraft:stone";
 		if (!blockString.includes(":")) blockString = `minecraft:${blockString}`;
 
-		if (
-			blockState.properties &&
-			Object.keys(blockState.properties).length > 0
-		) {
+		if (blockState.properties && Object.keys(blockState.properties).length > 0) {
 			const props = Object.entries(blockState.properties)
 				.map(([k, v]) => `${k}=${v}`)
 				.join(",");
@@ -1589,8 +1627,7 @@ export class WorldMeshBuilder {
 	}
 
 	private getBlockCategory(blockName: string): keyof ChunkMeshes {
-		if (blockName.includes("water") || blockName.includes("lava"))
-			return "water";
+		if (blockName.includes("water") || blockName.includes("lava")) return "water";
 		if (
 			blockName.includes("glass") ||
 			blockName.includes("leaves") ||
@@ -1601,10 +1638,7 @@ export class WorldMeshBuilder {
 		return "solid";
 	}
 
-	private configureMeshForCategory(
-		mesh: THREE.Mesh,
-		category: keyof ChunkMeshes
-	): void {
+	private configureMeshForCategory(mesh: THREE.Mesh, category: keyof ChunkMeshes): void {
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
 		mesh.frustumCulled = true;
@@ -1627,9 +1661,7 @@ export class WorldMeshBuilder {
 		}
 	}
 
-	private extractAllMeshData(
-		rootCubaneObject: THREE.Object3D
-	): ProcessedBlockGeometry[] {
+	private extractAllMeshData(rootCubaneObject: THREE.Object3D): ProcessedBlockGeometry[] {
 		const allMeshData: ProcessedBlockGeometry[] = [];
 		rootCubaneObject.updateMatrixWorld(true);
 
@@ -1641,17 +1673,13 @@ export class WorldMeshBuilder {
 				child.visible &&
 				child !== rootCubaneObject
 			) {
-				const material = Array.isArray(child.material)
-					? child.material[0]
-					: child.material;
+				const material = Array.isArray(child.material) ? child.material[0] : child.material;
 				if (!material || !(material instanceof THREE.Material)) return;
 
 				const geometry = child.geometry.clone();
 				const matrixRelativeToRoot = child.matrixWorld
 					.clone()
-					.multiply(
-						new THREE.Matrix4().copy(rootCubaneObject.matrixWorld).invert()
-					);
+					.multiply(new THREE.Matrix4().copy(rootCubaneObject.matrixWorld).invert());
 				geometry.applyMatrix4(matrixRelativeToRoot);
 
 				if (geometry.attributes.position.count > 0) {
@@ -1690,25 +1718,16 @@ export class WorldMeshBuilder {
 					return (
 						total +
 						blockData.materialGroups.reduce((subtotal, group) => {
-							return (
-								subtotal +
-								(group.baseGeometry.attributes.position?.count || 0) * 3 * 4
-							);
+							return subtotal + (group.baseGeometry.attributes.position?.count || 0) * 3 * 4;
 						}, 0)
 					);
 				}, 0) || 0,
 		};
 	}
 
-	public enableInstancedRendering(
-		group: THREE.Group,
-		merged: boolean = false
-	): void {
+	public enableInstancedRendering(group: THREE.Group, merged: boolean = false): void {
 		this.useInstancedRendering = true;
-		this.instancedRenderer = new InstancedBlockRenderer(
-			group,
-			this.paletteCache
-		);
+		this.instancedRenderer = new InstancedBlockRenderer(group, this.paletteCache);
 
 		if (merged) {
 			console.log("🔥 Enabling MERGED instanced rendering...");
@@ -1725,18 +1744,12 @@ export class WorldMeshBuilder {
 			this.instancedRenderer.disposeInstancedMeshes();
 			this.instancedRenderer = null;
 		}
-		console.log(
-			"🔄 Instanced rendering disabled, reverted to individual meshes"
-		);
+		console.log("🔄 Instanced rendering disabled, reverted to individual meshes");
 	}
 
-	public async renderSchematicInstanced(
-		schematicObject: SchematicObject
-	): Promise<void> {
+	public async renderSchematicInstanced(schematicObject: SchematicObject): Promise<void> {
 		if (!this.useInstancedRendering || !this.instancedRenderer) {
-			throw new Error(
-				"Instanced rendering not enabled. Call enableInstancedRendering() first."
-			);
+			throw new Error("Instanced rendering not enabled. Call enableInstancedRendering() first.");
 		}
 
 		console.log("🚀 Starting instanced schematic rendering...");
@@ -1776,12 +1789,8 @@ export class WorldMeshBuilder {
 		this.instancedRenderer.renderBlocksInstanced(allBlocks);
 
 		const duration = performance.now() - startTime;
-		console.log(
-			`✨ Instanced schematic rendering completed in ${duration.toFixed(2)}ms`
-		);
-		console.log(
-			`   Rendered ${allBlocks.length} blocks using instanced meshes`
-		);
+		console.log(`✨ Instanced schematic rendering completed in ${duration.toFixed(2)}ms`);
+		console.log(`   Rendered ${allBlocks.length} blocks using instanced meshes`);
 	}
 
 	public dispose(): void {
@@ -1814,7 +1823,7 @@ export class WorldMeshBuilder {
 		this.gpuInitPromise = null;
 
 		// Terminate all workers
-		this.workers.forEach(w => w.terminate());
+		this.workers.forEach((w) => w.terminate());
 		this.workers = [];
 		this.freeWorkers = [];
 

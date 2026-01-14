@@ -54,8 +54,8 @@ export class RegionInteractionHandler {
 		const handleObjects: THREE.Object3D[] = [];
 
 		// Collect all handles from all regions
-		regions.forEach(region => {
-			region.group.traverse(child => {
+		regions.forEach((region) => {
+			region.group.traverse((child) => {
 				if (child.userData && child.userData.isHandle) {
 					handleObjects.push(child);
 				}
@@ -97,14 +97,15 @@ export class RegionInteractionHandler {
 
 	private onMouseDown() {
 		if (this.hoveredHandle && !this.draggingHandle) {
-			// Used to prevent default selection or similar if needed, 
+			// Used to prevent default selection or similar if needed,
 			// though not currently using 'event' directly other than knowing mousedown happened.
-			// event.preventDefault(); 
+			// event.preventDefault();
 			this.draggingHandle = this.hoveredHandle;
 
 			// Find the region belonging to this handle
 			const regions = this.renderer.regionManager?.getAllRegions() || [];
-			this.activeRegion = regions.find(r => r.name === this.draggingHandle!.userData.regionName) || null;
+			this.activeRegion =
+				regions.find((r) => r.name === this.draggingHandle!.userData.regionName) || null;
 
 			if (this.activeRegion) {
 				this.startDrag();
@@ -118,7 +119,9 @@ export class RegionInteractionHandler {
 		if (!this.draggingHandle || !this.activeRegion || !this.renderer.cameraManager) return;
 
 		// Disable orbit controls
-		const controls = this.renderer.cameraManager.controls.get(this.renderer.cameraManager.activeControlKey);
+		const controls = this.renderer.cameraManager.controls.get(
+			this.renderer.cameraManager.activeControlKey
+		);
 		if (controls) {
 			controls.enabled = false;
 		}
@@ -134,32 +137,35 @@ export class RegionInteractionHandler {
 
 		// Determine best plane for dragging
 		// Axis of movement
-		let axis = new THREE.Vector3();
-		if (face.includes('X')) axis.set(1, 0, 0);
-		else if (face.includes('Y')) axis.set(0, 1, 0);
-		else if (face.includes('Z')) axis.set(0, 0, 1);
+		const axis = new THREE.Vector3();
+		if (face.includes("X")) axis.set(1, 0, 0);
+		else if (face.includes("Y")) axis.set(0, 1, 0);
+		else if (face.includes("Z")) axis.set(0, 0, 1);
 
 		// We want a plane containing the handle position
 		// Normal should be one of the other two axes, whichever is most aligned with camera view (most perpendicular to camera plane is bad? No.)
 		// We want plane normal to be roughly parallel to camera direction so the plane faces the camera.
 
-		let planeNormal = new THREE.Vector3();
+		const planeNormal = new THREE.Vector3();
 
-		if (axis.x !== 0) { // Moving on X
+		if (axis.x !== 0) {
+			// Moving on X
 			// Candidates: Y (0,1,0) or Z (0,0,1)
 			if (Math.abs(cameraDir.y) > Math.abs(cameraDir.z)) {
 				planeNormal.set(0, 1, 0); // XZ plane (top/bottom view)
 			} else {
 				planeNormal.set(0, 0, 1); // XY plane (front/back view)
 			}
-		} else if (axis.y !== 0) { // Moving on Y
+		} else if (axis.y !== 0) {
+			// Moving on Y
 			// Candidates: X (1,0,0) or Z (0,0,1)
 			if (Math.abs(cameraDir.x) > Math.abs(cameraDir.z)) {
 				planeNormal.set(1, 0, 0); // YZ plane
 			} else {
 				planeNormal.set(0, 0, 1); // XY plane
 			}
-		} else { // Moving on Z
+		} else {
+			// Moving on Z
 			// Candidates: X (1,0,0) or Y (0,1,0)
 			if (Math.abs(cameraDir.x) > Math.abs(cameraDir.y)) {
 				planeNormal.set(1, 0, 0); // YZ plane
@@ -196,12 +202,12 @@ export class RegionInteractionHandler {
 			// Snap to integer grid
 			const snap = (val: number) => Math.round(val);
 
-			if (face === 'minX') newMin.x = snap(intersect.x - this.dragOffset);
-			if (face === 'maxX') newMax.x = snap(intersect.x - this.dragOffset);
-			if (face === 'minY') newMin.y = snap(intersect.y - this.dragOffset);
-			if (face === 'maxY') newMax.y = snap(intersect.y - this.dragOffset);
-			if (face === 'minZ') newMin.z = snap(intersect.z - this.dragOffset);
-			if (face === 'maxZ') newMax.z = snap(intersect.z - this.dragOffset);
+			if (face === "minX") newMin.x = snap(intersect.x - this.dragOffset);
+			if (face === "maxX") newMax.x = snap(intersect.x - this.dragOffset);
+			if (face === "minY") newMin.y = snap(intersect.y - this.dragOffset);
+			if (face === "maxY") newMax.y = snap(intersect.y - this.dragOffset);
+			if (face === "minZ") newMin.z = snap(intersect.z - this.dragOffset);
+			if (face === "maxZ") newMax.z = snap(intersect.z - this.dragOffset);
 
 			// Constraint: min <= max
 			newMin.min(newMax); // ensure min is smaller
@@ -225,7 +231,9 @@ export class RegionInteractionHandler {
 
 			// Re-enable orbit controls
 			if (this.renderer.cameraManager) {
-				const controls = this.renderer.cameraManager.controls.get(this.renderer.cameraManager.activeControlKey);
+				const controls = this.renderer.cameraManager.controls.get(
+					this.renderer.cameraManager.activeControlKey
+				);
 				if (controls) {
 					controls.enabled = true;
 				}

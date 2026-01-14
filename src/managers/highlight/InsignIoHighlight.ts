@@ -1,9 +1,9 @@
 // managers/highlight/InsignIoHighlight.ts
-import * as THREE from 'three';
-import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { Highlight } from './Highlight';
-import { SchematicRenderer } from '../../SchematicRenderer';
-import { DslEntry } from '../../types/insign';
+import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { Highlight } from "./Highlight";
+import { SchematicRenderer } from "../../SchematicRenderer";
+import { DslEntry } from "../../types/insign";
 
 export type BoxPair = [[number, number, number], [number, number, number]];
 
@@ -26,7 +26,7 @@ export interface InsignIoOptions {
 	entry: DslEntry;
 	positions: Array<[number, number, number]>; // Sorted positions from Insign IO parsing
 	dataType: string; // e.g., "unsigned", "signed:8", "bool"
-	ioDirection: 'input' | 'output';
+	ioDirection: "input" | "output";
 	style?: Partial<InsignIoStyle>;
 }
 
@@ -67,7 +67,7 @@ export class InsignIoHighlight implements Highlight {
 	private regionId: string;
 	private positions: Array<[number, number, number]>;
 	private dataType: string;
-	private ioDirection: 'input' | 'output';
+	private ioDirection: "input" | "output";
 	private style: InsignIoStyle;
 	private meshes: THREE.Object3D[] = [];
 	private labels: CSS2DObject[] = [];
@@ -82,7 +82,8 @@ export class InsignIoHighlight implements Highlight {
 		this.dataType = options.dataType;
 		this.ioDirection = options.ioDirection;
 
-		const defaultStyle = options.ioDirection === 'input' ? DEFAULT_INPUT_STYLE : DEFAULT_OUTPUT_STYLE;
+		const defaultStyle =
+			options.ioDirection === "input" ? DEFAULT_INPUT_STYLE : DEFAULT_OUTPUT_STYLE;
 		this.style = { ...defaultStyle, ...options.style };
 	}
 
@@ -202,8 +203,8 @@ export class InsignIoHighlight implements Highlight {
 
 		// Get schematic offset (same as CustomIoHighlight)
 		const schematics = this.renderer.schematicManager?.getAllSchematics();
-		let schematicOffset = new THREE.Vector3(0, 0, 0);
-		
+		const schematicOffset = new THREE.Vector3(0, 0, 0);
+
 		if (schematics && schematics.length > 0) {
 			const firstSchematic = schematics[0];
 			schematicOffset.copy(firstSchematic.position);
@@ -340,15 +341,15 @@ export class InsignIoHighlight implements Highlight {
 
 		// Get schematic offset
 		const schematics = this.renderer.schematicManager?.getAllSchematics();
-		let schematicOffset = new THREE.Vector3(0, 0, 0);
-		
+		const schematicOffset = new THREE.Vector3(0, 0, 0);
+
 		if (schematics && schematics.length > 0) {
 			const firstSchematic = schematics[0];
 			schematicOffset.copy(firstSchematic.position);
 		}
 
-		const div = document.createElement('div');
-		div.className = 'insign-io-bit-label';
+		const div = document.createElement("div");
+		div.className = "insign-io-bit-label";
 		div.textContent = `${bitIndex}`;
 		div.style.cssText = `
 			color: white;
@@ -372,8 +373,8 @@ export class InsignIoHighlight implements Highlight {
 	 * Create the main label for the IO region
 	 */
 	private createMainLabel(position: THREE.Vector3): CSS2DObject | null {
-		const div = document.createElement('div');
-		div.className = 'insign-io-main-label';
+		const div = document.createElement("div");
+		div.className = "insign-io-main-label";
 
 		// Build label text
 		let labelText = this.regionId;
@@ -386,7 +387,8 @@ export class InsignIoHighlight implements Highlight {
 
 		div.textContent = labelText;
 
-		const bgColor = this.ioDirection === 'input' ? 'rgba(68, 153, 255, 0.9)' : 'rgba(255, 68, 102, 0.9)';
+		const bgColor =
+			this.ioDirection === "input" ? "rgba(68, 153, 255, 0.9)" : "rgba(255, 68, 102, 0.9)";
 
 		div.style.cssText = `
 			color: white;
@@ -435,7 +437,7 @@ export class InsignIoHighlight implements Highlight {
 	/**
 	 * Get the IO direction
 	 */
-	public getDirection(): 'input' | 'output' {
+	public getDirection(): "input" | "output" {
 		return this.ioDirection;
 	}
 
@@ -460,4 +462,3 @@ export class InsignIoHighlight implements Highlight {
 		return [...this.positions];
 	}
 }
-

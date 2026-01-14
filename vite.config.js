@@ -6,18 +6,17 @@ import dts from 'vite-plugin-dts';
 import path from 'path';
 import fs from 'fs';
 
-// Plugin to inline WASM as base64 data URIs
+// WASM inline plugin - inlines WASM as base64 for library distribution
+// Note: This adds ~33% size overhead but ensures WASM works in all environments
 const wasmInlinePlugin = () => {
   return {
     name: 'wasm-inline',
-    enforce: 'pre', // Run before other plugins
+    enforce: 'pre',
     transform(code, id) {
-      // Clean the ID of query parameters for matching
       const cleanId = id.split('?')[0];
       if (cleanId.endsWith('.wasm')) {
         const buffer = fs.readFileSync(cleanId);
         const base64 = buffer.toString('base64');
-        // Return as a data URI string
         return {
           code: `export default "data:application/wasm;base64,${base64}";`,
           map: null
@@ -59,8 +58,8 @@ export default defineConfig({
         globals: {
           three: 'THREE',
         },
-        // Ensure dynamic imports (like workers) are inlined
-        inlineDynamicImports: true,
+        // Code splitting is handled automatically via dynamic imports
+        // manualChunks cannot be used with library mode
       },
     },
   },
@@ -70,10 +69,10 @@ export default defineConfig({
     }
   },
   plugins: [
-    wasmInlinePlugin(), // Add our custom inline plugin
+    wasmInlinePlugin(), // Keep WASM inlined for library compatibility
     viteCommonjs(),
-    wasm(),
     topLevelAwait(),
+    wasm(), // Provides WASM support
     dts({
       insertTypesEntry: true,
       outDir: '../dist',
@@ -88,6 +87,7 @@ export default defineConfig({
     exclude: ['nucleation', '@wasm/minecraft_schematic_utils', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },
   worker: {
+    format: 'es',
     plugins: [
       wasmInlinePlugin()
     ]
@@ -96,6 +96,23 @@ export default defineConfig({
     root: './',
     globals: true,
     environment: 'happy-dom',
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}', 'test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}'],
+    exclude: ['node_modules', 'dist', 'test/pages'],
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'html'],
+      reportsDirectory: './coverage',
+      exclude: [
+        'node_modules/',
+        'dist/',
+        'test/',
+        '**/*.d.ts',
+        '**/*.test.ts',
+        '**/*.spec.ts',
+        '**/index.ts',
+        'src/test/**',
+      ],
+    },
   }
 });

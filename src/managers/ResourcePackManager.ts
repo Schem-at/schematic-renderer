@@ -198,10 +198,7 @@ export class ResourcePackManager {
 	/**
 	 * Subscribe to a pack event
 	 */
-	public onPackEvent<T extends PackEventType>(
-		event: T,
-		handler: PackEventHandler<T>
-	): void {
+	public onPackEvent<T extends PackEventType>(event: T, handler: PackEventHandler<T>): void {
 		if (!this.eventHandlers.has(event)) {
 			this.eventHandlers.set(event, new Set());
 		}
@@ -211,30 +208,21 @@ export class ResourcePackManager {
 	/**
 	 * Alias for onPackEvent for convenience
 	 */
-	public on<T extends PackEventType>(
-		event: T,
-		handler: PackEventHandler<T>
-	): void {
+	public on<T extends PackEventType>(event: T, handler: PackEventHandler<T>): void {
 		this.onPackEvent(event, handler);
 	}
 
 	/**
 	 * Unsubscribe from a pack event
 	 */
-	public offPackEvent<T extends PackEventType>(
-		event: T,
-		handler: PackEventHandler<T>
-	): void {
+	public offPackEvent<T extends PackEventType>(event: T, handler: PackEventHandler<T>): void {
 		this.eventHandlers.get(event)?.delete(handler);
 	}
 
 	/**
 	 * Subscribe to a pack event once
 	 */
-	public oncePackEvent<T extends PackEventType>(
-		event: T,
-		handler: PackEventHandler<T>
-	): void {
+	public oncePackEvent<T extends PackEventType>(event: T, handler: PackEventHandler<T>): void {
 		if (!this.onceHandlers.has(event)) {
 			this.onceHandlers.set(event, new Set());
 		}
@@ -273,10 +261,7 @@ export class ResourcePackManager {
 	/**
 	 * Load a resource pack from URL
 	 */
-	public async loadPackFromUrl(
-		url: string,
-		options: PackFetchOptions = {}
-	): Promise<string> {
+	public async loadPackFromUrl(url: string, options: PackFetchOptions = {}): Promise<string> {
 		const packId = generatePackId();
 
 		this.emit("loadStart", { packId, source: "url" });
@@ -374,9 +359,7 @@ export class ResourcePackManager {
 			// Check max packs limit
 			if (this.options.maxPacks && this.options.maxPacks > 0) {
 				if (this.packs.size >= this.options.maxPacks) {
-					throw new Error(
-						`Maximum pack limit (${this.options.maxPacks}) reached`
-					);
+					throw new Error(`Maximum pack limit (${this.options.maxPacks}) reached`);
 				}
 			}
 
@@ -444,7 +427,7 @@ export class ResourcePackManager {
 		const hash = await hashBlob(blob);
 
 		// Parse pack.mcmeta
-		let name = overrideName || "Unknown Pack";
+		const name = overrideName || "Unknown Pack";
 		let description = "";
 		let packFormat = 0;
 
@@ -579,9 +562,7 @@ export class ResourcePackManager {
 		pack.enabled = !pack.enabled;
 		await this.savePack(pack);
 		this.emit("packToggled", { packId, enabled: pack.enabled });
-		await this.triggerRebuild(
-			`Pack ${pack.enabled ? "enabled" : "disabled"}: ${pack.name}`
-		);
+		await this.triggerRebuild(`Pack ${pack.enabled ? "enabled" : "disabled"}: ${pack.name}`);
 
 		return pack.enabled;
 	}
@@ -743,7 +724,7 @@ export class ResourcePackManager {
 			.filter((p) => p.enabled)
 			.map((p) => ({
 				...this.packToInfo(p),
-				blob: p.data
+				blob: p.data,
 			}));
 	}
 
@@ -757,9 +738,7 @@ export class ResourcePackManager {
 	/**
 	 * Legacy method for backward compatibility
 	 */
-	public async listPacks(): Promise<
-		{ name: string; enabled: boolean; order: number }[]
-	> {
+	public async listPacks(): Promise<{ name: string; enabled: boolean; order: number }[]> {
 		return this.getSortedPacks().map((p) => ({
 			name: p.name,
 			enabled: p.enabled,
@@ -896,10 +875,7 @@ export class ResourcePackManager {
 	/**
 	 * Preview a texture from a specific pack
 	 */
-	public async previewPackTexture(
-		packId: string,
-		texturePath: string
-	): Promise<string | null> {
+	public async previewPackTexture(packId: string, texturePath: string): Promise<string | null> {
 		const pack = this.packs.get(packId);
 		if (!pack) return null;
 
@@ -946,10 +922,15 @@ export class ResourcePackManager {
 	 * Manually trigger atlas rebuild
 	 */
 	public async rebuildPackAtlas(): Promise<void> {
-		console.log('[ResourcePackManager] rebuildPackAtlas called, callback set:', !!this.onAtlasRebuild);
+		console.log(
+			"[ResourcePackManager] rebuildPackAtlas called, callback set:",
+			!!this.onAtlasRebuild
+		);
 		if (this.onAtlasRebuild) {
 			const enabledPacks = this.getEnabledPacks();
-			this.emit("atlasRebuilding", { textureCount: enabledPacks.reduce((sum, p) => sum + p.assetCounts.textures, 0) });
+			this.emit("atlasRebuilding", {
+				textureCount: enabledPacks.reduce((sum, p) => sum + p.assetCounts.textures, 0),
+			});
 
 			try {
 				await this.onAtlasRebuild();
@@ -972,16 +953,16 @@ export class ResourcePackManager {
 		this.emit("packsChanged", { reason });
 
 		if (this.batchMode) {
-			console.log('[ResourcePackManager] Batch mode - deferring rebuild');
+			console.log("[ResourcePackManager] Batch mode - deferring rebuild");
 			this.pendingChanges = true;
 			return;
 		}
 
 		if (this.autoRebuild) {
-			console.log('[ResourcePackManager] Auto-rebuild enabled, calling rebuildPackAtlas');
+			console.log("[ResourcePackManager] Auto-rebuild enabled, calling rebuildPackAtlas");
 			await this.rebuildPackAtlas();
 		} else {
-			console.log('[ResourcePackManager] Auto-rebuild disabled');
+			console.log("[ResourcePackManager] Auto-rebuild disabled");
 		}
 	}
 
@@ -1224,11 +1205,7 @@ export class ResourcePackManager {
 				}
 			});
 
-			if (
-				assetCounts.textures === 0 &&
-				assetCounts.blockstates === 0 &&
-				assetCounts.models === 0
-			) {
+			if (assetCounts.textures === 0 && assetCounts.blockstates === 0 && assetCounts.models === 0) {
 				warnings.push("No Minecraft assets found in pack");
 			}
 		} catch (error) {
@@ -1292,9 +1269,7 @@ export class ResourcePackManager {
 	}
 
 	private getSortedPacks(): StoredResourcePack[] {
-		return Array.from(this.packs.values()).sort(
-			(a, b) => a.priority - b.priority
-		);
+		return Array.from(this.packs.values()).sort((a, b) => a.priority - b.priority);
 	}
 
 	private getSortedPackIds(): string[] {
@@ -1336,19 +1311,19 @@ export class ResourcePackManager {
 		// Clear all event handlers
 		this.eventHandlers.clear();
 		this.onceHandlers.clear();
-		
+
 		// Clear download cache
 		this.downloadCache.clear();
-		
+
 		// Clear in-memory packs
 		this.packs.clear();
-		
+
 		// Close database connection
 		if (this.db) {
 			this.db.close();
 			this.db = null;
 		}
-		
+
 		// Clear atlas rebuild callback
 		this.onAtlasRebuild = undefined;
 	}

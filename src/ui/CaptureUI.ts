@@ -88,14 +88,14 @@ export class CaptureUI extends BaseUI {
 	private recordingSettings: RecordingSettings;
 	private cameraPathSettings: CameraPathSettings;
 	private screenshotPresets: { label: string; width: number; height: number }[];
-	
+
 	// Callbacks
 	private onScreenshotTaken?: (blob: Blob, filename: string) => void;
 	private onRecordingComplete?: (blob: Blob, filename: string) => void;
-	
+
 	// Recording state
 	private isRecording: boolean = false;
-	
+
 	// UI Elements
 	private presetSelect!: HTMLSelectElement;
 	private customWidthInput!: HTMLDivElement;
@@ -108,23 +108,20 @@ export class CaptureUI extends BaseUI {
 	private progressText!: HTMLDivElement;
 	private pathVisibilityToggle!: HTMLLabelElement;
 
-	constructor(
-		renderer: SchematicRenderer,
-		options: CaptureUIOptions = {}
-	) {
+	constructor(renderer: SchematicRenderer, options: CaptureUIOptions = {}) {
 		super(renderer.canvas, {
 			...options,
 			toggleUIShortcut: options.toggleUIShortcut ?? "KeyC",
 		});
-		
+
 		this.renderer = renderer;
 		this.screenshotPresets = options.screenshotPresets ?? DEFAULT_SCREENSHOT_PRESETS;
 		this.onScreenshotTaken = options.onScreenshotTaken;
 		this.onRecordingComplete = options.onRecordingComplete;
-		
+
 		// Initialize settings
 		this.screenshotSettings = { ...DEFAULT_SCREENSHOT_SETTINGS };
-		this.recordingSettings = { 
+		this.recordingSettings = {
 			...DEFAULT_RECORDING_SETTINGS,
 			...options.defaultRecordingSettings,
 		};
@@ -133,14 +130,14 @@ export class CaptureUI extends BaseUI {
 			pathName: "circularPath",
 			autoFit: true,
 		};
-		
+
 		// Build UI
 		this.buildUI();
 	}
 
 	private buildUI(): void {
 		// Header
-		const header = this.createHeader("Capture", "📷");
+		const header = this.createHeader("Capture");
 		this.container.appendChild(header);
 
 		// Content
@@ -149,10 +146,10 @@ export class CaptureUI extends BaseUI {
 
 		// Screenshot Section
 		content.appendChild(this.createScreenshotSection());
-		
+
 		// Camera Path Section
 		content.appendChild(this.createCameraPathSection());
-		
+
 		// Recording Section
 		content.appendChild(this.createRecordingSection());
 
@@ -162,12 +159,12 @@ export class CaptureUI extends BaseUI {
 	private createScreenshotSection(): HTMLDivElement {
 		const section = document.createElement("div");
 		Object.assign(section.style, UIStyles.section);
-		
+
 		section.appendChild(createSectionTitle("Screenshot"));
-		
+
 		// Resolution Preset
 		this.presetSelect = createSelect(
-			this.screenshotPresets.map(p => ({ value: `${p.width}x${p.height}`, label: p.label })),
+			this.screenshotPresets.map((p) => ({ value: `${p.width}x${p.height}`, label: p.label })),
 			`${this.screenshotSettings.width}x${this.screenshotSettings.height}`,
 			(value) => {
 				if (value === "0x0") {
@@ -181,19 +178,19 @@ export class CaptureUI extends BaseUI {
 			}
 		);
 		section.appendChild(createSettingRow("Resolution", this.presetSelect));
-		
+
 		// Custom Size Container
 		this.customSizeContainer = document.createElement("div");
 		this.customSizeContainer.style.display = "none";
 		this.customSizeContainer.style.marginTop = "8px";
-		
+
 		const sizeRow = document.createElement("div");
 		Object.assign(sizeRow.style, {
 			display: "flex",
 			gap: "12px",
 			alignItems: "center",
 		});
-		
+
 		// Width input
 		const widthContainer = document.createElement("div");
 		widthContainer.style.flex = "1";
@@ -202,11 +199,13 @@ export class CaptureUI extends BaseUI {
 			min: 100,
 			max: 8192,
 			step: 1,
-			onChange: (val) => { this.screenshotSettings.width = val; },
+			onChange: (val) => {
+				this.screenshotSettings.width = val;
+			},
 		});
 		widthContainer.appendChild(this.customWidthInput);
 		sizeRow.appendChild(widthContainer);
-		
+
 		// Height input
 		const heightContainer = document.createElement("div");
 		heightContainer.style.flex = "1";
@@ -215,14 +214,16 @@ export class CaptureUI extends BaseUI {
 			min: 100,
 			max: 8192,
 			step: 1,
-			onChange: (val) => { this.screenshotSettings.height = val; },
+			onChange: (val) => {
+				this.screenshotSettings.height = val;
+			},
 		});
 		heightContainer.appendChild(this.customHeightInput);
 		sizeRow.appendChild(heightContainer);
-		
+
 		this.customSizeContainer.appendChild(sizeRow);
 		section.appendChild(this.customSizeContainer);
-		
+
 		// Format
 		const formatSelect = createSelect(
 			[
@@ -235,7 +236,7 @@ export class CaptureUI extends BaseUI {
 			}
 		);
 		section.appendChild(createSettingRow("Format", formatSelect));
-		
+
 		// Quality (for JPEG)
 		const qualitySlider = createSlider(this.screenshotSettings.quality * 100, {
 			min: 50,
@@ -247,26 +248,26 @@ export class CaptureUI extends BaseUI {
 			},
 		});
 		section.appendChild(createSettingRow("Quality", qualitySlider));
-		
+
 		// Screenshot Button
 		const buttonContainer = document.createElement("div");
 		buttonContainer.style.marginTop = "12px";
-		
+
 		this.screenshotButton = createButton("📸 Take Screenshot", () => this.takeScreenshot());
 		this.screenshotButton.style.width = "100%";
 		buttonContainer.appendChild(this.screenshotButton);
-		
+
 		section.appendChild(buttonContainer);
-		
+
 		return section;
 	}
 
 	private createCameraPathSection(): HTMLDivElement {
 		const section = document.createElement("div");
 		Object.assign(section.style, UIStyles.section);
-		
+
 		section.appendChild(createSectionTitle("Camera Path (Orbit)"));
-		
+
 		// Path Visibility Toggle
 		this.pathVisibilityToggle = createToggle(this.cameraPathSettings.visible, (enabled) => {
 			this.cameraPathSettings.visible = enabled;
@@ -276,12 +277,16 @@ export class CaptureUI extends BaseUI {
 				this.renderer.cameraManager.hidePathVisualization(this.cameraPathSettings.pathName);
 			}
 		});
-		section.appendChild(createSettingRow("Show Path", this.pathVisibilityToggle, {
-			tooltip: "Display the camera orbit path in the scene",
-		}));
+		section.appendChild(
+			createSettingRow("Show Path", this.pathVisibilityToggle, {
+				tooltip: "Display the camera orbit path in the scene",
+			})
+		);
 
 		// Get current path parameters
-		const path = this.renderer.cameraManager.cameraPathManager.getPath(this.cameraPathSettings.pathName);
+		const path = this.renderer.cameraManager.cameraPathManager.getPath(
+			this.cameraPathSettings.pathName
+		);
 		const initialRadius = (path as any)?.getRadius?.() ?? 20;
 		const initialHeight = (path as any)?.getHeight?.() ?? 10;
 
@@ -292,12 +297,14 @@ export class CaptureUI extends BaseUI {
 			step: 1,
 			formatValue: (v) => `${v.toFixed(0)}`,
 			onChange: (value) => {
-				this.updatePathParameter('radius', value);
+				this.updatePathParameter("radius", value);
 			},
 		});
-		section.appendChild(createSettingRow("Radius", radiusSlider, {
-			tooltip: "Distance from the center of the orbit",
-		}));
+		section.appendChild(
+			createSettingRow("Radius", radiusSlider, {
+				tooltip: "Distance from the center of the orbit",
+			})
+		);
 
 		// Orbit Height Slider
 		const heightSlider = createSlider(initialHeight, {
@@ -306,13 +313,15 @@ export class CaptureUI extends BaseUI {
 			step: 1,
 			formatValue: (v) => `${v.toFixed(0)}`,
 			onChange: (value) => {
-				this.updatePathParameter('height', value);
+				this.updatePathParameter("height", value);
 			},
 		});
-		section.appendChild(createSettingRow("Height", heightSlider, {
-			tooltip: "Camera height above the target",
-		}));
-		
+		section.appendChild(
+			createSettingRow("Height", heightSlider, {
+				tooltip: "Camera height above the target",
+			})
+		);
+
 		// Path Controls Row
 		const controlsRow = document.createElement("div");
 		Object.assign(controlsRow.style, {
@@ -320,47 +329,60 @@ export class CaptureUI extends BaseUI {
 			gap: "8px",
 			marginTop: "12px",
 		});
-		
+
 		// Fit Path Button
-		const fitBtn = createButton("Auto Fit", () => {
-			this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics(
-				this.cameraPathSettings.pathName
-			);
-			// Refresh visualization if visible
-			this.refreshPathVisualization();
-		}, { primary: false });
+		const fitBtn = createButton(
+			"Auto Fit",
+			() => {
+				this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics(
+					this.cameraPathSettings.pathName
+				);
+				// Refresh visualization if visible
+				this.refreshPathVisualization();
+			},
+			{ primary: false }
+		);
 		fitBtn.style.flex = "1";
 		controlsRow.appendChild(fitBtn);
-		
+
 		// Preview Path Button
 		const previewBtn = createButton("Preview", () => this.previewPath(), { primary: false });
 		previewBtn.style.flex = "1";
 		controlsRow.appendChild(previewBtn);
-		
+
 		section.appendChild(controlsRow);
 
 		// Use Current Camera Button
-		const useCameraBtn = createButton("Use Current View", () => {
-			this.setPathFromCurrentCamera();
-		}, { primary: false });
+		const useCameraBtn = createButton(
+			"Use Current View",
+			() => {
+				this.setPathFromCurrentCamera();
+			},
+			{ primary: false }
+		);
 		useCameraBtn.style.width = "100%";
 		useCameraBtn.style.marginTop = "8px";
 		section.appendChild(useCameraBtn);
-		
+
 		return section;
 	}
 
 	/**
 	 * Update a camera path parameter and refresh visualization
 	 */
-	private updatePathParameter(param: 'radius' | 'height' | 'center', value: number | THREE.Vector3): void {
-		const path = this.renderer.cameraManager.cameraPathManager.getPath(this.cameraPathSettings.pathName);
-		if (!path || typeof (path as any).updateParameters !== 'function') return;
+	private updatePathParameter(
+		param: "radius" | "height" | "center",
+		value: number | THREE.Vector3
+	): void {
+		const path = this.renderer.cameraManager.cameraPathManager.getPath(
+			this.cameraPathSettings.pathName
+		);
+		if (!path || typeof (path as any).updateParameters !== "function") return;
 
 		const params: any = {};
 		params[param] = value;
 		(path as any).updateParameters(params);
-		
+
 		this.refreshPathVisualization();
 	}
 
@@ -378,8 +400,10 @@ export class CaptureUI extends BaseUI {
 	 * Set camera path from current camera position
 	 */
 	private setPathFromCurrentCamera(): void {
-		const path = this.renderer.cameraManager.cameraPathManager.getPath(this.cameraPathSettings.pathName);
-		if (!path || typeof (path as any).fitToSchematics !== 'function') return;
+		const path = this.renderer.cameraManager.cameraPathManager.getPath(
+			this.cameraPathSettings.pathName
+		);
+		if (!path || typeof (path as any).fitToSchematics !== "function") return;
 
 		// Use the fitToSchematics method which sets the path based on current camera
 		(path as any).fitToSchematics();
@@ -390,12 +414,12 @@ export class CaptureUI extends BaseUI {
 		const section = document.createElement("div");
 		// Last section, no bottom border
 		section.style.paddingBottom = "0";
-		
+
 		section.appendChild(createSectionTitle("Recording"));
-		
+
 		// Check FFmpeg availability
 		const ffmpegAvailable = !!this.renderer.options.ffmpeg;
-		
+
 		if (!ffmpegAvailable) {
 			const warningDiv = document.createElement("div");
 			Object.assign(warningDiv.style, {
@@ -412,7 +436,7 @@ export class CaptureUI extends BaseUI {
 			`;
 			section.appendChild(warningDiv);
 		}
-		
+
 		// Resolution (uses same presets as screenshot)
 		const recordPresetSelect = createSelect(
 			[
@@ -428,7 +452,7 @@ export class CaptureUI extends BaseUI {
 			}
 		);
 		section.appendChild(createSettingRow("Resolution", recordPresetSelect));
-		
+
 		// Frame Rate
 		const fpsSelect = createSelect(
 			[
@@ -441,7 +465,7 @@ export class CaptureUI extends BaseUI {
 			}
 		);
 		section.appendChild(createSettingRow("Frame Rate", fpsSelect));
-		
+
 		// Duration
 		const durationSlider = createSlider(this.recordingSettings.duration, {
 			min: 5,
@@ -453,7 +477,7 @@ export class CaptureUI extends BaseUI {
 			},
 		});
 		section.appendChild(createSettingRow("Duration", durationSlider));
-		
+
 		// Recording Status
 		this.recordingStatus = document.createElement("div");
 		this.recordingStatus.style.display = "none";
@@ -463,7 +487,7 @@ export class CaptureUI extends BaseUI {
 			backgroundColor: "rgba(255, 255, 255, 0.05)",
 			borderRadius: "4px",
 		});
-		
+
 		this.progressText = document.createElement("div");
 		Object.assign(this.progressText.style, {
 			fontSize: "12px",
@@ -472,7 +496,7 @@ export class CaptureUI extends BaseUI {
 		});
 		this.progressText.textContent = "Preparing recording...";
 		this.recordingStatus.appendChild(this.progressText);
-		
+
 		const progressContainer = document.createElement("div");
 		Object.assign(progressContainer.style, {
 			width: "100%",
@@ -481,7 +505,7 @@ export class CaptureUI extends BaseUI {
 			borderRadius: "2px",
 			overflow: "hidden",
 		});
-		
+
 		this.progressBar = document.createElement("div");
 		Object.assign(this.progressBar.style, {
 			width: "0%",
@@ -492,9 +516,9 @@ export class CaptureUI extends BaseUI {
 		});
 		progressContainer.appendChild(this.progressBar);
 		this.recordingStatus.appendChild(progressContainer);
-		
+
 		section.appendChild(this.recordingStatus);
-		
+
 		// Record Button
 		const buttonContainer = document.createElement("div");
 		Object.assign(buttonContainer.style, {
@@ -502,7 +526,7 @@ export class CaptureUI extends BaseUI {
 			display: "flex",
 			gap: "8px",
 		});
-		
+
 		this.recordButton = createButton("🎬 Start Recording", () => this.toggleRecording());
 		this.recordButton.style.flex = "1";
 		if (!ffmpegAvailable) {
@@ -511,9 +535,9 @@ export class CaptureUI extends BaseUI {
 			this.recordButton.style.cursor = "not-allowed";
 		}
 		buttonContainer.appendChild(this.recordButton);
-		
+
 		section.appendChild(buttonContainer);
-		
+
 		return section;
 	}
 
@@ -521,7 +545,7 @@ export class CaptureUI extends BaseUI {
 	private async takeScreenshot(): Promise<void> {
 		this.screenshotButton.textContent = "Processing...";
 		this.screenshotButton.disabled = true;
-		
+
 		try {
 			const blob = await this.renderer.cameraManager.recordingManager.takeScreenshot({
 				width: this.screenshotSettings.width,
@@ -529,26 +553,25 @@ export class CaptureUI extends BaseUI {
 				quality: this.screenshotSettings.quality,
 				format: this.screenshotSettings.format,
 			});
-			
+
 			const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 			const extension = this.screenshotSettings.format === "image/png" ? "png" : "jpg";
 			const filename = `${this.screenshotSettings.filename}_${timestamp}.${extension}`;
-			
+
 			// Trigger callback
 			if (this.onScreenshotTaken) {
 				this.onScreenshotTaken(blob, filename);
 			}
-			
+
 			// Auto-download
 			this.downloadBlob(blob, filename);
-			
+
 			// Show success feedback
 			this.screenshotButton.textContent = "✓ Screenshot Saved!";
 			setTimeout(() => {
 				this.screenshotButton.textContent = "📸 Take Screenshot";
 				this.screenshotButton.disabled = false;
 			}, 2000);
-			
 		} catch (error) {
 			console.error("Screenshot failed:", error);
 			this.screenshotButton.textContent = "❌ Failed";
@@ -566,7 +589,7 @@ export class CaptureUI extends BaseUI {
 				this.cameraPathSettings.pathName
 			);
 		}
-		
+
 		// Animate camera along path as preview (shorter duration)
 		const path = this.renderer.cameraManager.getCameraPath(this.cameraPathSettings.pathName);
 		if (path) {
@@ -592,14 +615,14 @@ export class CaptureUI extends BaseUI {
 		this.recordButton.textContent = "⏹ Stop Recording";
 		this.recordButton.style.backgroundColor = UIColors.danger;
 		this.recordingStatus.style.display = "block";
-		
+
 		// Fit path if auto-fit is enabled
 		if (this.cameraPathSettings.autoFit) {
 			this.renderer.cameraManager.cameraPathManager.fitCircularPathToSchematics(
 				this.cameraPathSettings.pathName
 			);
 		}
-		
+
 		try {
 			await this.renderer.cameraManager.recordingManager.startRecording(
 				this.recordingSettings.duration,
@@ -623,15 +646,15 @@ export class CaptureUI extends BaseUI {
 					onComplete: (blob) => {
 						const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 						const filename = `${this.recordingSettings.filename}_${timestamp}.mp4`;
-						
+
 						// Trigger callback
 						if (this.onRecordingComplete) {
 							this.onRecordingComplete(blob, filename);
 						}
-						
+
 						// Auto-download
 						this.downloadBlob(blob, filename);
-						
+
 						this.finishRecording(true);
 					},
 				}
@@ -651,14 +674,14 @@ export class CaptureUI extends BaseUI {
 		this.isRecording = false;
 		this.recordButton.textContent = "🎬 Start Recording";
 		this.recordButton.style.backgroundColor = UIColors.primary;
-		
+
 		if (success) {
 			this.progressText.textContent = "✓ Recording saved!";
 			this.progressBar.style.width = "100%";
 		} else {
 			this.progressText.textContent = "Recording cancelled";
 		}
-		
+
 		setTimeout(() => {
 			this.recordingStatus.style.display = "none";
 			this.progressBar.style.width = "0%";
@@ -727,18 +750,17 @@ export class CaptureUI extends BaseUI {
 		options?: Partial<RecordingSettings>
 	): Promise<Blob | null> {
 		const settings = { ...this.recordingSettings, ...options };
-		
+
 		return new Promise((resolve, reject) => {
-			this.renderer.cameraManager.recordingManager.startRecording(
-				settings.duration,
-				{
+			this.renderer.cameraManager.recordingManager
+				.startRecording(settings.duration, {
 					width: settings.width,
 					height: settings.height,
 					frameRate: settings.frameRate,
 					quality: settings.quality,
 					onComplete: (blob) => resolve(blob),
-				}
-			).catch(reject);
+				})
+				.catch(reject);
 		});
 	}
 

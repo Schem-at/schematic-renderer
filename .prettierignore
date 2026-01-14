@@ -1,0 +1,8 @@
+dist/
+node_modules/
+*.wasm
+*.tgz
+bun.lock
+mesh_builder_wasm/
+nucleation_local/
+test/

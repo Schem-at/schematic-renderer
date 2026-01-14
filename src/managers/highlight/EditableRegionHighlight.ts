@@ -35,7 +35,10 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	private schematicId?: string;
 	private filters: string[] = [];
 
-	constructor(renderer: SchematicRenderer, options: EditableRegionOptions & { schematicId?: string }) {
+	constructor(
+		renderer: SchematicRenderer,
+		options: EditableRegionOptions & { schematicId?: string }
+	) {
 		this.renderer = renderer;
 		this.name = options.name;
 		this.id = `region_${options.name}`;
@@ -80,9 +83,13 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 
 	private createFaceHandles() {
 		const handleGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-		const handleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8 });
+		const handleMaterial = new THREE.MeshBasicMaterial({
+			color: 0x00ff00,
+			transparent: true,
+			opacity: 0.8,
+		});
 
-		const faces = ['minX', 'maxX', 'minY', 'maxY', 'minZ', 'maxZ'];
+		const faces = ["minX", "maxX", "minY", "maxY", "minZ", "maxZ"];
 
 		for (const face of faces) {
 			const handle = new THREE.Mesh(handleGeometry, handleMaterial.clone());
@@ -90,7 +97,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			handle.userData = {
 				isHandle: true,
 				regionName: this.name,
-				face: face
+				face: face,
 			};
 			this.group.add(handle);
 			this.handles.set(face, handle);
@@ -127,7 +134,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 
 			// Apply filters
 			const copy = this.baseRegion.copy();
-			let filteredRegion = copy.filterByBlock(schematicWrapper, this.filters[0]);
+			const filteredRegion = copy.filterByBlock(schematicWrapper, this.filters[0]);
 
 			for (let i = 1; i < this.filters.length; i++) {
 				const nextFiltered = copy.filterByBlock(schematicWrapper, this.filters[i]);
@@ -144,14 +151,14 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 
 	public rebuildVisuals(): void {
 		// 1. Clean up existing meshes
-		this.meshes.forEach(mesh => {
+		this.meshes.forEach((mesh) => {
 			this.group.remove(mesh);
 			mesh.geometry.dispose();
 			(mesh.material as THREE.Material).dispose();
 		});
 		this.meshes = [];
 
-		this.wireframes.forEach(wireframe => {
+		this.wireframes.forEach((wireframe) => {
 			this.group.remove(wireframe);
 			wireframe.geometry.dispose();
 			(wireframe.material as THREE.Material).dispose();
@@ -167,9 +174,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		const max = new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]);
 
 		// Center of the bounding box of the whole region
-		const overallCenter = new THREE.Vector3()
-			.addVectors(min, max)
-			.multiplyScalar(0.5); // Block center logic: (min+max)/2
+		const overallCenter = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5); // Block center logic: (min+max)/2
 
 		// Position group at center
 		if (this.schematicId) {
@@ -215,7 +220,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 				opacity: this.opacity,
 				transparent: true,
 				depthWrite: false,
-				side: THREE.DoubleSide
+				side: THREE.DoubleSide,
 			});
 
 			const mesh = new THREE.Mesh(geometry, material);
@@ -227,7 +232,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			const edges = new THREE.EdgesGeometry(geometry);
 			const lineMaterial = new THREE.LineBasicMaterial({
 				color: this.color,
-				linewidth: 2
+				linewidth: 2,
 			});
 			const wireframe = new THREE.LineSegments(edges, lineMaterial);
 			wireframe.position.copy(localPos);
@@ -254,19 +259,19 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		if (this.handles.size === 0) return;
 
 		// X faces - offset by 0.5 to sit on the block face
-		this.handles.get('minX')!.position.set(min.x - center.x - 0.5, 0, 0);
-		this.handles.get('maxX')!.position.set(max.x + 1 - center.x - 0.5, 0, 0);
+		this.handles.get("minX")!.position.set(min.x - center.x - 0.5, 0, 0);
+		this.handles.get("maxX")!.position.set(max.x + 1 - center.x - 0.5, 0, 0);
 
 		// Y faces
-		this.handles.get('minY')!.position.set(0, min.y - center.y - 0.5, 0);
-		this.handles.get('maxY')!.position.set(0, max.y + 1 - center.y - 0.5, 0);
+		this.handles.get("minY")!.position.set(0, min.y - center.y - 0.5, 0);
+		this.handles.get("maxY")!.position.set(0, max.y + 1 - center.y - 0.5, 0);
 
 		// Z faces
-		this.handles.get('minZ')!.position.set(0, 0, min.z - center.z - 0.5);
-		this.handles.get('maxZ')!.position.set(0, 0, max.z + 1 - center.z - 0.5);
+		this.handles.get("minZ")!.position.set(0, 0, min.z - center.z - 0.5);
+		this.handles.get("maxZ")!.position.set(0, 0, max.z + 1 - center.z - 0.5);
 
 		// Reset scales
-		this.handles.forEach(h => h.scale.set(1, 1, 1));
+		this.handles.forEach((h) => h.scale.set(1, 1, 1));
 	}
 
 	public getName(): string {
@@ -286,10 +291,10 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	}
 
 	public setEditMode(enabled: boolean): void {
-		this.handles.forEach(handle => {
+		this.handles.forEach((handle) => {
 			handle.visible = enabled;
 		});
-		this.wireframes.forEach(w => w.visible = true);
+		this.wireframes.forEach((w) => (w.visible = true));
 	}
 
 	public edit(): void {
@@ -353,9 +358,15 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 		this.updateActiveRegion();
 	}
 
-	public get position(): THREE.Vector3 { return this.group.position; }
-	public get rotation(): THREE.Euler { return this.group.rotation; }
-	public get scale(): THREE.Vector3 { return this.group.scale; }
+	public get position(): THREE.Vector3 {
+		return this.group.position;
+	}
+	public get rotation(): THREE.Euler {
+		return this.group.rotation;
+	}
+	public get scale(): THREE.Vector3 {
+		return this.group.scale;
+	}
 
 	public setPosition(position: THREE.Vector3): void {
 		this.group.position.copy(position);
@@ -377,12 +388,12 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	 * Returns the overall bounding box of the ACTIVE (filtered) region.
 	 * If the region is empty (e.g. filter matches nothing), returns empty/zero bounds.
 	 */
-	public getBounds(): { min: THREE.Vector3, max: THREE.Vector3 } {
+	public getBounds(): { min: THREE.Vector3; max: THREE.Vector3 } {
 		const bounds = this.activeRegion.getBounds();
 		if (!bounds) return { min: new THREE.Vector3(), max: new THREE.Vector3() };
 		return {
 			min: new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
-			max: new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2])
+			max: new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]),
 		};
 	}
 
@@ -390,11 +401,11 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 	 * Returns array of bounding boxes for the ACTIVE (filtered) region.
 	 * Useful for seeing disjoint parts.
 	 */
-	public getBoundingBoxes(): Array<{ min: THREE.Vector3, max: THREE.Vector3 }> {
+	public getBoundingBoxes(): Array<{ min: THREE.Vector3; max: THREE.Vector3 }> {
 		const boxes = this.activeRegion.getBoxes();
 		return boxes.map((box: any) => ({
 			min: new THREE.Vector3(box.min[0], box.min[1], box.min[2]),
-			max: new THREE.Vector3(box.max[0], box.max[1], box.max[2])
+			max: new THREE.Vector3(box.max[0], box.max[1], box.max[2]),
 		}));
 	}
 
@@ -447,12 +458,12 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 
 	public setColor(color: number): this {
 		this.color = color;
-		this.meshes.forEach(mesh => {
+		this.meshes.forEach((mesh) => {
 			if (mesh.material instanceof THREE.MeshBasicMaterial) {
 				mesh.material.color.setHex(color);
 			}
 		});
-		this.wireframes.forEach(wf => {
+		this.wireframes.forEach((wf) => {
 			if (wf.material instanceof THREE.LineBasicMaterial) {
 				wf.material.color.setHex(color);
 			}
@@ -462,7 +473,7 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 
 	public setOpacity(opacity: number): this {
 		this.opacity = opacity;
-		this.meshes.forEach(mesh => {
+		this.meshes.forEach((mesh) => {
 			if (mesh.material instanceof THREE.MeshBasicMaterial) {
 				mesh.material.opacity = opacity;
 			}
@@ -477,19 +488,19 @@ export class EditableRegionHighlight implements Highlight, SelectableObject {
 			this.group.parent.remove(this.group);
 		}
 
-		this.meshes.forEach(mesh => {
+		this.meshes.forEach((mesh) => {
 			mesh.geometry.dispose();
 			(mesh.material as THREE.Material).dispose();
 		});
 		this.meshes = [];
 
-		this.wireframes.forEach(wf => {
+		this.wireframes.forEach((wf) => {
 			wf.geometry.dispose();
 			(wf.material as THREE.Material).dispose();
 		});
 		this.wireframes = [];
 
-		this.handles.forEach(handle => {
+		this.handles.forEach((handle) => {
 			handle.geometry.dispose();
 			(handle.material as THREE.Material).dispose();
 		});

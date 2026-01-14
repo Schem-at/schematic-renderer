@@ -49,15 +49,18 @@ export class RegionManager extends EventEmitter {
 
 	public createRegion(
 		name: string,
-		min: { x: number, y: number, z: number },
-		max: { x: number, y: number, z: number },
+		min: { x: number; y: number; z: number },
+		max: { x: number; y: number; z: number },
 		schematicId?: string,
-		options?: { color?: number, opacity?: number }
+		options?: { color?: number; opacity?: number }
 	): EditableRegionHighlight {
 		if (this.regions.has(name)) {
 			console.warn(`Region ${name} already exists, updating bounds.`);
 			const region = this.regions.get(name)!;
-			region.setBounds(new THREE.Vector3(min.x, min.y, min.z), new THREE.Vector3(max.x, max.y, max.z));
+			region.setBounds(
+				new THREE.Vector3(min.x, min.y, min.z),
+				new THREE.Vector3(max.x, max.y, max.z)
+			);
 			if (options) {
 				if (options.color !== undefined) region.setColor(options.color);
 				if (options.opacity !== undefined) region.setOpacity(options.opacity);
@@ -70,7 +73,7 @@ export class RegionManager extends EventEmitter {
 			min,
 			max,
 			schematicId,
-			...options
+			...options,
 		});
 
 		this.regions.set(name, region);
@@ -80,7 +83,7 @@ export class RegionManager extends EventEmitter {
 	}
 
 	public setEditMode(enabled: boolean) {
-		this.regions.forEach(region => {
+		this.regions.forEach((region) => {
 			region.setEditMode(enabled);
 			if (enabled) {
 				region.activate();
@@ -139,7 +142,6 @@ export class RegionManager extends EventEmitter {
 				// Make sure we update the helper immediately
 				if (gizmoManager.update) gizmoManager.update();
 			}
-
 		} else {
 			console.warn(`Region ${name} not found or GizmoManager not enabled.`);
 		}
@@ -167,13 +169,15 @@ export class RegionManager extends EventEmitter {
 	}
 
 	public getRegionsForSchematic(schematicId: string): EditableRegionHighlight[] {
-		return Array.from(this.regions.values()).filter(region => (region as any).schematicId === schematicId);
+		return Array.from(this.regions.values()).filter(
+			(region) => (region as any).schematicId === schematicId
+		);
 	}
 
 	/**
 	 * Load definition regions from a schematic's metadata.
 	 * These are regions stored in NucleationDefinitions (e.g., from CircuitBuilder or Insign).
-	 * 
+	 *
 	 * @param schematicId - The ID of the schematic to load regions from
 	 * @param autoActivate - Whether to immediately show the regions (default: true based on options)
 	 * @returns Array of created region names
@@ -181,7 +185,9 @@ export class RegionManager extends EventEmitter {
 	public loadDefinitionRegionsFromSchematic(schematicId: string, autoActivate?: boolean): string[] {
 		const schematic = this.renderer.schematicManager?.getSchematic(schematicId);
 		if (!schematic) {
-			console.warn(`[RegionManager] Cannot load definition regions: Schematic '${schematicId}' not found.`);
+			console.warn(
+				`[RegionManager] Cannot load definition regions: Schematic '${schematicId}' not found.`
+			);
 			return [];
 		}
 
@@ -193,7 +199,10 @@ export class RegionManager extends EventEmitter {
 			return [];
 		}
 
-		console.log(`[RegionManager] Loading ${regionNames.length} definition regions from '${schematicId}':`, regionNames);
+		console.log(
+			`[RegionManager] Loading ${regionNames.length} definition regions from '${schematicId}':`,
+			regionNames
+		);
 
 		const options = this.renderer.options.definitionRegionOptions || {};
 		const shouldActivate = autoActivate ?? options.showOnLoad ?? true;
@@ -219,12 +228,12 @@ export class RegionManager extends EventEmitter {
 				// Get region metadata for color/styling
 				const metadata = defRegion.getAllMetadata();
 				let color = options.defaultColor ?? 0x00ff88;
-				let opacity = options.defaultOpacity ?? 0.25;
+				const opacity = options.defaultOpacity ?? 0.25;
 
 				// Check for color in metadata (format: "#RRGGBB")
 				if (metadata && metadata.color) {
 					const colorStr = metadata.color;
-					if (colorStr.startsWith('#')) {
+					if (colorStr.startsWith("#")) {
 						color = parseInt(colorStr.slice(1), 16);
 					}
 				}
@@ -232,23 +241,23 @@ export class RegionManager extends EventEmitter {
 				// Scope the name to the schematic
 				const scopedName = `${schematicId}_defRegion_${regionName}`;
 
-                        // Create the editable region highlight
-                        const region = this.createRegion(
-                                scopedName,
-                                { x: bounds.min[0], y: bounds.min[1], z: bounds.min[2] },
-                                { x: bounds.max[0], y: bounds.max[1], z: bounds.max[2] },
-                                schematicId,
-                                { color, opacity }
-                        );
+				// Create the editable region highlight
+				const region = this.createRegion(
+					scopedName,
+					{ x: bounds.min[0], y: bounds.min[1], z: bounds.min[2] },
+					{ x: bounds.max[0], y: bounds.max[1], z: bounds.max[2] },
+					schematicId,
+					{ color, opacity }
+				);
 
-                        // Set the actual complex region definition (handles disjoint boxes)
-                        region.setBaseRegion(defRegion);
+				// Set the actual complex region definition (handles disjoint boxes)
+				region.setBaseRegion(defRegion);
 
-                        // If the definition region has multiple boxes, we need to set them
-                        const boxes = defRegion.getBoxes();
-                        if (boxes.length > 1) {
-                                console.log(`[RegionManager] Region '${regionName}' has ${boxes.length} boxes.`);
-                        }				// Store metadata for reference
+				// If the definition region has multiple boxes, we need to set them
+				const boxes = defRegion.getBoxes();
+				if (boxes.length > 1) {
+					console.log(`[RegionManager] Region '${regionName}' has ${boxes.length} boxes.`);
+				} // Store metadata for reference
 				(region as any).definitionMetadata = metadata;
 				(region as any).originalRegionName = regionName;
 
@@ -260,14 +269,15 @@ export class RegionManager extends EventEmitter {
 				}
 
 				defRegion.free();
-
 			} catch (e) {
 				console.error(`[RegionManager] Error loading definition region '${regionName}':`, e);
 			}
 		}
 
-		console.log(`[RegionManager] Loaded ${createdNames.length} definition regions for '${schematicId}'.`);
-		this.emit('definitionRegionsLoaded', { schematicId, regionNames: createdNames });
+		console.log(
+			`[RegionManager] Loaded ${createdNames.length} definition regions for '${schematicId}'.`
+		);
+		this.emit("definitionRegionsLoaded", { schematicId, regionNames: createdNames });
 
 		return createdNames;
 	}
@@ -359,7 +369,7 @@ export class RegionManager extends EventEmitter {
 	}
 
 	public dispose() {
-		this.regions.forEach(region => region.dispose());
+		this.regions.forEach((region) => region.dispose());
 		this.regions.clear();
 		this.definitionRegionNames.clear();
 	}

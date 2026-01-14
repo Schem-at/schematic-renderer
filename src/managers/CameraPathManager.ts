@@ -14,10 +14,7 @@ export class CameraPathManager {
 	private schematicRenderer: SchematicRenderer;
 	private showVisualization: boolean;
 
-	constructor(
-		schematicRenderer: SchematicRenderer,
-		options: CameraPathManagerOptions = {}
-	) {
+	constructor(schematicRenderer: SchematicRenderer, options: CameraPathManagerOptions = {}) {
 		this.paths = new Map();
 		this.displayedPaths = new Set();
 		this.schematicRenderer = schematicRenderer;
@@ -108,9 +105,7 @@ export class CameraPathManager {
 
 		// Update visualization if currently displayed
 		if (this.displayedPaths.has(name)) {
-			this.schematicRenderer.sceneManager.removePathVisualization(
-				`${name}Visualization`
-			);
+			this.schematicRenderer.sceneManager.removePathVisualization(`${name}Visualization`);
 			const visualizationGroup = path.getVisualizationGroup();
 			this.schematicRenderer.sceneManager.addPathVisualization(
 				visualizationGroup,
@@ -180,8 +175,7 @@ export class CameraPathManager {
 		target: THREE.Vector3;
 	} {
 		// Get camera for FOV calculations (assume perspective camera for path fitting)
-		const activeCamera =
-			this.schematicRenderer.cameraManager.activeCamera.camera;
+		const activeCamera = this.schematicRenderer.cameraManager.activeCamera.camera;
 		let fov = 75; // Default FOV
 
 		if (activeCamera instanceof THREE.PerspectiveCamera) {
@@ -195,7 +189,7 @@ export class CameraPathManager {
 		const sphereRadius = boundingSphere.radius;
 
 		// Start with an initial radius estimate
-		let optimalRadius = Math.max(sphereRadius * 2, minRadius);
+		const optimalRadius = Math.max(sphereRadius * 2, minRadius);
 
 		// Test different heights to find the best framing
 		const testHeights = [
@@ -220,10 +214,7 @@ export class CameraPathManager {
 				samples
 			);
 
-			if (
-				requiredRadius <= maxRadius &&
-				requiredRadius < smallestRequiredRadius
-			) {
+			if (requiredRadius <= maxRadius && requiredRadius < smallestRequiredRadius) {
 				smallestRequiredRadius = requiredRadius;
 				bestRadius = Math.max(requiredRadius, minRadius);
 				bestHeight = testHeight;
@@ -234,13 +225,7 @@ export class CameraPathManager {
 		if (smallestRequiredRadius > maxRadius) {
 			bestRadius = maxRadius;
 			// Calculate the height needed for this radius
-			bestHeight = this.calculateOptimalHeight(
-				center,
-				boundingBox,
-				bestRadius,
-				fovRad,
-				padding
-			);
+			bestHeight = this.calculateOptimalHeight(center, boundingBox, bestRadius, fovRad, padding);
 		}
 
 		// Ensure the target is the center of the bounding box
@@ -306,54 +291,18 @@ export class CameraPathManager {
 		const aspect = canvas.width / canvas.height;
 
 		// Calculate camera direction
-		const cameraDir = new THREE.Vector3(
-			Math.cos(angle),
-			0,
-			Math.sin(angle)
-		).normalize();
+		const cameraDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
 
 		// Project the bounding box onto the camera's view plane
 		const corners = [
-			new THREE.Vector3(
-				boundingBox.min.x,
-				boundingBox.min.y,
-				boundingBox.min.z
-			),
-			new THREE.Vector3(
-				boundingBox.min.x,
-				boundingBox.min.y,
-				boundingBox.max.z
-			),
-			new THREE.Vector3(
-				boundingBox.min.x,
-				boundingBox.max.y,
-				boundingBox.min.z
-			),
-			new THREE.Vector3(
-				boundingBox.min.x,
-				boundingBox.max.y,
-				boundingBox.max.z
-			),
-			new THREE.Vector3(
-				boundingBox.max.x,
-				boundingBox.min.y,
-				boundingBox.min.z
-			),
-			new THREE.Vector3(
-				boundingBox.max.x,
-				boundingBox.min.y,
-				boundingBox.max.z
-			),
-			new THREE.Vector3(
-				boundingBox.max.x,
-				boundingBox.max.y,
-				boundingBox.min.z
-			),
-			new THREE.Vector3(
-				boundingBox.max.x,
-				boundingBox.max.y,
-				boundingBox.max.z
-			),
+			new THREE.Vector3(boundingBox.min.x, boundingBox.min.y, boundingBox.min.z),
+			new THREE.Vector3(boundingBox.min.x, boundingBox.min.y, boundingBox.max.z),
+			new THREE.Vector3(boundingBox.min.x, boundingBox.max.y, boundingBox.min.z),
+			new THREE.Vector3(boundingBox.min.x, boundingBox.max.y, boundingBox.max.z),
+			new THREE.Vector3(boundingBox.max.x, boundingBox.min.y, boundingBox.min.z),
+			new THREE.Vector3(boundingBox.max.x, boundingBox.min.y, boundingBox.max.z),
+			new THREE.Vector3(boundingBox.max.x, boundingBox.max.y, boundingBox.min.z),
+			new THREE.Vector3(boundingBox.max.x, boundingBox.max.y, boundingBox.max.z),
 		];
 
 		// Find the maximum extent when viewed from this angle
@@ -364,13 +313,7 @@ export class CameraPathManager {
 		const testRadius = 50; // Arbitrary test radius
 		const cameraPos = center
 			.clone()
-			.add(
-				new THREE.Vector3(
-					cameraDir.x * testRadius,
-					height,
-					cameraDir.z * testRadius
-				)
-			);
+			.add(new THREE.Vector3(cameraDir.x * testRadius, height, cameraDir.z * testRadius));
 
 		// Calculate the view direction and up vector
 		const viewDir = center.clone().sub(cameraPos).normalize();
@@ -481,9 +424,7 @@ export class CameraPathManager {
 			path.updateParameters(params);
 			if (this.displayedPaths.has(name)) {
 				// Update visualization
-				this.schematicRenderer.sceneManager.removePathVisualization(
-					`${name}Visualization`
-				);
+				this.schematicRenderer.sceneManager.removePathVisualization(`${name}Visualization`);
 				const visualizationGroup = path.getVisualizationGroup();
 				this.schematicRenderer.sceneManager.addPathVisualization(
 					visualizationGroup,
@@ -510,10 +451,7 @@ export class CameraPathManager {
 			);
 
 			const targetPosition = path.getTargetPosition();
-			this.schematicRenderer.sceneManager.addTargetIndicator(
-				targetPosition,
-				`${name}Target`
-			);
+			this.schematicRenderer.sceneManager.addTargetIndicator(targetPosition, `${name}Target`);
 
 			this.displayedPaths.add(name);
 		} else {
@@ -522,9 +460,7 @@ export class CameraPathManager {
 	}
 
 	public hidePathVisualization(name: string): void {
-		this.schematicRenderer.sceneManager.removePathVisualization(
-			`${name}Visualization`
-		);
+		this.schematicRenderer.sceneManager.removePathVisualization(`${name}Visualization`);
 		this.schematicRenderer.sceneManager.removeTargetIndicator(`${name}Target`);
 		this.displayedPaths.delete(name);
 	}

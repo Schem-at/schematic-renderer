@@ -13,7 +13,7 @@ export class UIManager {
 	// Add to UIManager class
 	private fpvOverlay: HTMLDivElement | null = null;
 	private fpvMenu: HTMLDivElement | null = null;
-    private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+	private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 	private progressOptions: {
 		showLabel: boolean;
 		showPercentage: boolean;
@@ -21,12 +21,12 @@ export class UIManager {
 		barHeight: number;
 		labelColor: string;
 		labelSize: string;
-		theme: 'light' | 'dark' | 'custom';
+		theme: "light" | "dark" | "custom";
 	};
 
 	public createFPVElements() {
 		const canvas = this.renderer.canvas;
-		
+
 		// Create blocker
 		this.fpvOverlay = document.createElement("div");
 		Object.assign(this.fpvOverlay.style, {
@@ -39,9 +39,9 @@ export class UIManager {
 			display: "none",
 			zIndex: "1000",
 			pointerEvents: "auto",
-			transition: "background-color 0.2s ease"
+			transition: "background-color 0.2s ease",
 		});
-	
+
 		// Create menu
 		this.fpvMenu = document.createElement("div");
 		Object.assign(this.fpvMenu.style, {
@@ -55,22 +55,22 @@ export class UIManager {
 			borderRadius: "8px",
 			cursor: "pointer",
 			pointerEvents: "auto",
-			backgroundColor: "rgba(0, 0, 0, 0.3)"
+			backgroundColor: "rgba(0, 0, 0, 0.3)",
 		});
-	
+
 		const title = document.createElement("h2");
 		title.textContent = "Creative Mode";
 		Object.assign(title.style, {
 			fontSize: "1.5rem",
 			fontWeight: "600",
-			marginBottom: "1.5rem"
+			marginBottom: "1.5rem",
 		});
-	
+
 		const controls = document.createElement("div");
 		Object.assign(controls.style, {
 			fontSize: "1.125rem",
 			opacity: "0.8",
-			lineHeight: "1.5"
+			lineHeight: "1.5",
 		});
 		controls.innerHTML = `
 			<div style="text-align: left;">
@@ -81,61 +81,61 @@ export class UIManager {
 				<div><span style="opacity: 0.6;">Exit:</span> ESC</div>
 			</div>
 		`;
-	
+
 		const instruction = document.createElement("p");
 		instruction.textContent = "Click anywhere to begin";
 		Object.assign(instruction.style, {
 			marginTop: "1.5rem",
 			fontSize: "1rem",
-			opacity: "0.6"
+			opacity: "0.6",
 		});
-	
+
 		this.fpvMenu.appendChild(title);
 		this.fpvMenu.appendChild(controls);
 		this.fpvMenu.appendChild(instruction);
 		this.fpvOverlay.appendChild(this.fpvMenu);
-	
+
 		// Add to canvas parent and ensure parent has relative positioning
 		const canvasParent = canvas.parentElement;
 		if (canvasParent) {
-			if (getComputedStyle(canvasParent).position === 'static') {
-				canvasParent.style.position = 'relative';
+			if (getComputedStyle(canvasParent).position === "static") {
+				canvasParent.style.position = "relative";
 			}
 			canvasParent.appendChild(this.fpvOverlay);
 		}
 
 		this.keydownHandler = (e: KeyboardEvent) => {
-            if (this.renderer.cameraManager.activeControlKey == "creative" && e.code === 'Space') {
-                e.preventDefault();
-            }
-        };
+			if (this.renderer.cameraManager.activeControlKey == "creative" && e.code === "Space") {
+				e.preventDefault();
+			}
+		};
 
-        // Initially attach the handler
-        window.addEventListener('keydown', this.keydownHandler);
-	
+		// Initially attach the handler
+		window.addEventListener("keydown", this.keydownHandler);
+
 		return {
 			menu: this.fpvMenu,
-			blocker: this.fpvOverlay
+			blocker: this.fpvOverlay,
 		};
 	}
 
 	public showFPVOverlay() {
 		if (this.fpvOverlay) {
-			this.fpvOverlay.style.display = 'block';
+			this.fpvOverlay.style.display = "block";
 			if (this.fpvMenu) {
-				this.fpvMenu.style.display = 'block';
+				this.fpvMenu.style.display = "block";
 			}
 		}
 	}
 
 	public hideFPVOverlay() {
 		if (this.fpvOverlay) {
-			this.fpvOverlay.style.display = 'none';
+			this.fpvOverlay.style.display = "none";
 			if (this.fpvMenu) {
-				this.fpvMenu.style.display = 'none';
+				this.fpvMenu.style.display = "none";
 			}
 		}
-	} 
+	}
 
 	constructor(renderer: SchematicRenderer) {
 		this.renderer = renderer;
@@ -146,23 +146,23 @@ export class UIManager {
 		this.progressBarContainer = document.createElement("div");
 		this.progressLabel = document.createElement("div");
 		this.progressText = document.createElement("div");
-		
+
 		// Initialize progress options with defaults, will be overridden by user options
 		this.progressOptions = {
 			showLabel: true,
 			showPercentage: true,
-			barColor: '#4CAF50', // Material green
+			barColor: "#4CAF50", // Material green
 			barHeight: 6,
-			labelColor: '#ffffff',
-			labelSize: '14px',
-			theme: 'dark'
+			labelColor: "#ffffff",
+			labelSize: "14px",
+			theme: "dark",
 		};
-		
+
 		// Apply user configuration if available
 		if (this.renderer.options.progressBarOptions) {
 			Object.assign(this.progressOptions, this.renderer.options.progressBarOptions);
 		}
-		
+
 		if (this.renderer.options.enableDragAndDrop) {
 			this.emptyStateOverlay = this.createUploadStateOverlay();
 		} else {
@@ -180,7 +180,7 @@ export class UIManager {
 	}
 
 	private createUploadStateOverlay() {
-		let emptyStateOverlay = document.createElement("div");
+		const emptyStateOverlay = document.createElement("div");
 		const container = this.renderer.canvas.parentElement || document.body;
 
 		emptyStateOverlay.style.position = "absolute";
@@ -237,8 +237,7 @@ export class UIManager {
 		subtitle.style.marginBottom = "0.5rem";
 
 		const supportedFormats = document.createElement("p");
-		supportedFormats.textContent =
-			"Supports .schematic, .schem, and .litematic files";
+		supportedFormats.textContent = "Supports .schematic, .schem, and .litematic files";
 		supportedFormats.style.fontSize = "0.875rem";
 		supportedFormats.style.opacity = "0.6";
 		supportedFormats.style.marginBottom = "1.5rem";
@@ -347,9 +346,8 @@ export class UIManager {
 		this.progressBarContainer.style.borderRadius = "8px";
 		this.progressBarContainer.style.overflow = "hidden";
 		this.progressBarContainer.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-		this.progressBarContainer.style.backgroundColor = this.progressOptions.theme === 'dark' ? 
-			"rgba(30, 30, 30, 0.9)" : 
-			"rgba(240, 240, 240, 0.9)";
+		this.progressBarContainer.style.backgroundColor =
+			this.progressOptions.theme === "dark" ? "rgba(30, 30, 30, 0.9)" : "rgba(240, 240, 240, 0.9)";
 		this.progressBarContainer.style.padding = "12px 16px";
 		this.progressBarContainer.style.display = "none";
 		this.progressBarContainer.style.zIndex = "1000";
@@ -368,9 +366,8 @@ export class UIManager {
 		this.progressText.style.textAlign = "right";
 		this.progressText.style.marginTop = "4px";
 		this.progressText.style.fontSize = "12px";
-		this.progressText.style.color = this.progressOptions.theme === 'dark' ? 
-			"rgba(255, 255, 255, 0.7)" : 
-			"rgba(0, 0, 0, 0.7)";
+		this.progressText.style.color =
+			this.progressOptions.theme === "dark" ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.7)";
 		this.progressText.style.display = this.progressOptions.showPercentage ? "block" : "none";
 		this.progressText.textContent = "0%";
 
@@ -378,9 +375,8 @@ export class UIManager {
 		const progressTrack = document.createElement("div");
 		progressTrack.style.width = "100%";
 		progressTrack.style.height = `${this.progressOptions.barHeight}px`;
-		progressTrack.style.backgroundColor = this.progressOptions.theme === 'dark' ? 
-			"rgba(255, 255, 255, 0.1)" : 
-			"rgba(0, 0, 0, 0.1)";
+		progressTrack.style.backgroundColor =
+			this.progressOptions.theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
 		progressTrack.style.borderRadius = "4px";
 		progressTrack.style.overflow = "hidden";
 		progressTrack.style.position = "relative";
@@ -416,7 +412,7 @@ export class UIManager {
 		this.progressBarContainer.style.display = "none";
 		this.hideOverlay();
 	}
-	
+
 	public isProgressBarVisible(): boolean {
 		return this.progressBarContainer.style.display === "block";
 	}
@@ -425,12 +421,12 @@ export class UIManager {
 		// Update progress bar width
 		const percentage = progress * 100;
 		this.progressBar.style.width = `${percentage}%`;
-		
+
 		// Update percentage text
 		if (this.progressOptions.showPercentage) {
 			this.progressText.textContent = `${Math.round(percentage)}%`;
 		}
-		
+
 		// Update label if provided
 		if (message && this.progressOptions.showLabel) {
 			this.progressLabel.textContent = message;
@@ -469,12 +465,11 @@ export class UIManager {
 	}
 
 	public dispose() {
-
 		if (this.keydownHandler) {
-            window.removeEventListener('keydown', this.keydownHandler);
-            this.keydownHandler = null;
+			window.removeEventListener("keydown", this.keydownHandler);
+			this.keydownHandler = null;
 		}
-		
+
 		// Existing cleanup
 		this.overlay.remove();
 

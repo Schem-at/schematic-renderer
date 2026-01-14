@@ -8,7 +8,7 @@ import {
 	BlockPosition,
 	DefinitionRegionWrapper,
 	CircuitBuilderWrapper,
-	SortStrategyWrapper
+	SortStrategyWrapper,
 } from "../nucleationExports";
 import { WorldMeshBuilder } from "../WorldMeshBuilder";
 import { EventEmitter } from "events";
@@ -106,8 +106,7 @@ export class SchematicObject extends EventEmitter {
 		if (!this.schematicRenderer.worldMeshBuilder) {
 			throw new Error("WorldMeshBuilder is required.");
 		}
-		this.worldMeshBuilder =
-			schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 
@@ -123,33 +122,21 @@ export class SchematicObject extends EventEmitter {
 			// Handle Three.js objects carefully
 			if (properties.position) {
 				if (Array.isArray(properties.position)) {
-					this.position.set(
-						properties.position[0],
-						properties.position[1],
-						properties.position[2]
-					);
+					this.position.set(properties.position[0], properties.position[1], properties.position[2]);
 				} else {
 					this.position.copy(properties.position);
 				}
 			}
 			if (properties.rotation) {
 				if (Array.isArray(properties.rotation)) {
-					this.rotation.set(
-						properties.rotation[0],
-						properties.rotation[1],
-						properties.rotation[2]
-					);
+					this.rotation.set(properties.rotation[0], properties.rotation[1], properties.rotation[2]);
 				} else {
 					this.rotation.copy(properties.rotation);
 				}
 			}
 			if (properties.scale) {
 				if (Array.isArray(properties.scale)) {
-					this.scale.set(
-						properties.scale[0],
-						properties.scale[1],
-						properties.scale[2]
-					);
+					this.scale.set(properties.scale[0], properties.scale[1], properties.scale[2]);
 				} else if (typeof properties.scale === "number") {
 					this.scale.setScalar(properties.scale);
 				} else {
@@ -177,9 +164,10 @@ export class SchematicObject extends EventEmitter {
 		console.log("Schematic dimensions (tight bounds):", tightDimensions);
 
 		// Use tight bounds for centering if available, otherwise fall back to allocated dimensions
-		const centeringDimensions = (tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0)
-			? tightDimensions
-			: schematicDimensions;
+		const centeringDimensions =
+			tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0
+				? tightDimensions
+				: schematicDimensions;
 
 		console.log("Centering schematic using dimensions:", centeringDimensions);
 		this.position = new THREE.Vector3(
@@ -401,7 +389,7 @@ export class SchematicObject extends EventEmitter {
 	 */
 	public getDimensions(): [number, number, number] {
 		if (!this._cachedDimensions) {
-			let dimensions = this.schematicWrapper.get_dimensions();
+			const dimensions = this.schematicWrapper.get_dimensions();
 			this._cachedDimensions = [dimensions[0], dimensions[1], dimensions[2]];
 		}
 		return this._cachedDimensions;
@@ -445,8 +433,6 @@ export class SchematicObject extends EventEmitter {
 			return;
 		}
 
-
-
 		// Debug log to check data presence
 
 		// Aggregate metrics from chunk processing data
@@ -459,14 +445,12 @@ export class SchematicObject extends EventEmitter {
 			});
 		}
 
-
-
-
-
 		if (sessionData.breakdown && sessionData.breakdown.length > 0) {
 			console.warn("📋 Detailed Breakdown:");
 			sessionData.breakdown.forEach((op: any) => {
-				console.warn(`  - ${op.operationId}: ${op.duration !== undefined ? op.duration.toFixed(2) : "0.00"}ms`);
+				console.warn(
+					`  - ${op.operationId}: ${op.duration !== undefined ? op.duration.toFixed(2) : "0.00"}ms`
+				);
 			});
 		} else {
 			console.warn("⚠️ No breakdown data available.");
@@ -474,7 +458,6 @@ export class SchematicObject extends EventEmitter {
 				console.log("Raw timing data:", JSON.stringify(sessionData.timingData));
 			}
 		}
-
 	}
 
 	private emitPropertyChanged(property: string, value: any) {
@@ -518,9 +501,7 @@ export class SchematicObject extends EventEmitter {
 						child.receiveShadow = true;
 						child.frustumCulled = true;
 
-						const materials = Array.isArray(child.material)
-							? child.material
-							: [child.material];
+						const materials = Array.isArray(child.material) ? child.material : [child.material];
 
 						materials.forEach((mat) => {
 							if (mat) {
@@ -546,14 +527,14 @@ export class SchematicObject extends EventEmitter {
 
 	/**
 	 * Export the schematic using the new modular export system
-	 * 
+	 *
 	 * @param options Export options including format, quality, and callbacks
 	 * @returns Promise resolving to the export result
-	 * 
+	 *
 	 * @example
 	 * // Basic GLB export (recommended)
 	 * await schematic.export({ format: 'glb' });
-	 * 
+	 *
 	 * @example
 	 * // Export with options
 	 * await schematic.export({
@@ -574,7 +555,7 @@ export class SchematicObject extends EventEmitter {
 		const originalProgress = options.onProgress;
 		if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 			this.schematicRenderer.uiManager.showProgressBar(`Exporting ${this.name}`);
-			
+
 			exporter.on("exportProgress", (progress) => {
 				this.schematicRenderer.uiManager?.updateProgress(progress.progress, progress.message);
 				originalProgress?.(progress);
@@ -602,7 +583,7 @@ export class SchematicObject extends EventEmitter {
 
 		try {
 			const result = await exporter.export(this.group, exportOptions);
-			
+
 			// Auto-download if no onComplete callback is provided
 			if (!options.onComplete) {
 				exporter.download(result);
@@ -647,7 +628,7 @@ export class SchematicObject extends EventEmitter {
 	): Promise<void> {
 		// Map old API to new export system
 		const format: ExportFormat = options.binary ? "glb" : "gltf";
-		
+
 		await this.export({
 			filename: options.filename || `${this.name}_schematic`,
 			format,
@@ -659,14 +640,10 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	private async buildMeshes(): Promise<void> {
-
 		if (!this.visible) {
 			return;
 		}
-		const { meshes, chunkMap } = await this.buildSchematicMeshes(
-			this,
-			this.chunkDimensions
-		);
+		const { meshes, chunkMap } = await this.buildSchematicMeshes(this, this.chunkDimensions);
 		this.chunkMeshes = chunkMap;
 
 		// Apply properties to all objects
@@ -689,9 +666,7 @@ export class SchematicObject extends EventEmitter {
 			this.createRenderingBoundsHelper();
 		}
 
-		this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(
-			this.name
-		);
+		this.sceneManager.schematicRenderer.options.callbacks?.onSchematicRendered?.(this.name);
 	}
 
 	// Track chunk building progress
@@ -702,10 +677,7 @@ export class SchematicObject extends EventEmitter {
 		completedChunks?: number
 	) {
 		// Only show progress if enabled and UI manager exists
-		if (
-			this.schematicRenderer.options.enableProgressBar &&
-			this.schematicRenderer.uiManager
-		) {
+		if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 			// Format detailed progress message if chunks are provided
 			let progressMessage = message;
 			if (totalChunks !== undefined && completedChunks !== undefined) {
@@ -718,10 +690,7 @@ export class SchematicObject extends EventEmitter {
 			}
 
 			// Update progress
-			this.schematicRenderer.uiManager.updateProgress(
-				progress,
-				progressMessage
-			);
+			this.schematicRenderer.uiManager.updateProgress(progress, progressMessage);
 
 			// Hide when complete
 			if (progress >= 1) {
@@ -737,16 +706,13 @@ export class SchematicObject extends EventEmitter {
 			chunkHeight: 16,
 			chunkLength: 16,
 		},
-		buildMode: "immediate" | "incremental" | "instanced" | "batched" = this
-			.schematicRenderer.options.meshBuildingMode || "incremental"
+		buildMode: "immediate" | "incremental" | "instanced" | "batched" = this.schematicRenderer
+			.options.meshBuildingMode || "incremental"
 	) {
-
 		// Start performance monitoring session
 		const sessionId = performanceMonitor.startSession(this.id, buildMode);
 		if (this.schematicRenderer.renderManager?.renderer) {
-			performanceMonitor.setRenderer(
-				this.schematicRenderer.renderManager.renderer
-			);
+			performanceMonitor.setRenderer(this.schematicRenderer.renderManager.renderer);
 		}
 
 		performanceMonitor.startOperation(`schematic-build-${buildMode}`, {
@@ -766,26 +732,17 @@ export class SchematicObject extends EventEmitter {
 			let result;
 			switch (buildMode) {
 				case "immediate":
-					result = await this.buildSchematicMeshesImmediate(
-						schematicObject,
-						chunkDimensions
-					);
+					result = await this.buildSchematicMeshesImmediate(schematicObject, chunkDimensions);
 					break;
 				case "incremental":
-					result = await this.buildSchematicMeshesIncremental(
-						schematicObject,
-						chunkDimensions
-					);
+					result = await this.buildSchematicMeshesIncremental(schematicObject, chunkDimensions);
 					break;
 				case "instanced":
 					result = await this.buildSchematicMeshesInstanced(schematicObject);
 					break;
 				case "batched":
 					// New high-performance batch mode - merges all chunks into a few meshes
-					result = await this.buildSchematicMeshesBatched(
-						schematicObject,
-						chunkDimensions
-					);
+					result = await this.buildSchematicMeshesBatched(schematicObject, chunkDimensions);
 					break;
 				default:
 					throw new Error(
@@ -803,8 +760,7 @@ export class SchematicObject extends EventEmitter {
 				chunkId: `${this.id}-complete`,
 				chunkCoords: [0, 0, 0],
 				processingTime:
-					performance.now() -
-					(performanceMonitor as any).getCurrentOperationStartTime?.() || 0,
+					performance.now() - (performanceMonitor as any).getCurrentOperationStartTime?.() || 0,
 				blockCount: result.meshes.length,
 				meshCount: result.meshes.length,
 				memoryUsed: memoryDelta,
@@ -870,7 +826,6 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-
 		const overallStartTime = performance.now();
 		const schematic = schematicObject.schematicWrapper;
 
@@ -899,17 +854,9 @@ export class SchematicObject extends EventEmitter {
 		const totalChunks = iterator.total_chunks();
 
 		if (totalChunks === 0) {
-
-			this.reportBuildProgress(
-				"Schematic build complete (no chunks)",
-				1.0,
-				0,
-				0
-			);
+			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
 			return { meshes: [], chunkMap: new Map() };
 		}
-
-
 
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		const renderingBounds = schematicObject.renderingBounds?.enabled
@@ -920,12 +867,7 @@ export class SchematicObject extends EventEmitter {
 		let totalMeshCount = 0;
 		const progressUpdateInterval = Math.max(1, Math.floor(totalChunks / 20));
 
-		this.reportBuildProgress(
-			"Processing chunks with minimal memory...",
-			0.15,
-			totalChunks,
-			0
-		);
+		this.reportBuildProgress("Processing chunks with minimal memory...", 0.15, totalChunks, 0);
 
 		performanceMonitor.startOperation("Process All Chunks");
 
@@ -1030,18 +972,11 @@ export class SchematicObject extends EventEmitter {
 
 		performanceMonitor.endOperation("Process All Chunks");
 
-
-		this.reportBuildProgress(
-			"Finalizing scene...",
-			0.95,
-			totalChunks,
-			processedChunkCount
-		);
+		this.reportBuildProgress("Finalizing scene...", 0.95, totalChunks, processedChunkCount);
 
 		this.group.updateMatrixWorld(true);
 
 		const totalTime = performance.now() - overallStartTime;
-
 
 		// Return meshes from scene graph (not from accumulator!)
 		const finalMeshes = Array.from(this.group.children);
@@ -1085,12 +1020,7 @@ export class SchematicObject extends EventEmitter {
 			).toFixed(1)}MB`
 		);
 
-		this.reportBuildProgress(
-			"TRUE lazy build complete",
-			1.0,
-			totalChunks,
-			processedChunkCount
-		);
+		this.reportBuildProgress("TRUE lazy build complete", 1.0, totalChunks, processedChunkCount);
 
 		setTimeout(() => {
 			if (this.schematicRenderer.uiManager) {
@@ -1113,7 +1043,6 @@ export class SchematicObject extends EventEmitter {
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-
 		const overallStartTime = performance.now();
 		const renderer = this.schematicRenderer.renderManager?.renderer;
 		const schematic = schematicObject.schematicWrapper;
@@ -1124,7 +1053,7 @@ export class SchematicObject extends EventEmitter {
 
 		// CRITICAL: Wait for JSZip's async postMessage queue to drain
 		// JSZip uses setImmediate (via postMessage) which continues after await returns
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		const iterator = schematic.create_lazy_chunk_iterator(
 			chunkDimensions.chunkWidth,
@@ -1139,26 +1068,14 @@ export class SchematicObject extends EventEmitter {
 		const totalChunks = iterator.total_chunks();
 
 		if (totalChunks === 0) {
-
-			this.reportBuildProgress(
-				"Schematic build complete (no chunks)",
-				1.0,
-				0,
-				0
-			);
+			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
 			return { meshes: [], chunkMap: new Map() };
 		}
-
 
 		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
 		let totalMeshCount = 0;
 
-		this.reportBuildProgress(
-			"Processing optimized chunks...",
-			0,
-			totalChunks,
-			0
-		);
+		this.reportBuildProgress("Processing optimized chunks...", 0, totalChunks, 0);
 
 		const renderingBounds = schematicObject.renderingBounds?.enabled
 			? schematicObject.renderingBounds
@@ -1173,7 +1090,8 @@ export class SchematicObject extends EventEmitter {
 			try {
 				// PERFORMANCE FIX: Batch all worker calls to avoid per-await event loop overhead
 				// Collect all chunk data first
-				const allChunks: Array<{ chunk_x: number, chunk_y: number, chunk_z: number, blocks: any }> = [];
+				const allChunks: Array<{ chunk_x: number; chunk_y: number; chunk_z: number; blocks: any }> =
+					[];
 
 				while (iterator.has_next()) {
 					const chunkData = iterator.next();
@@ -1215,11 +1133,9 @@ export class SchematicObject extends EventEmitter {
 
 					// Send all chunks in this batch to workers simultaneously
 					const batchPromises = batch.map(({ chunk_x, chunk_y, chunk_z, blocks }) =>
-						this.worldMeshBuilder.getChunkMesh(
-							{ blocks, chunk_x, chunk_y, chunk_z },
-							schematicObject,
-							renderingBounds
-						).then(meshes => ({ chunk_x, chunk_y, chunk_z, meshes }))
+						this.worldMeshBuilder
+							.getChunkMesh({ blocks, chunk_x, chunk_y, chunk_z }, schematicObject, renderingBounds)
+							.then((meshes) => ({ chunk_x, chunk_y, chunk_z, meshes }))
 					);
 
 					// Await entire batch at once - single yield point!
@@ -1240,7 +1156,9 @@ export class SchematicObject extends EventEmitter {
 					}
 
 					// Log progress every batch
-					console.log(`[SceneAdd] batch=${Math.floor(batchStart / BATCH_SIZE) + 1} processed=${processedChunkCount}/${totalChunksToProcess} children=${this.group.children.length}`);
+					console.log(
+						`[SceneAdd] batch=${Math.floor(batchStart / BATCH_SIZE) + 1} processed=${processedChunkCount}/${totalChunksToProcess} children=${this.group.children.length}`
+					);
 
 					this.reportBuildProgress(
 						"Processing chunks...",
@@ -1255,7 +1173,9 @@ export class SchematicObject extends EventEmitter {
 					const renderStartTime = performance.now();
 					this.schematicRenderer.renderManager.render();
 					const renderTime = performance.now() - renderStartTime;
-					console.log(`[RenderTiming] FINAL meshes=${this.group.children.length} renderMs=${renderTime.toFixed(0)}`);
+					console.log(
+						`[RenderTiming] FINAL meshes=${this.group.children.length} renderMs=${renderTime.toFixed(0)}`
+					);
 				}
 
 				// Complete
@@ -1292,7 +1212,6 @@ export class SchematicObject extends EventEmitter {
 				}, 800);
 
 				resolvePromise({ meshes: finalMeshes, chunkMap });
-
 			} catch (error) {
 				performanceMonitor.endOperation("Process All Chunks");
 				performanceMonitor.endOperation("schematic-build-incremental");
@@ -1304,10 +1223,10 @@ export class SchematicObject extends EventEmitter {
 
 	/**
 	 * High-performance batched build mode
-	 * 
+	 *
 	 * Processes all chunks through a single worker that accumulates geometry,
 	 * then returns just a few merged meshes (one per category: solid, transparent, etc.)
-	 * 
+	 *
 	 * Benefits:
 	 * - Creates only 2-3 THREE.Mesh objects instead of hundreds
 	 * - Drastically reduces main thread work
@@ -1392,10 +1311,9 @@ export class SchematicObject extends EventEmitter {
 				blocks: blocksArray,
 				chunk_x: chunkData.chunk_x,
 				chunk_y: chunkData.chunk_y,
-				chunk_z: chunkData.chunk_z
+				chunk_z: chunkData.chunk_z,
 			});
 		}
-
 
 		// STEP 4: Process all chunks in batch mode
 		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);
@@ -1407,20 +1325,19 @@ export class SchematicObject extends EventEmitter {
 			(processed, total) => {
 				processedCount = processed;
 				const progress = 0.2 + (processed / total) * 0.7;
-				this.reportBuildProgress(
-					`Batch processing chunks...`,
-					progress,
-					total,
-					processed
-				);
+				this.reportBuildProgress(`Batch processing chunks...`, progress, total, processed);
 			}
 		);
 
 		performanceMonitor.endOperation("Process All Chunks");
 
 		// STEP 5: Add meshes to scene
-		this.reportBuildProgress("Adding batched meshes to scene...", 0.95, totalChunks, processedCount);
-
+		this.reportBuildProgress(
+			"Adding batched meshes to scene...",
+			0.95,
+			totalChunks,
+			processedCount
+		);
 
 		// Add meshes progressively to avoid GPU upload freeze
 		// Each mesh addition triggers GPU buffer upload, so we spread them out
@@ -1438,9 +1355,8 @@ export class SchematicObject extends EventEmitter {
 
 			// Let browser breathe - use RAF for real frame timing
 			if (i + MESHES_PER_FRAME < batchedMeshes.length) {
-				await new Promise<void>(r => requestAnimationFrame(() => r()));
+				await new Promise<void>((r) => requestAnimationFrame(() => r()));
 			}
-
 		}
 
 		this.group.updateMatrixWorld(true);
@@ -1471,17 +1387,14 @@ export class SchematicObject extends EventEmitter {
 
 		return {
 			meshes: batchedMeshes,
-			chunkMap: new Map([["batched", batchedMeshes]])
+			chunkMap: new Map([["batched", batchedMeshes]]),
 		};
 	}
 
-	public async buildSchematicMeshesInstanced(
-		schematicObject: SchematicObject
-	): Promise<{
+	public async buildSchematicMeshesInstanced(schematicObject: SchematicObject): Promise<{
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-
 		const overallStartTime = performance.now();
 
 		// Initialize instanced rendering
@@ -1495,7 +1408,6 @@ export class SchematicObject extends EventEmitter {
 		await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
 
 		const totalTime = performance.now() - overallStartTime;
-
 
 		// Return instanced meshes from scene graph
 		const instancedMeshes = Array.from(this.group.children);
@@ -1531,12 +1443,8 @@ export class SchematicObject extends EventEmitter {
 		if (visible && this.renderingBounds.enabled) {
 			// Create a box to represent the rendering bounds
 			const box = new THREE.Box3(
-				this.renderingBounds.min
-					.clone()
-					.add(new THREE.Vector3(-0.5, -0.5, -0.5)),
-				this.renderingBounds.max
-					.clone()
-					.add(new THREE.Vector3(-0.5, -0.5, -0.5))
+				this.renderingBounds.min.clone().add(new THREE.Vector3(-0.5, -0.5, -0.5)),
+				this.renderingBounds.max.clone().add(new THREE.Vector3(-0.5, -0.5, -0.5))
 			);
 
 			// Create a box helper to visualize the bounds
@@ -1586,7 +1494,7 @@ export class SchematicObject extends EventEmitter {
 		this.emitPropertyChanged("renderingBounds", {
 			min: this.renderingBounds.min.toArray(),
 			max: this.renderingBounds.max.toArray(),
-			enabled: this.renderingBounds.enabled
+			enabled: this.renderingBounds.enabled,
 		});
 	}
 
@@ -1635,22 +1543,11 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	// Keep the old method names for backward compatibility
-	public getChunkMeshAt(
-		chunkX: number,
-		chunkY: number,
-		chunkZ: number
-	): THREE.Mesh[] | null {
-		return this.getChunkObjectsAt(chunkX, chunkY, chunkZ) as
-			| THREE.Mesh[]
-			| null;
+	public getChunkMeshAt(chunkX: number, chunkY: number, chunkZ: number): THREE.Mesh[] | null {
+		return this.getChunkObjectsAt(chunkX, chunkY, chunkZ) as THREE.Mesh[] | null;
 	}
 
-	public setChunkMeshAt(
-		chunkX: number,
-		chunkY: number,
-		chunkZ: number,
-		meshes: THREE.Mesh[]
-	) {
+	public setChunkMeshAt(chunkX: number, chunkY: number, chunkZ: number, meshes: THREE.Mesh[]) {
 		this.setChunkObjectsAt(chunkX, chunkY, chunkZ, meshes);
 	}
 
@@ -1660,9 +1557,7 @@ export class SchematicObject extends EventEmitter {
 
 		this.group.traverse((child) => {
 			if (child instanceof THREE.Mesh) {
-				const materials = Array.isArray(child.material)
-					? child.material
-					: [child.material];
+				const materials = Array.isArray(child.material) ? child.material : [child.material];
 
 				materials.forEach((mat) => {
 					if (mat) {
@@ -1797,7 +1692,13 @@ export class SchematicObject extends EventEmitter {
 		let finalOptions = options;
 
 		// Check if 3rd argument (maxOrOptions) is a point (has x, y, z)
-		if (maxOrOptions && typeof maxOrOptions === 'object' && 'x' in maxOrOptions && 'y' in maxOrOptions && 'z' in maxOrOptions) {
+		if (
+			maxOrOptions &&
+			typeof maxOrOptions === "object" &&
+			"x" in maxOrOptions &&
+			"y" in maxOrOptions &&
+			"z" in maxOrOptions
+		) {
 			max = maxOrOptions as { x: number; y: number; z: number };
 		} else {
 			// It's options or undefined, so default max to min (single block region)
@@ -1808,7 +1709,13 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		return this.schematicRenderer.regionManager!.createRegion(scopedName, min, max, this.id, finalOptions);
+		return this.schematicRenderer.regionManager!.createRegion(
+			scopedName,
+			min,
+			max,
+			this.id,
+			finalOptions
+		);
 	}
 
 	// ========================================================================
@@ -1831,18 +1738,24 @@ export class SchematicObject extends EventEmitter {
 	 * Load definition regions from this schematic's metadata.
 	 * Definition regions are stored in NucleationDefinitions metadata,
 	 * typically created via CircuitBuilder, Insign, or direct API calls.
-	 * 
+	 *
 	 * @param autoShow - Whether to immediately show the regions (default: true based on renderer options)
 	 * @returns Array of created region names
 	 */
 	public loadDefinitionRegions(autoShow?: boolean): string[] {
 		if (!this.schematicRenderer.regionManager) {
-			console.warn('[SchematicObject] RegionManager not available, cannot load definition regions.');
+			console.warn(
+				"[SchematicObject] RegionManager not available, cannot load definition regions."
+			);
 			return [];
 		}
 
-		const shouldShow = autoShow ?? this.schematicRenderer.options.definitionRegionOptions?.showOnLoad ?? true;
-		const regionNames = this.schematicRenderer.regionManager.loadDefinitionRegionsFromSchematic(this.id, shouldShow);
+		const shouldShow =
+			autoShow ?? this.schematicRenderer.options.definitionRegionOptions?.showOnLoad ?? true;
+		const regionNames = this.schematicRenderer.regionManager.loadDefinitionRegionsFromSchematic(
+			this.id,
+			shouldShow
+		);
 
 		this._definitionRegionsVisible = shouldShow && regionNames.length > 0;
 
@@ -1870,7 +1783,8 @@ export class SchematicObject extends EventEmitter {
 	 * @returns The new visibility state
 	 */
 	public toggleDefinitionRegions(): boolean {
-		const isVisible = this.schematicRenderer.regionManager?.toggleDefinitionRegions(this.id) ?? false;
+		const isVisible =
+			this.schematicRenderer.regionManager?.toggleDefinitionRegions(this.id) ?? false;
 		this._definitionRegionsVisible = isVisible;
 		return isVisible;
 	}
@@ -1911,7 +1825,7 @@ export class SchematicObject extends EventEmitter {
 	/**
 	 * Creates a callable JavaScript function from this schematic using region-based IO.
 	 * This allows you to treat the schematic as a black-box function in JS.
-	 * 
+	 *
 	 * @param inputs List of input definitions
 	 * @param outputs List of output definitions
 	 * @returns A callable object to run the circuit
@@ -1920,18 +1834,24 @@ export class SchematicObject extends EventEmitter {
 		inputs: Array<{
 			name: string;
 			bits: number;
-			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper;
+			region:
+				| { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }
+				| string
+				| DefinitionRegionWrapper;
 			signed?: boolean;
-			mode?: 'binary' | 'signal';
+			mode?: "binary" | "signal";
 			blockFilter?: string | string[];
 			sort?: string | SortStrategyWrapper;
 		}>,
 		outputs: Array<{
 			name: string;
 			bits: number;
-			region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper;
+			region:
+				| { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }
+				| string
+				| DefinitionRegionWrapper;
 			signed?: boolean;
-			mode?: 'binary' | 'signal';
+			mode?: "binary" | "signal";
 			blockFilter?: string | string[];
 			sort?: string | SortStrategyWrapper;
 		}>
@@ -1944,12 +1864,18 @@ export class SchematicObject extends EventEmitter {
 		let builder = new CircuitBuilderWrapper(this.schematicWrapper);
 
 		// Helper to resolve region
-		const resolveRegion = (region: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | string | DefinitionRegionWrapper, filters?: string | string[]) => {
+		const resolveRegion = (
+			region:
+				| { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }
+				| string
+				| DefinitionRegionWrapper,
+			filters?: string | string[]
+		) => {
 			let defRegion: DefinitionRegionWrapper;
 
 			if (region instanceof DefinitionRegionWrapper) {
 				defRegion = region;
-			} else if (typeof region === 'string') {
+			} else if (typeof region === "string") {
 				// Try using getRegion to handle scoping automatically
 				const regionObj = this.getRegion(region);
 				if (!regionObj) {
@@ -1979,7 +1905,7 @@ export class SchematicObject extends EventEmitter {
 				const filterList = Array.isArray(filters) ? filters : [filters];
 				if (filterList.length > 0) {
 					// Apply first filter
-					let filteredRegion = defRegion.filterByBlock(this.schematicWrapper, filterList[0]);
+					const filteredRegion = defRegion.filterByBlock(this.schematicWrapper, filterList[0]);
 
 					// Apply subsequent filters and union results (OR logic)
 					for (let i = 1; i < filterList.length; i++) {
@@ -2004,7 +1930,7 @@ export class SchematicObject extends EventEmitter {
 		const resolveSort = (sort?: string | SortStrategyWrapper): SortStrategyWrapper | undefined => {
 			if (!sort) return undefined;
 			if (sort instanceof SortStrategyWrapper) return sort;
-			if (typeof sort === 'string') {
+			if (typeof sort === "string") {
 				return SortStrategyWrapper.fromString(sort);
 			}
 			return undefined;
@@ -2013,7 +1939,7 @@ export class SchematicObject extends EventEmitter {
 		// Add Inputs
 		for (const input of inputs) {
 			// If using signal mode (packed4), force bits to be at least 4 to match layout expectations
-			const effectiveBits = (input.mode === 'signal' && input.bits < 4) ? 4 : input.bits;
+			const effectiveBits = input.mode === "signal" && input.bits < 4 ? 4 : input.bits;
 
 			const type = input.signed
 				? IoTypeWrapper.signedInt(effectiveBits)
@@ -2022,39 +1948,19 @@ export class SchematicObject extends EventEmitter {
 			const region = resolveRegion(input.region, input.blockFilter);
 			const sortStrategy = resolveSort(input.sort);
 
-			if (input.mode === 'signal') {
+			if (input.mode === "signal") {
 				const layout = LayoutFunctionWrapper.packed4();
 				if (sortStrategy) {
-					builder = builder.withInputSorted(
-						input.name,
-						type,
-						layout,
-						region,
-						sortStrategy
-					);
+					builder = builder.withInputSorted(input.name, type, layout, region, sortStrategy);
 				} else {
-					builder = builder.withInput(
-						input.name,
-						type,
-						layout,
-						region
-					);
+					builder = builder.withInput(input.name, type, layout, region);
 				}
 			} else {
 				// Use Auto for default/binary mode
 				if (sortStrategy) {
-					builder = builder.withInputAutoSorted(
-						input.name,
-						type,
-						region,
-						sortStrategy
-					);
+					builder = builder.withInputAutoSorted(input.name, type, region, sortStrategy);
 				} else {
-					builder = builder.withInputAuto(
-						input.name,
-						type,
-						region
-					);
+					builder = builder.withInputAuto(input.name, type, region);
 				}
 			}
 		}
@@ -2062,7 +1968,7 @@ export class SchematicObject extends EventEmitter {
 		// Add Outputs
 		for (const output of outputs) {
 			// If using signal mode (packed4), force bits to be at least 4 to match layout expectations
-			const effectiveBits = (output.mode === 'signal' && output.bits < 4) ? 4 : output.bits;
+			const effectiveBits = output.mode === "signal" && output.bits < 4 ? 4 : output.bits;
 
 			const type = output.signed
 				? IoTypeWrapper.signedInt(effectiveBits)
@@ -2071,39 +1977,19 @@ export class SchematicObject extends EventEmitter {
 			const region = resolveRegion(output.region, output.blockFilter);
 			const sortStrategy = resolveSort(output.sort);
 
-			if (output.mode === 'signal') {
+			if (output.mode === "signal") {
 				const layout = LayoutFunctionWrapper.packed4();
 				if (sortStrategy) {
-					builder = builder.withOutputSorted(
-						output.name,
-						type,
-						layout,
-						region,
-						sortStrategy
-					);
+					builder = builder.withOutputSorted(output.name, type, layout, region, sortStrategy);
 				} else {
-					builder = builder.withOutput(
-						output.name,
-						type,
-						layout,
-						region
-					);
+					builder = builder.withOutput(output.name, type, layout, region);
 				}
 			} else {
 				// Use Auto for default/binary mode
 				if (sortStrategy) {
-					builder = builder.withOutputAutoSorted(
-						output.name,
-						type,
-						region,
-						sortStrategy
-					);
+					builder = builder.withOutputAutoSorted(output.name, type, region, sortStrategy);
 				} else {
-					builder = builder.withOutputAuto(
-						output.name,
-						type,
-						region
-					);
+					builder = builder.withOutputAuto(output.name, type, region);
 				}
 			}
 		}
@@ -2113,24 +1999,25 @@ export class SchematicObject extends EventEmitter {
 
 		// 4. Return the Interface
 		return {
-			run: (inputValues: Record<string, number | boolean>, maxTicks = 1000, mode: 'stable' | 'fixed' = 'stable') => {
+			run: (
+				inputValues: Record<string, number | boolean>,
+				maxTicks = 1000,
+				mode: "stable" | "fixed" = "stable"
+			) => {
 				// Sanitize inputs: Convert booleans to numbers (1/0)
 				const sanitizedInputs: Record<string, number> = {};
 				for (const [key, val] of Object.entries(inputValues)) {
-					sanitizedInputs[key] = typeof val === 'boolean' ? (val ? 1 : 0) : val;
+					sanitizedInputs[key] = typeof val === "boolean" ? (val ? 1 : 0) : val;
 				}
 
 				let executionMode;
-				if (mode === 'fixed') {
+				if (mode === "fixed") {
 					executionMode = ExecutionModeWrapper.fixedTicks(maxTicks);
 				} else {
 					executionMode = ExecutionModeWrapper.untilStable(2, maxTicks);
 				}
 
-				const result = executor.execute(
-					sanitizedInputs,
-					executionMode
-				);
+				const result = executor.execute(sanitizedInputs, executionMode);
 				return result;
 			},
 			reset: () => executor.reset(),
@@ -2146,20 +2033,20 @@ export class SchematicObject extends EventEmitter {
 				// unless we re-create the executor or if syncToSchematic keeps the simulation alive.
 				// Based on mchprs logic, sync usually updates the schematic data.
 			},
-			executor
+			executor,
 		};
 	}
 
 	private getPalettes(schematic: SchematicWrapper): any {
 		// Safety check for get_all_palettes
-		if (typeof schematic.get_all_palettes === 'function') {
+		if (typeof schematic.get_all_palettes === "function") {
 			return schematic.get_all_palettes();
 		}
 
 		console.warn("[SchematicObject] get_all_palettes missing, falling back to get_palette");
 
 		// Fallback to get_palette
-		if (typeof schematic.get_palette === 'function') {
+		if (typeof schematic.get_palette === "function") {
 			return { default: schematic.get_palette() };
 		}
 
@@ -2181,21 +2068,13 @@ export class SchematicObject extends EventEmitter {
 		return this.blockEntitiesMap;
 	}
 
-	public async setBlockNoRebuild(
-		position: THREE.Vector3 | number[],
-		blockType: string
-	) {
+	public async setBlockNoRebuild(position: THREE.Vector3 | number[], blockType: string) {
 		// performanceMonitor.startOperation("setBlockNoRebuild"); // Too much overhead for bulk operations
 		if (Array.isArray(position)) {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
 
-		this.schematicWrapper.set_block(
-			position.x,
-			position.y,
-			position.z,
-			blockType
-		);
+		this.schematicWrapper.set_block(position.x, position.y, position.z, blockType);
 
 		// Invalidate cached dimensions since we modified the schematic
 		this._cachedDimensions = null;
@@ -2214,13 +2093,7 @@ export class SchematicObject extends EventEmitter {
 			position = new THREE.Vector3(position[0], position[1], position[2]);
 		}
 
-		this.schematicWrapper.setBlockWithNbt(
-			position.x,
-			position.y,
-			position.z,
-			blockType,
-			nbtData
-		);
+		this.schematicWrapper.setBlockWithNbt(position.x, position.y, position.z, blockType, nbtData);
 		performanceMonitor.endOperation("setBlockWithNbt");
 	}
 
@@ -2232,7 +2105,7 @@ export class SchematicObject extends EventEmitter {
 		try {
 			return this.schematicWrapper.compileInsign();
 		} catch (e) {
-			console.warn('[SchematicObject] Insign compilation failed:', e);
+			console.warn("[SchematicObject] Insign compilation failed:", e);
 			return null;
 		}
 	}
@@ -2272,7 +2145,7 @@ export class SchematicObject extends EventEmitter {
 
 		// Rebuild all affected chunks in parallel
 		const rebuildPromises: Promise<void>[] = [];
-		for (let chunk of affectedChunks) {
+		for (const chunk of affectedChunks) {
 			const [chunkX, chunkY, chunkZ] = chunk.split(",").map((v) => parseInt(v));
 			rebuildPromises.push(this.rebuildChunk(chunkX, chunkY, chunkZ));
 		}
@@ -2291,9 +2164,7 @@ export class SchematicObject extends EventEmitter {
 		rebuild: boolean = false
 	) {
 		const sourceSchematic =
-			this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(
-				sourceSchematicName
-			);
+			this.sceneManager?.schematicRenderer?.schematicManager?.getSchematic(sourceSchematicName);
 		if (!sourceSchematic) {
 			throw new Error(`Schematic ${sourceSchematicName} not found`);
 		}
@@ -2304,11 +2175,7 @@ export class SchematicObject extends EventEmitter {
 			sourceMax = new THREE.Vector3(sourceMax[0], sourceMax[1], sourceMax[2]);
 		}
 		if (Array.isArray(targetPosition)) {
-			targetPosition = new THREE.Vector3(
-				targetPosition[0],
-				targetPosition[1],
-				targetPosition[2]
-			);
+			targetPosition = new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]);
 		}
 
 		const sourceDimensions = sourceSchematic.getDimensions();
@@ -2423,10 +2290,7 @@ export class SchematicObject extends EventEmitter {
 		for (let x = 0; x < size.x; x++) {
 			for (let y = 0; y < size.y; y++) {
 				for (let z = 0; z < size.z; z++) {
-					blocks.push([
-						position.clone().add(new THREE.Vector3(x, y, z)),
-						blockType,
-					]);
+					blocks.push([position.clone().add(new THREE.Vector3(x, y, z)), blockType]);
 				}
 			}
 		}
@@ -2568,11 +2432,7 @@ export class SchematicObject extends EventEmitter {
 		const min = this.position.clone();
 		const max = min
 			.clone()
-			.add(
-				new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2]).multiply(
-					this.scale
-				)
-			);
+			.add(new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2]).multiply(this.scale));
 
 		return (
 			position.x >= min.x &&
@@ -2595,8 +2455,11 @@ export class SchematicObject extends EventEmitter {
 	public getTightWorldBox(): THREE.Box3 {
 		const tightMin = this.getTightBoundsMin();
 		const tightDimensions = this.getTightDimensions();
-		const hasTightBounds = tightMin !== null &&
-			tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0;
+		const hasTightBounds =
+			tightMin !== null &&
+			tightDimensions[0] > 0 &&
+			tightDimensions[1] > 0 &&
+			tightDimensions[2] > 0;
 
 		const box = new THREE.Box3();
 		if (hasTightBounds) {
@@ -2695,8 +2558,7 @@ export class SchematicObject extends EventEmitter {
 						// Get block properties using the correct method name
 						let properties = {};
 						try {
-							const blockWithProps =
-								this.schematicWrapper.get_block_with_properties?.(x, y, z);
+							const blockWithProps = this.schematicWrapper.get_block_with_properties?.(x, y, z);
 							if (blockWithProps) {
 								// Extract properties from BlockStateWrapper if available
 								properties = blockWithProps.properties || {};
@@ -2715,12 +2577,13 @@ export class SchematicObject extends EventEmitter {
 							chunk_x: Math.floor(x / this.chunkDimensions.chunkWidth),
 							chunk_y: Math.floor(y / this.chunkDimensions.chunkHeight),
 							chunk_z: Math.floor(z / this.chunkDimensions.chunkLength),
-							stateKey: `${blockName}${Object.keys(properties).length > 0
-								? `[${Object.entries(properties)
-									.map(([k, v]) => `${k}=${v}`)
-									.join(",")}]`
-								: ""
-								}`, // Generate stateKey
+							stateKey: `${blockName}${
+								Object.keys(properties).length > 0
+									? `[${Object.entries(properties)
+											.map(([k, v]) => `${k}=${v}`)
+											.join(",")}]`
+									: ""
+							}`, // Generate stateKey
 						};
 
 						// Apply filter if provided

@@ -1,37 +1,64 @@
 // managers/RenderManager.ts
 import * as THREE from "three";
-import { EffectComposer, RenderPass, EffectPass } from "postprocessing";
-import { SMAAEffect } from "postprocessing";
-// @ts-ignore
-import { N8AOPostPass } from "n8ao";
-import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
+// Lazy-loaded postprocessing imports to reduce initial bundle size (-3.3MB)
+// import { EffectComposer, RenderPass, EffectPass } from "postprocessing";
+// import { SMAAEffect } from "postprocessing";
+// import { N8AOPostPass } from "n8ao";
+// import { GammaCorrectionEffect } from "../effects/GammaCorrectionEffect";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
+// Dynamic imports for post-processing (loaded on-demand)
+let EffectComposer: any = null;
+let RenderPass: any = null;
+let EffectPass: any = null;
+let SMAAEffect: any = null;
+let N8AOPostPass: any = null;
+let GammaCorrectionEffect: any = null;
+let postprocessingLoaded = false;
+
+async function loadPostProcessing() {
+	if (postprocessingLoaded) return;
+	console.log("[RenderManager] Lazy-loading post-processing effects...");
+	const postprocessing = await import("postprocessing");
+	// @ts-ignore - n8ao doesn't have TypeScript definitions
+	const n8ao = await import("n8ao");
+	const gammaEffect = await import("../effects/GammaCorrectionEffect");
+
+	EffectComposer = postprocessing.EffectComposer;
+	RenderPass = postprocessing.RenderPass;
+	EffectPass = postprocessing.EffectPass;
+	SMAAEffect = postprocessing.SMAAEffect;
+	N8AOPostPass = n8ao.N8AOPostPass;
+	GammaCorrectionEffect = gammaEffect.GammaCorrectionEffect;
+	postprocessingLoaded = true;
+	console.log("[RenderManager] Post-processing effects loaded");
+}
+
 // HDRI Cache using IndexedDB
-const HDRI_CACHE_DB_NAME = 'schematic-renderer-hdri-cache';
-const HDRI_CACHE_STORE_NAME = 'hdri-textures';
+const HDRI_CACHE_DB_NAME = "schematic-renderer-hdri-cache";
+const HDRI_CACHE_STORE_NAME = "hdri-textures";
 const HDRI_CACHE_VERSION = 1;
 
 let hdriCacheDb: IDBDatabase | null = null;
 
 async function openHdriCacheDb(): Promise<IDBDatabase> {
 	if (hdriCacheDb) return hdriCacheDb;
-	
+
 	return new Promise((resolve, reject) => {
 		const request = indexedDB.open(HDRI_CACHE_DB_NAME, HDRI_CACHE_VERSION);
-		
+
 		request.onerror = () => reject(request.error);
 		request.onsuccess = () => {
 			hdriCacheDb = request.result;
 			resolve(hdriCacheDb);
 		};
-		
+
 		request.onupgradeneeded = (event) => {
 			const db = (event.target as IDBOpenDBRequest).result;
 			if (!db.objectStoreNames.contains(HDRI_CACHE_STORE_NAME)) {
-				db.createObjectStore(HDRI_CACHE_STORE_NAME, { keyPath: 'url' });
+				db.createObjectStore(HDRI_CACHE_STORE_NAME, { keyPath: "url" });
 			}
 		};
 	});
@@ -41,10 +68,10 @@ async function getCachedHdri(url: string): Promise<ArrayBuffer | null> {
 	try {
 		const db = await openHdriCacheDb();
 		return new Promise((resolve) => {
-			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, 'readonly');
+			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, "readonly");
 			const store = transaction.objectStore(HDRI_CACHE_STORE_NAME);
 			const request = store.get(url);
-			
+
 			request.onsuccess = () => {
 				if (request.result) {
 					console.log(`[HDRI Cache] Cache hit for: ${url}`);
@@ -64,7 +91,7 @@ async function cacheHdri(url: string, data: ArrayBuffer): Promise<void> {
 	try {
 		const db = await openHdriCacheDb();
 		return new Promise((resolve) => {
-			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, 'readwrite');
+			const transaction = db.transaction(HDRI_CACHE_STORE_NAME, "readwrite");
 			const store = transaction.objectStore(HDRI_CACHE_STORE_NAME);
 			store.put({ url, data, timestamp: Date.now() });
 			transaction.oncomplete = () => {
@@ -90,7 +117,7 @@ type AnyRenderer = THREE.WebGLRenderer | any; // WebGPURenderer type
 export class RenderManager {
 	private schematicRenderer: SchematicRenderer;
 	public renderer!: AnyRenderer;
-	private composer!: EffectComposer | null;
+	private composer!: any | null; // EffectComposer type (loaded dynamically)
 	// @ts-expect-error Reserved for future WebGPU post-processing support
 	private _postProcessing: any = null;
 	private passes: Map<string, any> = new Map();
@@ -172,17 +199,23 @@ export class RenderManager {
 				try {
 					await this.initWebGPURenderer();
 					this._isWebGPU = true;
-					console.log('%c[RenderManager] WebGPU Renderer initialized', 'color: #4caf50; font-weight: bold');
+					console.log(
+						"%c[RenderManager] WebGPU Renderer initialized",
+						"color: #4caf50; font-weight: bold"
+					);
 				} catch (error) {
-					console.warn('[RenderManager] WebGPU initialization failed, falling back to WebGL:', error);
-					this.initWebGLRenderer();
+					console.warn(
+						"[RenderManager] WebGPU initialization failed, falling back to WebGL:",
+						error
+					);
+					await this.initWebGLRenderer();
 				}
 			} else {
-				console.log('[RenderManager] WebGPU not available, using WebGL');
-				this.initWebGLRenderer();
+				console.log("[RenderManager] WebGPU not available, using WebGL");
+				await this.initWebGLRenderer();
 			}
 		} else {
-			this.initWebGLRenderer();
+			await this.initWebGLRenderer();
 		}
 
 		this.setupEventListeners();
@@ -196,7 +229,9 @@ export class RenderManager {
 			this.schematicRenderer.options.hdri !== ""
 		) {
 			if (this._isWebGPU) {
-				console.warn('[RenderManager] HDRI backgrounds are not yet supported in WebGPU mode. Using solid color with enhanced lighting.');
+				console.warn(
+					"[RenderManager] HDRI backgrounds are not yet supported in WebGPU mode. Using solid color with enhanced lighting."
+				);
 				// Set a nice sky color
 				this.schematicRenderer.sceneManager.scene.background = new THREE.Color(0x87ceeb);
 
@@ -234,7 +269,7 @@ export class RenderManager {
 
 			return true;
 		} catch (error) {
-			console.warn('[RenderManager] WebGPU check failed:', error);
+			console.warn("[RenderManager] WebGPU check failed:", error);
 			return false;
 		}
 	}
@@ -266,11 +301,11 @@ export class RenderManager {
 		// SceneManager stores lights in a Map, access via getLight if available
 		if ((sceneManager as any).lights) {
 			const lights = (sceneManager as any).lights as Map<string, THREE.Light>;
-			const ambientLight = lights.get('ambientLight') as THREE.AmbientLight;
+			const ambientLight = lights.get("ambientLight") as THREE.AmbientLight;
 			if (ambientLight) {
 				ambientLight.intensity = 3.5; // Boost ambient significantly
 			}
-			const directionalLight = lights.get('directionalLight') as THREE.DirectionalLight;
+			const directionalLight = lights.get("directionalLight") as THREE.DirectionalLight;
 			if (directionalLight) {
 				directionalLight.intensity = 1.5; // Boost directional
 			}
@@ -280,24 +315,24 @@ export class RenderManager {
 		const hemiLight = new THREE.HemisphereLight(
 			0x87ceeb, // Sky color (light blue)
 			0x666666, // Ground color (medium gray for better contrast)
-			2.0       // Higher intensity
+			2.0 // Higher intensity
 		);
-		hemiLight.name = 'webgpuHemiLight';
+		hemiLight.name = "webgpuHemiLight";
 		scene.add(hemiLight);
 
 		// Add a fill light from the opposite direction for better shading
 		const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
 		fillLight.position.set(-15, 15, 15);
-		fillLight.name = 'webgpuFillLight';
+		fillLight.name = "webgpuFillLight";
 		scene.add(fillLight);
 
 		// Add a back light for rim lighting effect
 		const backLight = new THREE.DirectionalLight(0xffffcc, 0.4);
 		backLight.position.set(0, -10, -20);
-		backLight.name = 'webgpuBackLight';
+		backLight.name = "webgpuBackLight";
 		scene.add(backLight);
 
-		console.log('[RenderManager] WebGPU environment lighting configured');
+		console.log("[RenderManager] WebGPU environment lighting configured");
 	}
 
 	private setInitialSize(): void {
@@ -326,17 +361,17 @@ export class RenderManager {
 	 */
 	private async initWebGPURenderer(): Promise<void> {
 		// Dynamically import WebGPU modules
-		const webgpuModule = await import('three/webgpu');
+		const webgpuModule = await import("three/webgpu");
 		WebGPURenderer = webgpuModule.WebGPURenderer;
 		_PostProcessing = webgpuModule.PostProcessing;
 
 		// Try to import Inspector (no types available yet)
 		try {
 			// @ts-expect-error Inspector module doesn't have type definitions yet
-			const inspectorModule = await import('three/examples/jsm/inspector/Inspector.js');
+			const inspectorModule = await import("three/examples/jsm/inspector/Inspector.js");
 			Inspector = inspectorModule.Inspector;
 		} catch (e) {
-			console.warn('[RenderManager] Three.js Inspector not available:', e);
+			console.warn("[RenderManager] Three.js Inspector not available:", e);
 		}
 
 		this.renderer = new WebGPURenderer({
@@ -364,9 +399,9 @@ export class RenderManager {
 			try {
 				this.inspector = new Inspector();
 				this.inspector.setRenderer(this.renderer);
-				console.log('[RenderManager] Three.js Inspector initialized');
+				console.log("[RenderManager] Three.js Inspector initialized");
 			} catch (e) {
-				console.warn('[RenderManager] Failed to initialize Inspector:', e);
+				console.warn("[RenderManager] Failed to initialize Inspector:", e);
 			}
 		}
 
@@ -385,7 +420,7 @@ export class RenderManager {
 	/**
 	 * Initialize WebGL Renderer (original code)
 	 */
-	private initWebGLRenderer(): void {
+	private async initWebGLRenderer(): Promise<void> {
 		this.renderer = new THREE.WebGLRenderer({
 			canvas: this.schematicRenderer.canvas,
 			alpha: true,
@@ -408,11 +443,11 @@ export class RenderManager {
 
 		// this.renderer.resetState();
 
-		this.initComposer();
+		await this.initComposer();
 		this.initDefaultPasses(this.schematicRenderer.options);
 	}
 
-	private initComposer(): void {
+	private async initComposer(): Promise<void> {
 		if (this._isWebGPU) return; // WebGPU uses different post-processing
 
 		const postOpts = this.schematicRenderer.options.postProcessingOptions;
@@ -420,12 +455,17 @@ export class RenderManager {
 		if (postOpts && postOpts.enabled === false) return;
 
 		// If all individual effects disabled, don't create composer
-		if (postOpts &&
+		if (
+			postOpts &&
 			postOpts.enableSSAO === false &&
 			postOpts.enableSMAA === false &&
-			postOpts.enableGamma === false) {
+			postOpts.enableGamma === false
+		) {
 			return;
 		}
+
+		// Lazy-load post-processing modules only when needed
+		await loadPostProcessing();
 
 		this.composer = new EffectComposer(this.renderer);
 		const renderPass = new RenderPass(
@@ -472,15 +512,11 @@ export class RenderManager {
 	 * Check if current camera is orthographic (isometric)
 	 */
 	private isOrthographicCamera(): boolean {
-		const activeCamera =
-			this.schematicRenderer.cameraManager.activeCamera.camera;
+		const activeCamera = this.schematicRenderer.cameraManager.activeCamera.camera;
 		return activeCamera instanceof THREE.OrthographicCamera;
 	}
 
-	public setupHDRIBackground(
-		hdriPath: string,
-		backgroundOnly: boolean = true
-	): void {
+	public setupHDRIBackground(hdriPath: string, backgroundOnly: boolean = true): void {
 		this.hdriPath = hdriPath;
 		this.hdriBackgroundOnly = backgroundOnly;
 
@@ -488,27 +524,17 @@ export class RenderManager {
 
 		const canvas = this.renderer.domElement;
 		canvas.removeEventListener("webglcontextlost", this.handleContextLost);
-		canvas.removeEventListener(
-			"webglcontextrestored",
-			this.handleContextRestored
-		);
+		canvas.removeEventListener("webglcontextrestored", this.handleContextRestored);
 
 		// Only add context lost handlers for WebGL
 		if (!this._isWebGPU) {
 			canvas.addEventListener("webglcontextlost", this.handleContextLost, false);
-			canvas.addEventListener(
-				"webglcontextrestored",
-				this.handleContextRestored,
-				false
-			);
+			canvas.addEventListener("webglcontextrestored", this.handleContextRestored, false);
 		}
 	}
 
 	private isPMREMGeneratorDisposed(): boolean {
-		return (
-			!this.pmremGenerator ||
-			(this.pmremGenerator as any)._blurMaterial === null
-		);
+		return !this.pmremGenerator || (this.pmremGenerator as any)._blurMaterial === null;
 	}
 
 	private loadHDRI(hdriPath: string, backgroundOnly: boolean): void {
@@ -518,38 +544,51 @@ export class RenderManager {
 
 	private async loadHDRIWithCache(hdriPath: string, backgroundOnly: boolean): Promise<void> {
 		const hdriLoader = new RGBELoader();
-		
+		hdriLoader.setDataType(THREE.HalfFloatType);
+
 		// Check cache first
 		const cachedData = await getCachedHdri(hdriPath);
-		
+
 		if (cachedData) {
 			// Load from cached ArrayBuffer
 			try {
-				const texture = hdriLoader.parse(cachedData);
-				this.applyHDRITexture(texture, backgroundOnly, hdriPath);
-				return;
+				const parseResult = hdriLoader.parse(cachedData);
+				// Cast to DataTexture since parse returns RGBE type but actually gives us a texture
+				const texture = parseResult as unknown as THREE.DataTexture;
+				// Ensure texture has required properties for PMREMGenerator
+				if (texture && texture.image && texture.image.width && texture.image.height) {
+					texture.mapping = THREE.EquirectangularReflectionMapping;
+					this.applyHDRITexture(texture, backgroundOnly, hdriPath);
+					return;
+				} else {
+					console.warn("[HDRI Cache] Cached texture missing required properties, fetching fresh");
+				}
 			} catch (error) {
-				console.warn('[HDRI Cache] Failed to parse cached data, fetching fresh:', error);
+				console.warn("[HDRI Cache] Failed to parse cached data, fetching fresh:", error);
 			}
 		}
-		
-		// Fetch and cache
-		try {
-			const response = await fetch(hdriPath);
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
-			
-			const arrayBuffer = await response.arrayBuffer();
-			
-			// Cache the raw data
-			cacheHdri(hdriPath, arrayBuffer);
-			
-			// Parse and apply
-			const texture = hdriLoader.parse(arrayBuffer);
-			this.applyHDRITexture(texture, backgroundOnly, hdriPath);
-		} catch (error) {
-			console.error("HDRI loading failed:", error);
-			this.eventEmitter.emit("hdriError", { error });
-		}
+
+		// Fetch and cache using the standard load method which properly sets all texture properties
+		hdriLoader.load(
+			hdriPath,
+			(texture) => {
+				texture.mapping = THREE.EquirectangularReflectionMapping;
+				this.applyHDRITexture(texture, backgroundOnly, hdriPath);
+
+				// Cache the raw data for next time by re-fetching (load doesn't expose ArrayBuffer)
+				fetch(hdriPath)
+					.then((response) => response.arrayBuffer())
+					.then((arrayBuffer) => cacheHdri(hdriPath, arrayBuffer))
+					.catch(() => {
+						/* Ignore cache errors */
+					});
+			},
+			undefined,
+			(error) => {
+				console.error("HDRI loading failed:", error);
+				this.eventEmitter.emit("hdriError", { error });
+			}
+		);
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -567,22 +606,21 @@ export class RenderManager {
 		this.currentEnvMap = envMap;
 
 		if (backgroundOnly) {
-			const backgroundTexture = new THREE.WebGLCubeRenderTarget(
-				1024
-			).fromEquirectangularTexture(this.renderer, texture);
+			const backgroundTexture = new THREE.WebGLCubeRenderTarget(1024).fromEquirectangularTexture(
+				this.renderer,
+				texture
+			);
 
 			// Only set HDRI background if not in isometric mode
 			if (!this.isOrthographicCamera()) {
-				this.schematicRenderer.sceneManager.scene.background =
-					backgroundTexture.texture;
+				this.schematicRenderer.sceneManager.scene.background = backgroundTexture.texture;
 				// Store as original background for camera switching
 				this.originalBackground = backgroundTexture.texture;
 			} else {
 				// Store for later use when switching back to perspective
 				this.originalBackground = backgroundTexture.texture;
 				// Keep isometric background
-				this.schematicRenderer.sceneManager.scene.background =
-					this.isometricBackground;
+				this.schematicRenderer.sceneManager.scene.background = this.isometricBackground;
 			}
 		} else {
 			this.schematicRenderer.sceneManager.scene.environment = envMap;
@@ -591,8 +629,7 @@ export class RenderManager {
 				this.originalBackground = envMap;
 			} else {
 				this.originalBackground = envMap;
-				this.schematicRenderer.sceneManager.scene.background =
-					this.isometricBackground;
+				this.schematicRenderer.sceneManager.scene.background = this.isometricBackground;
 			}
 		}
 
@@ -609,8 +646,7 @@ export class RenderManager {
 
 		// If currently in isometric mode, update the scene background immediately
 		if (this.isOrthographicCamera()) {
-			this.schematicRenderer.sceneManager.scene.background =
-				this.isometricBackground;
+			this.schematicRenderer.sceneManager.scene.background = this.isometricBackground;
 		}
 	}
 
@@ -637,7 +673,7 @@ export class RenderManager {
 
 			this.contextLost = false;
 
-			this.initWebGLRenderer();
+			await this.initWebGLRenderer();
 			this.updateCanvasSize();
 
 			if (this.hdriPath) {
@@ -665,9 +701,7 @@ export class RenderManager {
 		const effects = [];
 
 		if (postOpts?.enableGamma !== false) {
-			const gammaCorrectionEffect = new GammaCorrectionEffect(
-				options.gamma ?? 0.5
-			);
+			const gammaCorrectionEffect = new GammaCorrectionEffect(options.gamma ?? 0.5);
 			this.passes.set("gammaCorrection", gammaCorrectionEffect);
 			effects.push(gammaCorrectionEffect);
 		}
@@ -716,7 +750,7 @@ export class RenderManager {
 			this.passes.set("effectPass", effectPass);
 		} else if (this.composer.passes.length > 1) {
 			// If we have other passes (like SSAO) but no effect pass, make sure the last pass renders to screen
-			// N8AO pass usually renders to screen if it's the last one? 
+			// N8AO pass usually renders to screen if it's the last one?
 			// N8AO might need renderToScreen set manually if it's the final pass
 			const lastPass = this.composer.passes[this.composer.passes.length - 1];
 			if (lastPass) {
@@ -903,9 +937,7 @@ export class RenderManager {
 		if (!this._isWebGPU) {
 			const gl = renderer.getContext();
 			if (!gl || gl.isContextLost()) {
-				console.warn(
-					"[RenderManager] Attempted to render with lost WebGL context for stats."
-				);
+				console.warn("[RenderManager] Attempted to render with lost WebGL context for stats.");
 				this.contextLost = true;
 				return { renderTimeMs: 0, rendererInfo: renderer.info };
 			}
@@ -924,10 +956,7 @@ export class RenderManager {
 				this.renderer.render(scene, camera);
 			}
 		} catch (error) {
-			console.error(
-				"[RenderManager] Error during renderSingleFrameAndGetStats:",
-				error
-			);
+			console.error("[RenderManager] Error during renderSingleFrameAndGetStats:", error);
 			this.eventEmitter.emit("renderError", { error });
 			return {
 				renderTimeMs: performance.now() - renderStartTime,
@@ -965,7 +994,7 @@ export class RenderManager {
 
 				// Resolve timestamp queries to prevent overflow (for Inspector)
 				if (this.renderer.resolveTimestampsAsync) {
-					this.renderer.resolveTimestampsAsync('render').catch(() => {
+					this.renderer.resolveTimestampsAsync("render").catch(() => {
 						// Silently ignore - timestamps are optional for profiling
 					});
 				}
@@ -1059,10 +1088,7 @@ export class RenderManager {
 		window.removeEventListener("resize", this.updateCanvasSize);
 		const canvas = this.renderer.domElement;
 		canvas.removeEventListener("webglcontextlost", this.handleContextLost);
-		canvas.removeEventListener(
-			"webglcontextrestored",
-			this.handleContextRestored
-		);
+		canvas.removeEventListener("webglcontextrestored", this.handleContextRestored);
 
 		this.passes.forEach((pass) => {
 			if (pass.dispose) pass.dispose();

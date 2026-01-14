@@ -18,13 +18,12 @@ export class CustomIoHighlight implements Highlight {
 			"customIoPositionsChanged",
 			this.onCustomIoPositionsChanged
 		);
-		this.schematicRenderer.eventEmitter.on(
-			"simulationInitialized",
-			this.onSimulationInitialized
-		);
+		this.schematicRenderer.eventEmitter.on("simulationInitialized", this.onSimulationInitialized);
 	}
 
-	private onCustomIoPositionsChanged = (data: { positions: Array<{ x: number; y: number; z: number }> }) => {
+	private onCustomIoPositionsChanged = (data: {
+		positions: Array<{ x: number; y: number; z: number }>;
+	}) => {
 		this.updateMarkers(data.positions);
 	};
 
@@ -48,10 +47,7 @@ export class CustomIoHighlight implements Highlight {
 			"customIoPositionsChanged",
 			this.onCustomIoPositionsChanged
 		);
-		this.schematicRenderer.eventEmitter.off(
-			"simulationInitialized",
-			this.onSimulationInitialized
-		);
+		this.schematicRenderer.eventEmitter.off("simulationInitialized", this.onSimulationInitialized);
 	}
 
 	public setVisible(visible: boolean) {
@@ -69,8 +65,8 @@ export class CustomIoHighlight implements Highlight {
 	private updateMarkers(positions: Array<{ x: number; y: number; z: number }>) {
 		// Remove markers that are no longer in the list
 		const currentKeys = Object.keys(this.markers);
-		const newKeys = positions.map(p => `${p.x},${p.y},${p.z}`);
-		
+		const newKeys = positions.map((p) => `${p.x},${p.y},${p.z}`);
+
 		for (const key of currentKeys) {
 			if (!newKeys.includes(key)) {
 				this.removeMarker(key);
@@ -94,8 +90,8 @@ export class CustomIoHighlight implements Highlight {
 		// Get the schematic's world offset
 		// Schematics are usually positioned at their min coordinates
 		const schematics = this.schematicRenderer.schematicManager?.getAllSchematics();
-		let schematicOffset = new THREE.Vector3(0, 0, 0);
-		
+		const schematicOffset = new THREE.Vector3(0, 0, 0);
+
 		if (schematics && schematics.length > 0) {
 			// Use the first schematic's position as the offset
 			const firstSchematic = schematics[0];
@@ -165,7 +161,7 @@ export class CustomIoHighlight implements Highlight {
 
 		// Create sprite from canvas
 		const texture = new THREE.CanvasTexture(canvas);
-		const spriteMaterial = new THREE.SpriteMaterial({ 
+		const spriteMaterial = new THREE.SpriteMaterial({
 			map: texture,
 			transparent: true,
 			depthTest: false, // Always render on top
@@ -180,21 +176,17 @@ export class CustomIoHighlight implements Highlight {
 		// We'll use the group as the mesh
 		this.schematicRenderer.sceneManager.scene.add(group);
 		this.schematicRenderer.sceneManager.scene.add(sprite);
-		this.markers[key] = { 
+		this.markers[key] = {
 			mesh: group as any, // Store group as mesh
-			label: sprite 
+			label: sprite,
 		};
 	}
 
 	private removeMarker(key: string) {
 		if (this.markers[key]) {
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.markers[key].mesh
-			);
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.markers[key].label
-			);
-			
+			this.schematicRenderer.sceneManager.scene.remove(this.markers[key].mesh);
+			this.schematicRenderer.sceneManager.scene.remove(this.markers[key].label);
+
 			// Dispose geometries and materials
 			const group = this.markers[key].mesh as any;
 			if (group && group.children) {
@@ -209,7 +201,7 @@ export class CustomIoHighlight implements Highlight {
 					}
 				});
 			}
-			
+
 			delete this.markers[key];
 		}
 	}
@@ -220,7 +212,6 @@ export class CustomIoHighlight implements Highlight {
 		}
 		this.markers = {};
 	}
-
 
 	/**
 	 * Public method to add a custom IO marker at a position
@@ -249,5 +240,3 @@ export class CustomIoHighlight implements Highlight {
 		}
 	}
 }
-
-

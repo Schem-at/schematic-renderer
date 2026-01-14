@@ -101,8 +101,8 @@ export class CameraManager extends EventEmitter {
 			// Using slightly adjusted angles for better visualization
 			rotation: [
 				-Math.atan(1 / Math.sqrt(2)), // ~35.264° pitch for true isometric
-				(45 * Math.PI) / 180,          // 45° yaw for isometric
-				0
+				(45 * Math.PI) / 180, // 45° yaw for isometric
+				0,
 			] as const,
 			controlType: "orbit" as const,
 			fov: 45, // FOV for orthographic camera
@@ -153,10 +153,7 @@ export class CameraManager extends EventEmitter {
 		},
 	} as const;
 
-	constructor(
-		schematicRenderer: SchematicRenderer,
-		options: CameraManagerOptions = {}
-	) {
+	constructor(schematicRenderer: SchematicRenderer, options: CameraManagerOptions = {}) {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.rendererDomElement = this.schematicRenderer.canvas;
@@ -176,14 +173,12 @@ export class CameraManager extends EventEmitter {
 		const defaultPresetName = options.defaultCameraPreset || "perspective";
 		const defaultPreset =
 			CameraManager.CAMERA_PRESETS[
-			defaultPresetName as keyof typeof CameraManager.CAMERA_PRESETS
+				defaultPresetName as keyof typeof CameraManager.CAMERA_PRESETS
 			] || CameraManager.CAMERA_PRESETS.perspective;
 		this.activeControlKey = `${defaultPresetName}-${defaultPreset.controlType}`;
 
 		if (options.defaultCameraPreset) {
-			console.log(
-				`Switching to default camera preset: ${options.defaultCameraPreset}`
-			);
+			console.log(`Switching to default camera preset: ${options.defaultCameraPreset}`);
 			this.activeCameraKey = options.defaultCameraPreset; // Set active camera before switch
 			this.switchCameraPreset(options.defaultCameraPreset);
 		}
@@ -227,7 +222,7 @@ export class CameraManager extends EventEmitter {
 		}
 		const initialPreset =
 			CameraManager.CAMERA_PRESETS[
-			this.activeCameraKey as keyof typeof CameraManager.CAMERA_PRESETS
+				this.activeCameraKey as keyof typeof CameraManager.CAMERA_PRESETS
 			];
 		this.activeControlKey = `${this.activeCameraKey}-${initialPreset.controlType}`;
 
@@ -266,10 +261,7 @@ export class CameraManager extends EventEmitter {
 		}
 
 		// Don't auto-start orbit here if we're going to zoom first
-		if (
-			this.schematicRenderer.options.enableAutoOrbit &&
-			!this.cameraOptions.enableZoomInOnLoad
-		) {
+		if (this.schematicRenderer.options.enableAutoOrbit && !this.cameraOptions.enableZoomInOnLoad) {
 			this.startAutoOrbit();
 		}
 	}
@@ -346,12 +338,8 @@ export class CameraManager extends EventEmitter {
 				let frame = 0;
 				let lastFrameTime = performance.now();
 
-				this.animationStartPosition.copy(
-					this.activeCamera.position as THREE.Vector3
-				);
-				this.animationStartRotation.copy(
-					this.activeCamera.rotation as THREE.Euler
-				);
+				this.animationStartPosition.copy(this.activeCamera.position as THREE.Vector3);
+				this.animationStartRotation.copy(this.activeCamera.rotation as THREE.Euler);
 
 				if (updateControls) {
 					const controls = this.controls.get(this.activeControlKey);
@@ -452,9 +440,7 @@ export class CameraManager extends EventEmitter {
 
 	public switchCameraPreset(presetName: string): void {
 		const preset =
-			CameraManager.CAMERA_PRESETS[
-			presetName as keyof typeof CameraManager.CAMERA_PRESETS
-			];
+			CameraManager.CAMERA_PRESETS[presetName as keyof typeof CameraManager.CAMERA_PRESETS];
 		if (!preset) {
 			console.warn(`Preset ${presetName} not found`);
 			return;
@@ -508,9 +494,7 @@ export class CameraManager extends EventEmitter {
 
 		// Update renderer camera if RenderManager exists
 		if (this.schematicRenderer.renderManager) {
-			this.schematicRenderer.renderManager.updateCamera(
-				this.activeCamera.camera
-			);
+			this.schematicRenderer.renderManager.updateCamera(this.activeCamera.camera);
 		}
 
 		// Emit change event
@@ -604,9 +588,7 @@ export class CameraManager extends EventEmitter {
 		if (!controls) return;
 
 		if (this.activeControlKey.includes("creative")) {
-			const speed =
-				CameraManager.CAMERA_PRESETS.perspective_fpv.controlSettings
-					?.movementSpeed;
+			const speed = CameraManager.CAMERA_PRESETS.perspective_fpv.controlSettings?.movementSpeed;
 			if (speed) {
 				CreativeControls.update(controls, speed);
 			}
@@ -629,8 +611,7 @@ export class CameraManager extends EventEmitter {
 				// When aspect ratio changes, orthographic cameras need their frustum recalculated
 				// to maintain proper framing if focusOnSchematics was called.
 				// For now, just update using a fixed frustum size, but ideally, it should re-focus.
-				const frustumHeight =
-					cameraWrapper.camera.top - cameraWrapper.camera.bottom; // Preserve current height
+				const frustumHeight = cameraWrapper.camera.top - cameraWrapper.camera.bottom; // Preserve current height
 				cameraWrapper.camera.left = (-frustumHeight * aspect) / 2;
 				cameraWrapper.camera.right = (frustumHeight * aspect) / 2;
 				// cameraWrapper.camera.top = frustumHeight / 2; // Already set
@@ -660,8 +641,7 @@ export class CameraManager extends EventEmitter {
 		if (!this.schematicRenderer.schematicManager) {
 			return;
 		}
-		const averagePosition =
-			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		const averagePosition = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
 		this.activeCamera.lookAt(averagePosition);
 	}
 
@@ -688,7 +668,8 @@ export class CameraManager extends EventEmitter {
 		}
 
 		// Check if camera preservation is requested (either in options or global camera options)
-		const shouldPreserveCamera = options.preserveCamera ?? this.cameraOptions.preserveCameraOnUpdate ?? false;
+		const shouldPreserveCamera =
+			options.preserveCamera ?? this.cameraOptions.preserveCameraOnUpdate ?? false;
 		if (shouldPreserveCamera) {
 			console.log("Camera preservation enabled, skipping focus");
 			return;
@@ -723,12 +704,8 @@ export class CameraManager extends EventEmitter {
 		const aspect = canvas.width / canvas.height;
 
 		// Store current camera state for animation
-		const startPosition = new THREE.Vector3().copy(
-			this.activeCamera.position as THREE.Vector3
-		);
-		const startRotation = new THREE.Euler().copy(
-			this.activeCamera.rotation as THREE.Euler
-		);
+		const startPosition = new THREE.Vector3().copy(this.activeCamera.position as THREE.Vector3);
+		const startRotation = new THREE.Euler().copy(this.activeCamera.rotation as THREE.Euler);
 
 		let targetPosition: THREE.Vector3;
 		let targetRotation: THREE.Euler | null = null;
@@ -736,22 +713,13 @@ export class CameraManager extends EventEmitter {
 
 		if (this.activeCamera.camera.type === "OrthographicCamera") {
 			// Check camera type directly
-			const result = this.calculateIsometricFraming(
-				center,
-				size,
-				aspect,
-				padding
-			);
+			const result = this.calculateIsometricFraming(center, size, aspect, padding);
 			targetPosition = result.position;
 			targetRotation = result.rotation;
 
 			// Update orthographic camera size for optimal framing
 			const orthoCamera = this.activeCamera.camera as THREE.OrthographicCamera;
-			const requiredFrustumHeight = this.calculateOrthographicSize(
-				size,
-				aspect,
-				padding
-			);
+			const requiredFrustumHeight = this.calculateOrthographicSize(size, aspect, padding);
 
 			orthoCamera.left = (-requiredFrustumHeight * aspect) / 2;
 			orthoCamera.right = (requiredFrustumHeight * aspect) / 2;
@@ -760,12 +728,7 @@ export class CameraManager extends EventEmitter {
 			orthoCamera.updateProjectionMatrix();
 		} else {
 			// Enhanced perspective framing with Pan Compensation
-			const framing = this.calculatePerspectiveFraming(
-				center,
-				size,
-				aspect,
-				padding
-			);
+			const framing = this.calculatePerspectiveFraming(center, size, aspect, padding);
 			targetPosition = framing.position;
 			lookAtTarget = framing.target;
 		}
@@ -783,17 +746,9 @@ export class CameraManager extends EventEmitter {
 			);
 		} else {
 			// Immediate positioning
-			this.activeCamera.setPosition([
-				targetPosition.x,
-				targetPosition.y,
-				targetPosition.z,
-			]);
+			this.activeCamera.setPosition([targetPosition.x, targetPosition.y, targetPosition.z]);
 			if (targetRotation) {
-				this.activeCamera.rotation = [
-					targetRotation.x,
-					targetRotation.y,
-					targetRotation.z,
-				];
+				this.activeCamera.rotation = [targetRotation.x, targetRotation.y, targetRotation.z];
 			} else {
 				// For perspective, ensure it looks at the center (possibly offset)
 				this.activeCamera.lookAt(lookAtTarget);
@@ -827,10 +782,7 @@ export class CameraManager extends EventEmitter {
 			this.stopAutoOrbit();
 		}
 		// Start orbit only if it was active OR if autoOrbitAfterZoom is specifically enabled for this scenario
-		if (
-			wasAutoOrbitActive ||
-			(this.cameraOptions.autoOrbitAfterZoom && animationDuration > 0)
-		) {
+		if (wasAutoOrbitActive || (this.cameraOptions.autoOrbitAfterZoom && animationDuration > 0)) {
 			// If there was an animation, give it a moment before starting orbit
 			const orbitDelay = animationDuration > 0 ? 100 : 0;
 			setTimeout(() => this.startAutoOrbitFromOptimalPosition(), orbitDelay);
@@ -865,7 +817,7 @@ export class CameraManager extends EventEmitter {
 			// Create the 8 corners of the WORLD SPACE AABB
 			const halfSize = objectSize.clone().multiplyScalar(0.5);
 			const center = this.schematicRenderer.schematicManager!.getSchematicsAveragePosition();
-			
+
 			const corners = [
 				new THREE.Vector3(center.x - halfSize.x, center.y - halfSize.y, center.z - halfSize.z),
 				new THREE.Vector3(center.x + halfSize.x, center.y - halfSize.y, center.z - halfSize.z),
@@ -877,8 +829,10 @@ export class CameraManager extends EventEmitter {
 				new THREE.Vector3(center.x + halfSize.x, center.y + halfSize.y, center.z + halfSize.z),
 			];
 
-			let minX = Infinity, maxX = -Infinity;
-			let minY = Infinity, maxY = -Infinity;
+			let minX = Infinity,
+				maxX = -Infinity;
+			let minY = Infinity,
+				maxY = -Infinity;
 
 			for (const corner of corners) {
 				const viewSpaceCorner = corner.clone().applyMatrix4(viewMatrix);
@@ -991,9 +945,7 @@ export class CameraManager extends EventEmitter {
 	/**
 	 * Enhanced schematic loading that supports the zoom effect
 	 */
-	public async handleSchematicLoaded(
-		enableZoomIn: boolean = false
-	): Promise<void> {
+	public async handleSchematicLoaded(enableZoomIn: boolean = false): Promise<void> {
 		if (enableZoomIn) {
 			// Pre-calculate the final orbit path ONCE at the beginning
 			const defaultPath = this.cameraPathManager.getFirstPath();
@@ -1034,22 +986,15 @@ export class CameraManager extends EventEmitter {
 		// Get the fitted camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
-			console.warn(
-				"Cannot start auto-orbit: No circular camera path available"
-			);
+			console.warn("Cannot start auto-orbit: No circular camera path available");
 			return;
 		}
 
 		const circularPath = defaultPath.path as CircularCameraPath;
 
 		// Find a good starting point on the orbit (current camera position projected onto orbit)
-		const currentPosition = new THREE.Vector3().copy(
-			this.activeCamera.position as THREE.Vector3
-		);
-		const optimalOrbitPoint = this.findClosestOrbitPoint(
-			circularPath,
-			currentPosition
-		);
+		const currentPosition = new THREE.Vector3().copy(this.activeCamera.position as THREE.Vector3);
+		const optimalOrbitPoint = this.findClosestOrbitPoint(circularPath, currentPosition);
 
 		circularPath.setStartAngle(optimalOrbitPoint.angle); // Adjust path start to current view
 
@@ -1099,9 +1044,7 @@ export class CameraManager extends EventEmitter {
 		// Get the default camera path
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
-			console.warn(
-				"Cannot start auto-orbit: No (circular) camera path available."
-			);
+			console.warn("Cannot start auto-orbit: No (circular) camera path available.");
 			return;
 		}
 
@@ -1175,34 +1118,20 @@ export class CameraManager extends EventEmitter {
 		let finalLookAtTarget: THREE.Vector3 = center;
 
 		if (this.activeCamera.camera.type === "OrthographicCamera") {
-			const result = this.calculateIsometricFraming(
-				center,
-				size,
-				aspect,
-				padding
-			);
+			const result = this.calculateIsometricFraming(center, size, aspect, padding);
 			finalTargetPosition = result.position;
 			finalTargetRotation = result.rotation;
 
 			// Also update ortho camera projection for the final state
 			const orthoCamera = this.activeCamera.camera as THREE.OrthographicCamera;
-			const requiredFrustumHeight = this.calculateOrthographicSize(
-				size,
-				aspect,
-				padding
-			);
+			const requiredFrustumHeight = this.calculateOrthographicSize(size, aspect, padding);
 			orthoCamera.left = (-requiredFrustumHeight * aspect) / 2;
 			orthoCamera.right = (requiredFrustumHeight * aspect) / 2;
 			orthoCamera.top = requiredFrustumHeight / 2;
 			orthoCamera.bottom = -requiredFrustumHeight / 2;
 			// Note: We are animating position/rotation. The projection matrix will "snap" at the end.
 		} else {
-			const framing = this.calculatePerspectiveFraming(
-				center,
-				size,
-				aspect,
-				padding
-			);
+			const framing = this.calculatePerspectiveFraming(center, size, aspect, padding);
 			finalTargetPosition = framing.position;
 			finalLookAtTarget = framing.target;
 		}
@@ -1223,11 +1152,7 @@ export class CameraManager extends EventEmitter {
 			}
 			zoomStartPosition = center
 				.clone()
-				.add(
-					direction.multiplyScalar(
-						finalTargetPosition.distanceTo(center) * startDistance
-					)
-				);
+				.add(direction.multiplyScalar(finalTargetPosition.distanceTo(center) * startDistance));
 		}
 
 		// Animate to the final position
@@ -1245,9 +1170,7 @@ export class CameraManager extends EventEmitter {
 		);
 		// After animation, ensure final projection for ortho is applied if it wasn't interpolated
 		if (this.activeCamera.camera.type === "OrthographicCamera") {
-			(
-				this.activeCamera.camera as THREE.OrthographicCamera
-			).updateProjectionMatrix();
+			(this.activeCamera.camera as THREE.OrthographicCamera).updateProjectionMatrix();
 		}
 
 		if (controls && "target" in controls) {
@@ -1278,10 +1201,7 @@ export class CameraManager extends EventEmitter {
 		const startRotation = (this.activeCamera.rotation as THREE.Euler).clone();
 		const orbitTarget = circularPath.getTargetPosition(); // Center of orbit
 
-		const closestPointOnOrbit = this.findClosestOrbitPoint(
-			circularPath,
-			startPosition
-		);
+		const closestPointOnOrbit = this.findClosestOrbitPoint(circularPath, startPosition);
 		const targetPositionOnOrbit = closestPointOnOrbit.position;
 
 		circularPath.setStartAngle(closestPointOnOrbit.angle); // Ensure orbit starts from here
@@ -1314,21 +1234,14 @@ export class CameraManager extends EventEmitter {
 		const height = circularPath.getHeight(); // Y-offset from pathCenter
 
 		// Project the query position onto the plane of the circular path
-		const projectedPosition = new THREE.Vector3(
-			position.x,
-			pathCenter.y + height,
-			position.z
-		);
+		const projectedPosition = new THREE.Vector3(position.x, pathCenter.y + height, position.z);
 
 		// Vector from path center to the projected query position
 		const dirToProjected = projectedPosition.clone().sub(pathCenter);
 		if (dirToProjected.lengthSq() === 0) {
 			// Query position is directly above/below path center
 			// Default to angle 0 or some predefined start angle for the path
-			const angle =
-				circularPath.getStartAngle() !== undefined
-					? circularPath.getStartAngle()
-					: 0;
+			const angle = circularPath.getStartAngle() !== undefined ? circularPath.getStartAngle() : 0;
 			return {
 				position: new THREE.Vector3(
 					pathCenter.x + radius * Math.cos(angle),
@@ -1378,16 +1291,9 @@ export class CameraManager extends EventEmitter {
 
 				// Interpolate position
 				const currentPos = startPos.clone().lerp(targetPos, t);
-				this.activeCamera.setPosition([
-					currentPos.x,
-					currentPos.y,
-					currentPos.z,
-				]);
+				this.activeCamera.setPosition([currentPos.x, currentPos.y, currentPos.z]);
 
-				if (
-					this.activeCamera.camera.type === "OrthographicCamera" &&
-					targetRotQuat
-				) {
+				if (this.activeCamera.camera.type === "OrthographicCamera" && targetRotQuat) {
 					// For Ortho, interpolate rotation if a target rotation is provided
 					const currentRot = new THREE.Quaternion();
 					currentRot.slerpQuaternions(startRotQuat, targetRotQuat, t);
@@ -1405,20 +1311,9 @@ export class CameraManager extends EventEmitter {
 					requestAnimationFrame(animate);
 				} else {
 					// Ensure final state is set precisely
-					this.activeCamera.setPosition([
-						targetPos.x,
-						targetPos.y,
-						targetPos.z,
-					]);
-					if (
-						this.activeCamera.camera.type === "OrthographicCamera" &&
-						targetRotEuler
-					) {
-						this.activeCamera.rotation = [
-							targetRotEuler.x,
-							targetRotEuler.y,
-							targetRotEuler.z,
-						];
+					this.activeCamera.setPosition([targetPos.x, targetPos.y, targetPos.z]);
+					if (this.activeCamera.camera.type === "OrthographicCamera" && targetRotEuler) {
+						this.activeCamera.rotation = [targetRotEuler.x, targetRotEuler.y, targetRotEuler.z];
 					} else {
 						this.activeCamera.lookAt(lookAtTarget);
 					}
@@ -1472,8 +1367,8 @@ export class CameraManager extends EventEmitter {
 		const horizontalExtent = Math.max(width, depth);
 		const pitchRatio = horizontalExtent / (height + horizontalExtent + 0.001);
 		// Map from 30° (tall) to 55° (flat) - slightly less top-down for better 3D feel
-		const minPitch = Math.PI / 6;  // 30°
-		const maxPitch = 11 * Math.PI / 36;  // 55°
+		const minPitch = Math.PI / 6; // 30°
+		const maxPitch = (11 * Math.PI) / 36; // 55°
 		const pitchAngle = THREE.MathUtils.lerp(minPitch, maxPitch, pitchRatio);
 
 		// Calculate base yaw based on width vs depth ratio
@@ -1485,8 +1380,8 @@ export class CameraManager extends EventEmitter {
 		// Wide screens (aspect > 1): prefer angles that show more horizontal extent
 		// Tall screens (aspect < 1): prefer angles that show more vertical composition
 		const aspectInfluence = Math.min(Math.max((screenAspect - 1.0) * 0.2, -0.1), 0.1);
-		const minYaw = Math.PI / 6 - aspectInfluence;   // ~30° baseline
-		const maxYaw = Math.PI / 3 + aspectInfluence;   // ~60° baseline
+		const minYaw = Math.PI / 6 - aspectInfluence; // ~30° baseline
+		const maxYaw = Math.PI / 3 + aspectInfluence; // ~60° baseline
 		const yawAngle = THREE.MathUtils.lerp(minYaw, maxYaw, yawRatio);
 
 		return { yaw: yawAngle, pitch: pitchAngle };
@@ -1510,7 +1405,10 @@ export class CameraManager extends EventEmitter {
 		const paddingFactor = 1 + padding * 2;
 
 		// Calculate optimal viewing angles based on object shape AND screen aspect ratio
-		const { yaw: yawAngle, pitch: pitchAngle } = this.calculateOptimalViewingAngles(objectSize, aspect);
+		const { yaw: yawAngle, pitch: pitchAngle } = this.calculateOptimalViewingAngles(
+			objectSize,
+			aspect
+		);
 
 		const cosYaw = Math.cos(yawAngle);
 		const sinYaw = Math.sin(yawAngle);
@@ -1518,15 +1416,11 @@ export class CameraManager extends EventEmitter {
 		const sinPitch = Math.sin(pitchAngle);
 
 		// Calculate normalized direction vector FROM center TO camera (Camera Z axis)
-		const camBack = new THREE.Vector3(
-			cosPitch * sinYaw,
-			sinPitch,
-			cosPitch * cosYaw
-		).normalize();
+		const camBack = new THREE.Vector3(cosPitch * sinYaw, sinPitch, cosPitch * cosYaw).normalize();
 
 		// Compute Camera Basis Vectors
 		const worldUp = new THREE.Vector3(0, 1, 0);
-		let camRight = new THREE.Vector3().crossVectors(worldUp, camBack).normalize();
+		const camRight = new THREE.Vector3().crossVectors(worldUp, camBack).normalize();
 		if (camRight.lengthSq() < 0.001) camRight.set(1, 0, 0);
 		const camUp = new THREE.Vector3().crossVectors(camBack, camRight).normalize();
 
@@ -1545,15 +1439,13 @@ export class CameraManager extends EventEmitter {
 
 		// Transform corners to Camera Space (but centered at 0,0,0)
 		// We want to find camera offset (cx, cy) and distance d
-		const rotatedCorners = corners.map(c => new THREE.Vector3(
-			c.dot(camRight),
-			c.dot(camUp),
-			c.dot(camBack)
-		));
+		const rotatedCorners = corners.map(
+			(c) => new THREE.Vector3(c.dot(camRight), c.dot(camUp), c.dot(camBack))
+		);
 
 		let cx = 0; // Camera lateral shift (Right)
 		let cy = 0; // Camera vertical shift (Up)
-		let d = 0;  // Camera distance (Back)
+		let d = 0; // Camera distance (Back)
 
 		// Iteratively refine Position (d) and Target Offset (cx, cy)
 		// to center the bounding box on screen and fit it tightly.
@@ -1589,8 +1481,10 @@ export class CameraManager extends EventEmitter {
 			d = Math.max(maxReqD, maxDim * 0.1, ABSOLUTE_MIN_PERSPECTIVE_DISTANCE);
 
 			// 2. Calculate Screen-Space Bounding Box to find centering error
-			let minU = Infinity, maxU = -Infinity;
-			let minV = Infinity, maxV = -Infinity;
+			let minU = Infinity,
+				maxU = -Infinity;
+			let minV = Infinity,
+				maxV = -Infinity;
 
 			for (const p of rotatedCorners) {
 				const dist = d - p.z;
@@ -1622,8 +1516,7 @@ export class CameraManager extends EventEmitter {
 
 		// Calculate final positions in World Space
 		// Target is offset from geometric center by (cx, cy) in camera plane
-		const targetOffset = camRight.clone().multiplyScalar(cx)
-			.add(camUp.clone().multiplyScalar(cy));
+		const targetOffset = camRight.clone().multiplyScalar(cx).add(camUp.clone().multiplyScalar(cy));
 
 		const target = center.clone().add(targetOffset);
 		const position = target.clone().add(camBack.multiplyScalar(d));
@@ -1644,13 +1537,11 @@ export class CameraManager extends EventEmitter {
 	): { position: THREE.Vector3; rotation: THREE.Euler } {
 		const presetName = this.activeCameraKey; // Assume current active camera is isometric or similar ortho
 		const preset =
-			CameraManager.CAMERA_PRESETS[
-			presetName as keyof typeof CameraManager.CAMERA_PRESETS
-			] || CameraManager.CAMERA_PRESETS.isometric;
+			CameraManager.CAMERA_PRESETS[presetName as keyof typeof CameraManager.CAMERA_PRESETS] ||
+			CameraManager.CAMERA_PRESETS.isometric;
 
 		// Use preset rotation if available, otherwise a default isometric-like rotation
-		const rotationArray =
-			preset.rotation || CameraManager.CAMERA_PRESETS.isometric.rotation;
+		const rotationArray = preset.rotation || CameraManager.CAMERA_PRESETS.isometric.rotation;
 		const rotation = new THREE.Euler(...rotationArray);
 
 		// Position the camera far enough along its viewing vector.
@@ -1658,8 +1549,7 @@ export class CameraManager extends EventEmitter {
 		const maxObjectDim = Math.max(objectSize.x, objectSize.y, objectSize.z);
 		// Safety factor to ensure camera is well outside the object.
 		// Padding is already accounted for in ortho frustum size.
-		const distanceFactor =
-			maxObjectDim * 1.5 + ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT * 2;
+		const distanceFactor = maxObjectDim * 1.5 + ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT * 2;
 
 		// Create a vector pointing away from the object along the camera's negative Z-axis (local)
 		const offsetDirection = new THREE.Vector3(0, 0, 1); // Camera looks along -Z, so position along +Z from target
@@ -1715,9 +1605,7 @@ export class CameraManager extends EventEmitter {
 		});
 
 		let zoomStartPosition: THREE.Vector3;
-		const currentCamRotation = (
-			this.activeCamera.rotation as THREE.Euler
-		).clone();
+		const currentCamRotation = (this.activeCamera.rotation as THREE.Euler).clone();
 
 		// Determine the target point on the (now fitted) orbit
 		// A good target is the point on the orbit closest to the current camera's XZ projection,
@@ -1789,9 +1677,7 @@ export class CameraManager extends EventEmitter {
 
 		const defaultPath = this.cameraPathManager.getFirstPath();
 		if (!defaultPath || !(defaultPath.path instanceof CircularCameraPath)) {
-			console.warn(
-				"Cannot start auto-orbit: No circular camera path or path not found."
-			);
+			console.warn("Cannot start auto-orbit: No circular camera path or path not found.");
 			return;
 		}
 		console.log("🎬 Starting auto-orbit animation.");
@@ -1925,11 +1811,14 @@ export class CameraManager extends EventEmitter {
 			this.activeCamera.rotation = [rotation.x, rotation.y, rotation.z];
 
 			// Refocus if requested
-			if (refocus && this.schematicRenderer.schematicManager &&
-				!this.schematicRenderer.schematicManager.isEmpty()) {
+			if (
+				refocus &&
+				this.schematicRenderer.schematicManager &&
+				!this.schematicRenderer.schematicManager.isEmpty()
+			) {
 				this.focusOnSchematics({
 					animationDuration: 0.5,
-					easing: (t) => t * t * (3 - 2 * t)
+					easing: (t) => t * t * (3 - 2 * t),
 				});
 			}
 

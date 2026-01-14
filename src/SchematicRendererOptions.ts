@@ -58,7 +58,7 @@ export interface DebugOptions {
 		name: string;
 		controls: Array<{
 			name: string;
-			type: 'number' | 'boolean' | 'color' | 'button' | 'select';
+			type: "number" | "boolean" | "color" | "button" | "select";
 			value?: any;
 			min?: number;
 			max?: number;
@@ -96,7 +96,7 @@ export interface DefinitionRegionOptions {
 	 * Automatically show definition regions from schematic metadata when a schematic is loaded.
 	 * Definition regions are regions stored in the schematic's NucleationDefinitions metadata,
 	 * typically created via the CircuitBuilder or Insign APIs.
-	 * 
+	 *
 	 * @default true
 	 */
 	showOnLoad?: boolean;
@@ -104,28 +104,28 @@ export interface DefinitionRegionOptions {
 	/**
 	 * Default color for definition regions (hex).
 	 * Individual regions may override this if they have color metadata.
-	 * 
+	 *
 	 * @default 0x00ff88 (green)
 	 */
 	defaultColor?: number;
 
 	/**
 	 * Default opacity for definition regions.
-	 * 
+	 *
 	 * @default 0.25
 	 */
 	defaultOpacity?: number;
 
 	/**
 	 * Show wireframe edges around regions
-	 * 
+	 *
 	 * @default true
 	 */
 	showEdges?: boolean;
 
 	/**
 	 * Show labels with region names
-	 * 
+	 *
 	 * @default true
 	 */
 	showLabels?: boolean;
@@ -134,14 +134,14 @@ export interface DefinitionRegionOptions {
 export interface GPUComputeOptions {
 	/**
 	 * Enable WebGPU compute for mesh building
-	 * 
+	 *
 	 * ⚠️ WARNING: GPU compute is currently SLOWER than workers due to GPU→CPU
 	 * readback overhead (~6x slower, ~10x more memory). Additionally, textures
 	 * don't render correctly (wireframe only).
-	 * 
+	 *
 	 * The Web Worker path with WASM is the recommended and default approach.
 	 * Keep this disabled unless you're developing/testing the GPU path.
-	 * 
+	 *
 	 * @default false
 	 * @deprecated Use default worker path instead
 	 */
@@ -153,38 +153,38 @@ export interface GPUComputeOptions {
 export interface WasmMeshBuilderOptions {
 	/**
 	 * Use WASM-based mesh builder for high-performance geometry merging.
-	 * 
+	 *
 	 * The WASM mesh builder is written in Rust and provides significantly
 	 * better performance than the pure JavaScript implementation for the
 	 * geometry merging and face culling operations.
-	 * 
+	 *
 	 * @default true (recommended)
 	 */
 	enabled?: boolean;
 
 	/**
 	 * Enable greedy meshing optimization.
-	 * 
+	 *
 	 * Greedy meshing merges adjacent coplanar faces with the same material
 	 * into larger quads, dramatically reducing vertex count (5-10x reduction)
 	 * for large flat surfaces like walls and floors.
-	 * 
+	 *
 	 * This improves both mesh building time and runtime rendering performance.
-	 * 
+	 *
 	 * Note: Only works when WASM mesh builder is enabled.
-	 * 
+	 *
 	 * @default false (until fully tested)
 	 */
 	greedyMeshingEnabled?: boolean;
 
 	/**
 	 * Maximum number of worker threads to use for mesh building.
-	 * 
+	 *
 	 * For small schematics, fewer workers (2-4) can actually be faster due to
 	 * reduced initialization overhead. For large schematics, more workers help.
-	 * 
+	 *
 	 * Set to 0 to use automatic detection (capped at 8).
-	 * 
+	 *
 	 * @default 0 (automatic - uses min(hardwareConcurrency, 8))
 	 */
 	maxWorkers?: number;
@@ -193,19 +193,19 @@ export interface WasmMeshBuilderOptions {
 export interface WebGPURendererOptions {
 	/**
 	 * Prefer WebGPU renderer when available.
-	 * 
+	 *
 	 * When enabled, the renderer will attempt to use WebGPURenderer if the
 	 * browser supports WebGPU. Falls back to WebGLRenderer automatically
 	 * if WebGPU is not available.
-	 * 
+	 *
 	 * Benefits of WebGPU:
 	 * - Access to Three.js Inspector for debugging
 	 * - Better performance for compute-heavy operations
 	 * - Modern GPU API with better parallelism
-	 * 
+	 *
 	 * Requirements:
 	 * - Chrome 113+, Edge 113+, Safari 17+, Firefox (behind flag)
-	 * 
+	 *
 	 * @default false (WebGL is more widely supported)
 	 */
 	preferWebGPU?: boolean;
@@ -213,7 +213,7 @@ export interface WebGPURendererOptions {
 	/**
 	 * Force WebGPU renderer even if feature detection suggests it may not work well.
 	 * Use this for testing purposes only.
-	 * 
+	 *
 	 * @default false
 	 */
 	forceWebGPU?: boolean;
@@ -335,13 +335,13 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		flySpeed: 5.0, // 5 units per second
 		sprintMultiplier: 2.5, // 2.5x speed when sprinting
 		keybinds: {
-			forward: 'w',
-			backward: 's',
-			left: 'a',
-			right: 'd',
-			up: ' ', // Space
-			down: 'Shift', // Shift
-			sprint: 'Shift', // Shift for sprint
+			forward: "w",
+			backward: "s",
+			left: "a",
+			right: "d",
+			up: " ", // Space
+			down: "Shift", // Shift
+			sprint: "Shift", // Shift for sprint
 		},
 	},
 	debugOptions: {
@@ -429,4 +429,9 @@ export interface Callbacks {
 	onSimulationSynced?: () => void;
 	onSimulationError?: (error: Error) => void;
 	onBlockInteracted?: (x: number, y: number, z: number) => void;
+
+	// UI callbacks
+	onRenderSettingsChanged?: (settings: any) => void;
+	onScreenshotTaken?: (blob: Blob, filename: string) => void;
+	onRecordingComplete?: (blob: Blob, filename: string) => void;
 }

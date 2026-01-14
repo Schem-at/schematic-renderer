@@ -929,7 +929,7 @@ function __wbg_get_imports() {
         return ret;
     };
     imports.wbg.__wbg_new_78feb108b6472713 = function() {
-        const ret = new Array();
+        const ret = [];
         return ret;
     };
     imports.wbg.__wbg_newnoargs_105ed471475aaf50 = function(arg0, arg1) {
