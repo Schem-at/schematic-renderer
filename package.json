@@ -1,6 +1,6 @@
 {
 	"name": "schematic-renderer",
-	"version": "1.1.18",
+	"version": "1.1.20",
 	"license": "AGPL-3.0-only",
 	"description": "A schematic renderer package for Minecraft schematics using Three.js",
 	"repository": {
