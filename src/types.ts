@@ -1,4 +1,4 @@
-import { Mesh, BufferGeometry, Material, Vector3 } from "three"
+import { Mesh, BufferGeometry, Material, Vector3 } from "three";
 
 export interface BlockStateModelHolder {
 	model: string;
@@ -11,8 +11,8 @@ export interface BlockStateModelHolder {
 type BlockStateDefinitionModel =
 	| BlockStateModelHolder
 	| (BlockStateModelHolder & {
-		weight?: number;
-	})[];
+			weight?: number;
+	  })[];
 
 export interface MeshData {
 	positions: Float32Array;
@@ -92,14 +92,7 @@ export type Block = {
 
 export type Vector = [number, number, number];
 
-export const POSSIBLE_FACES = [
-	"south",
-	"north",
-	"east",
-	"west",
-	"up",
-	"down",
-] as const;
+export const POSSIBLE_FACES = ["south", "north", "east", "west", "up", "down"] as const;
 export type Faces = (typeof POSSIBLE_FACES)[number] | "bottom";
 
 export interface BlockModel {

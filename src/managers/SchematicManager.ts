@@ -5,7 +5,12 @@ import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import pat
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
 import { SchematicRenderer } from "../SchematicRenderer";
-import { MemoryLeakFix, disposeGroup, clearAllCaches, forceGarbageCollection } from "../utils/MemoryLeakFix";
+import {
+	MemoryLeakFix,
+	disposeGroup,
+	clearAllCaches,
+	forceGarbageCollection,
+} from "../utils/MemoryLeakFix";
 import { GeometryBufferPool } from "../GeometryBufferPool";
 import { performanceMonitor } from "../performance/PerformanceMonitor";
 interface LoadingProgress {
@@ -31,10 +36,7 @@ export class SchematicManager {
 	private sceneManager: SceneManager;
 	private singleSchematicMode: boolean;
 
-	constructor(
-		schematicRenderer: SchematicRenderer,
-		options: SchematicManagerOptions = {}
-	) {
+	constructor(schematicRenderer: SchematicRenderer, options: SchematicManagerOptions = {}) {
 		this.schematicRenderer = schematicRenderer;
 		this.options = options;
 		if (!this.schematicRenderer) {
@@ -43,8 +45,7 @@ export class SchematicManager {
 		if (!this.schematicRenderer.worldMeshBuilder) {
 			throw new Error("WorldMeshBuilder is required.");
 		}
-		this.worldMeshBuilder =
-			schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 		this.singleSchematicMode = options.singleSchematicMode || false;
@@ -163,11 +164,7 @@ export class SchematicManager {
 			this.schematicRenderer.uiManager.hideEmptyState();
 		}
 		this.addSchematic(schematicObject);
-		if (
-			properties?.focused ||
-			!properties ||
-			properties.focused === undefined
-		) {
+		if (properties?.focused || !properties || properties.focused === undefined) {
 			this.eventEmitter.emit("schematicAdded", { schematic: schematicObject });
 		}
 
@@ -179,9 +176,7 @@ export class SchematicManager {
 	}
 
 	public async removeAllSchematics() {
-		const promises = Array.from(this.schematics.keys()).map((name) =>
-			this.removeSchematic(name)
-		);
+		const promises = Array.from(this.schematics.keys()).map((name) => this.removeSchematic(name));
 		await Promise.all(promises);
 
 		// After removing all schematics, perform cleanup
@@ -196,7 +191,6 @@ export class SchematicManager {
 	 * NOTE: Does NOT dispose WorldMeshBuilder as it's shared and needed for future builds
 	 */
 	public performDeepCleanup(): void {
-
 		// Clear all caches and registries
 		clearAllCaches();
 
@@ -213,7 +207,7 @@ export class SchematicManager {
 		// Force single garbage collection
 		forceGarbageCollection();
 
-		console.log('✅ Deep cleanup completed');
+		console.log("✅ Deep cleanup completed");
 	}
 
 	public async loadSchematics(
@@ -235,9 +229,7 @@ export class SchematicManager {
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
 				await this.loadSchematic(key, arrayBuffer, properties).then(() => {
-					this.sceneManager.schematicRenderer.options?.callbacks?.onSchematicLoaded?.(
-						key
-					);
+					this.sceneManager.schematicRenderer.options?.callbacks?.onSchematicLoaded?.(key);
 				});
 			}
 		}
@@ -251,13 +243,8 @@ export class SchematicManager {
 	): Promise<void> {
 		try {
 			// Start showing progress in UI if enabled
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.showProgressBar(
-					`Loading ${file.name}`
-				);
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
+				this.schematicRenderer.uiManager.showProgressBar(`Loading ${file.name}`);
 			}
 
 			// File reading stage
@@ -270,10 +257,7 @@ export class SchematicManager {
 				});
 
 				// Update UI progress bar
-				if (
-					this.schematicRenderer.options.enableProgressBar &&
-					this.schematicRenderer.uiManager
-				) {
+				if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 					this.schematicRenderer.uiManager.updateProgress(
 						progress / 100, // Convert to 0-1 range
 						`Reading ${file.name}...`
@@ -296,19 +280,13 @@ export class SchematicManager {
 						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
 						const overallProgress = 0.2 + (progress.progress / 100) * 0.8;
 
-						this.schematicRenderer.uiManager.updateProgress(
-							overallProgress,
-							progress.message
-						);
+						this.schematicRenderer.uiManager.updateProgress(overallProgress, progress.message);
 					}
 				},
 			});
 
 			// Hide progress bar when complete
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 
@@ -318,10 +296,7 @@ export class SchematicManager {
 			this.eventEmitter.emit("schematicLoaded", { id });
 		} catch (error) {
 			// Hide progress bar on error
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 			await this.options.callbacks?.onSchematicFileLoadFailure?.(file);
@@ -348,21 +323,12 @@ export class SchematicManager {
 	): Promise<void> {
 		try {
 			// Generate a name for display
-			const displayName =
-				name || new URL(url).pathname.split("/").pop() || "schematic";
+			const displayName = name || new URL(url).pathname.split("/").pop() || "schematic";
 
 			// Start showing progress in UI if enabled
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
-				this.schematicRenderer.uiManager.showProgressBar(
-					`Loading ${displayName}`
-				);
-				this.schematicRenderer.uiManager.updateProgress(
-					0,
-					"Fetching schematic from URL..."
-				);
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
+				this.schematicRenderer.uiManager.showProgressBar(`Loading ${displayName}`);
+				this.schematicRenderer.uiManager.updateProgress(0, "Fetching schematic from URL...");
 			}
 
 			// File reading stage
@@ -379,10 +345,7 @@ export class SchematicManager {
 			}
 
 			// Update progress to 20% after fetch completes
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 				this.schematicRenderer.uiManager.updateProgress(
 					0.2,
 					"Download complete, processing schematic..."
@@ -398,8 +361,7 @@ export class SchematicManager {
 			const arrayBuffer = await response.arrayBuffer();
 
 			// Generate a name if none provided
-			const schematicName =
-				name || new URL(url).pathname.split("/").pop() || "schematic_from_url";
+			const schematicName = name || new URL(url).pathname.split("/").pop() || "schematic_from_url";
 
 			// Load the schematic with progress tracking
 			await this.loadSchematic(schematicName, arrayBuffer, properties, {
@@ -415,19 +377,13 @@ export class SchematicManager {
 						// Calculate overall progress (file reading is 20%, schematic loading is 80%)
 						const overallProgress = 0.2 + (progress.progress / 100) * 0.8;
 
-						this.schematicRenderer.uiManager.updateProgress(
-							overallProgress,
-							progress.message
-						);
+						this.schematicRenderer.uiManager.updateProgress(overallProgress, progress.message);
 					}
 				},
 			});
 
 			// Hide progress bar when complete
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 
@@ -435,10 +391,7 @@ export class SchematicManager {
 			this.eventEmitter.emit("schematicLoaded", { id: schematicName });
 		} catch (error) {
 			// Hide progress bar on error
-			if (
-				this.schematicRenderer.options.enableProgressBar &&
-				this.schematicRenderer.uiManager
-			) {
+			if (this.schematicRenderer.options.enableProgressBar && this.schematicRenderer.uiManager) {
 				this.schematicRenderer.uiManager.hideProgressBar();
 			}
 
@@ -465,10 +418,7 @@ export class SchematicManager {
 
 			// Get meshes - if this fails, at least the schematic is removed from the map
 			const meshes = await schematicObject.getMeshes();
-			console.log(
-				"Before removal - scene children:",
-				this.sceneManager.scene.children.length
-			);
+			console.log("Before removal - scene children:", this.sceneManager.scene.children.length);
 			console.log("Meshes to remove:", meshes.length);
 
 			// Use the enhanced disposal method for comprehensive cleanup
@@ -495,19 +445,17 @@ export class SchematicManager {
 			const endMemory = MemoryLeakFix.monitorMemory();
 			if (startMemory && endMemory) {
 				const memoryFreed = startMemory.used - endMemory.used;
-				console.log(`💾 Memory freed: ${memoryFreed}MB (${startMemory.used}MB → ${endMemory.used}MB)`);
+				console.log(
+					`💾 Memory freed: ${memoryFreed}MB (${startMemory.used}MB → ${endMemory.used}MB)`
+				);
 			}
-
 		} catch (error) {
 			console.error("Error removing schematic:", error);
 			// Don't re-add to map since we already have enhanced cleanup
 			// The disposal should have worked even if there was an error
 		}
 
-		console.log(
-			"After removal - scene children:",
-			this.sceneManager.scene.children.length
-		);
+		console.log("After removal - scene children:", this.sceneManager.scene.children.length);
 
 		if (this.isEmpty() && this.schematicRenderer.uiManager) {
 			this.schematicRenderer.uiManager.showEmptyState();
@@ -528,7 +476,10 @@ export class SchematicManager {
 					if (regionNames.length > 0) {
 					}
 				} catch (e) {
-					console.warn(`[SchematicManager] Failed to auto-load definition regions for '${schematic.id}':`, e);
+					console.warn(
+						`[SchematicManager] Failed to auto-load definition regions for '${schematic.id}':`,
+						e
+					);
 				}
 			});
 		}
@@ -546,9 +497,7 @@ export class SchematicManager {
 		return this.getAllSchematics()[0];
 	}
 
-	public getSchematicAtPosition(
-		position: THREE.Vector3
-	): SchematicObject | null {
+	public getSchematicAtPosition(position: THREE.Vector3): SchematicObject | null {
 		for (const schematic of this.schematics.values()) {
 			if (schematic.containsPosition(position)) {
 				return schematic;
@@ -591,9 +540,7 @@ export class SchematicManager {
 		const schematics = this.getAllSchematics();
 		for (const schematic of schematics) {
 			const dimensions = schematic.schematicWrapper.get_dimensions();
-			maxDimensions.max(
-				new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
-			);
+			maxDimensions.max(new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2]));
 		}
 		return maxDimensions;
 	}
@@ -612,9 +559,7 @@ export class SchematicManager {
 			// Fall back to allocated dimensions if tight bounds are empty (no blocks)
 			if (tightDimensions[0] === 0 && tightDimensions[1] === 0 && tightDimensions[2] === 0) {
 				const dimensions = schematic.schematicWrapper.get_dimensions();
-				maxDimensions.max(
-					new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2])
-				);
+				maxDimensions.max(new THREE.Vector3(dimensions[0], dimensions[1], dimensions[2]));
 			} else {
 				maxDimensions.max(
 					new THREE.Vector3(tightDimensions[0], tightDimensions[1], tightDimensions[2])
@@ -641,9 +586,7 @@ export class SchematicManager {
 	}
 
 	public getSelectableObjects(): THREE.Object3D[] {
-		return Array.from(this.schematics.values()).map(
-			(schematic) => schematic.group
-		);
+		return Array.from(this.schematics.values()).map((schematic) => schematic.group);
 	}
 
 	public createEmptySchematic(

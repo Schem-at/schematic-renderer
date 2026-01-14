@@ -97,7 +97,7 @@ export interface AssetConflict {
 	/** Path to the conflicting asset */
 	assetPath: string;
 	/** Type of asset (texture, blockstate, model) */
-	type: 'texture' | 'blockstate' | 'model';
+	type: "texture" | "blockstate" | "model";
 	/** Packs that provide this asset */
 	providers: Array<{
 		packId: string;
@@ -164,7 +164,7 @@ export interface LoadProgressEvent {
 
 export interface LoadStartEvent {
 	packId: string;
-	source: 'url' | 'blob' | 'file' | 'cache';
+	source: "url" | "blob" | "file" | "cache";
 }
 
 export interface LoadCompleteEvent {
@@ -211,7 +211,7 @@ export interface ResourcePackOptions {
 	/** Enable the resource pack management UI (default: true) */
 	enableUI?: boolean;
 	/** Position of the UI panel */
-	uiPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+	uiPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
 	/** Auto-rebuild atlas when packs change (default: true) */
 	autoRebuild?: boolean;
 	/** Show pack icons in UI (default: true) */
@@ -226,7 +226,7 @@ export interface ResourcePackOptions {
 	maxPacks?: number;
 	/** Default packs to load on init */
 	defaultPacks?: Record<string, () => Promise<Blob>>;
-	
+
 	// Callbacks
 	/** Called when any pack change occurs that affects rendering */
 	onPacksChanged?: (packs: PacksChangedEvent) => void | Promise<void>;

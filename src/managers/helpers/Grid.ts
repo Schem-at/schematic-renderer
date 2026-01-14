@@ -18,10 +18,7 @@ export class Grid extends THREE.Object3D {
 		end: THREE.Vector3,
 		color: number = 0xffffff,
 		lineWidth: number = 1,
-		resolution: THREE.Vector2 = new THREE.Vector2(
-			window.innerWidth,
-			window.innerHeight
-		)
+		resolution: THREE.Vector2 = new THREE.Vector2(window.innerWidth, window.innerHeight)
 	): Line2 {
 		// Create the geometry
 		const geometry = new LineGeometry();
@@ -70,13 +67,7 @@ export class Grid extends THREE.Object3D {
 		//     this.add(element);
 		// });
 
-		const lineSegments = this.createGridLines(
-			camera,
-			majorStep,
-			majorColor,
-			30,
-			true
-		);
+		const lineSegments = this.createGridLines(camera, majorStep, majorColor, 30, true);
 
 		this.add(lineSegments);
 		//add two lines one for x (red) and one for z (blue)
@@ -172,10 +163,7 @@ export class Grid extends THREE.Object3D {
 		}
 
 		const geometry = new THREE.BufferGeometry();
-		geometry.setAttribute(
-			"position",
-			new THREE.Float32BufferAttribute(vertices, 3)
-		);
+		geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
 
 		return new THREE.LineSegments(geometry, material);
 	}
@@ -196,10 +184,7 @@ export class Grid extends THREE.Object3D {
 			const distance = Math.abs(i);
 			const fadeStart = this.fadeDistance * 0.5;
 			const fadeEnd = this.fadeDistance;
-			const opacity = Math.max(
-				0,
-				1 - (distance - fadeStart) / (fadeEnd - fadeStart)
-			);
+			const opacity = Math.max(0, 1 - (distance - fadeStart) / (fadeEnd - fadeStart));
 
 			// Create material with calculated opacity
 			const createLineMaterial = () =>
@@ -216,48 +201,20 @@ export class Grid extends THREE.Object3D {
 
 			// Create vertical lines (along Z axis)
 			const positiveVertical = new LineGeometry();
-			positiveVertical.setPositions([
-				i,
-				0,
-				-this.gridSize,
-				i,
-				0,
-				this.gridSize,
-			]);
+			positiveVertical.setPositions([i, 0, -this.gridSize, i, 0, this.gridSize]);
 			lines.push(new Line2(positiveVertical, createLineMaterial()));
 
 			const negativeVertical = new LineGeometry();
-			negativeVertical.setPositions([
-				-i,
-				0,
-				-this.gridSize,
-				-i,
-				0,
-				this.gridSize,
-			]);
+			negativeVertical.setPositions([-i, 0, -this.gridSize, -i, 0, this.gridSize]);
 			lines.push(new Line2(negativeVertical, createLineMaterial()));
 
 			// Create horizontal lines (along X axis)
 			const positiveHorizontal = new LineGeometry();
-			positiveHorizontal.setPositions([
-				-this.gridSize,
-				0,
-				i,
-				this.gridSize,
-				0,
-				i,
-			]);
+			positiveHorizontal.setPositions([-this.gridSize, 0, i, this.gridSize, 0, i]);
 			lines.push(new Line2(positiveHorizontal, createLineMaterial()));
 
 			const negativeHorizontal = new LineGeometry();
-			negativeHorizontal.setPositions([
-				-this.gridSize,
-				0,
-				-i,
-				this.gridSize,
-				0,
-				-i,
-			]);
+			negativeHorizontal.setPositions([-this.gridSize, 0, -i, this.gridSize, 0, -i]);
 			lines.push(new Line2(negativeHorizontal, createLineMaterial()));
 		}
 
@@ -319,12 +276,7 @@ export class Grid extends THREE.Object3D {
 	 * @param position The position of the label.
 	 * @param color The color of the text.
 	 */
-	private addLabel(
-		text: string,
-		position: THREE.Vector3,
-		color: number,
-		isAxisLabel: boolean
-	) {
+	private addLabel(text: string, position: THREE.Vector3, color: number, isAxisLabel: boolean) {
 		const canvas = document.createElement("canvas");
 		const context = canvas.getContext("2d");
 
@@ -336,8 +288,7 @@ export class Grid extends THREE.Object3D {
 			// Clear canvas
 			context.clearRect(0, 0, canvas.width, canvas.height);
 
-			const fadeFactor =
-				1.0 - Math.min(1.0, Math.abs(position.x) / this.fadeDistance);
+			const fadeFactor = 1.0 - Math.min(1.0, Math.abs(position.x) / this.fadeDistance);
 			// Modern font styling
 			const fontSize = isAxisLabel ? 40 : 32;
 			context.font = `${fontSize}px Inter, -apple-system, system-ui, sans-serif`;

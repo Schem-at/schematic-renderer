@@ -18,11 +18,7 @@ export class SimulationLogger {
 
 	static info(message: string, ...args: any[]) {
 		if (!this.enabled) return;
-		console.log(
-			`%c${this.prefix} [SIM] ${message}`,
-			"color: #10b981; font-weight: bold;",
-			...args
-		);
+		console.log(`%c${this.prefix} [SIM] ${message}`, "color: #10b981; font-weight: bold;", ...args);
 	}
 
 	static success(message: string, ...args: any[]) {
@@ -77,13 +73,20 @@ export class SimulationLogger {
 		);
 	}
 
-	static state(blockName: string, position: [number, number, number], oldState: any, newState: any) {
+	static state(
+		blockName: string,
+		position: [number, number, number],
+		oldState: any,
+		newState: any
+	) {
 		if (!this.enabled) return;
 		console.log(
 			`%c${this.prefix} [SIM] 📦 ${blockName} @ [${position.join(", ")}]`,
 			"color: #ec4899; font-weight: bold;",
-			"\n  Old:", oldState,
-			"\n  New:", newState
+			"\n  Old:",
+			oldState,
+			"\n  New:",
+			newState
 		);
 	}
 }

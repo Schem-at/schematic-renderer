@@ -1,13 +1,13 @@
 /**
  * ComputeMeshBuilder
- * 
+ *
  * Uses WebGPU compute shaders to perform geometry merging on the GPU
  * for chunk mesh building. Consolidated buffer layout to fit within
  * WebGPU's 8 storage buffer limit.
  */
 
-import { gpuCapabilityManager, GPUCapabilityManager } from './GPUCapabilityManager';
-import type { ChunkGeometryData, PaletteCache } from '../types';
+import { gpuCapabilityManager, GPUCapabilityManager } from "./GPUCapabilityManager";
+import type { ChunkGeometryData, PaletteCache } from "../types";
 
 // Workgroup size for compute shaders
 const WORKGROUP_SIZE = 64;
@@ -64,7 +64,7 @@ export class ComputeMeshBuilder {
 
 		const success = await this.gpuManager.initialize();
 		if (!success) {
-			console.warn('[ComputeMeshBuilder] Failed to initialize GPU');
+			console.warn("[ComputeMeshBuilder] Failed to initialize GPU");
 			return false;
 		}
 
@@ -72,7 +72,7 @@ export class ComputeMeshBuilder {
 		await this.createComputePipeline();
 
 		this.initialized = true;
-		console.log('[ComputeMeshBuilder] Initialized successfully');
+		console.log("[ComputeMeshBuilder] Initialized successfully");
 		return true;
 	}
 
@@ -86,47 +86,47 @@ export class ComputeMeshBuilder {
 
 		// Create bind group layout - consolidated to fit within 8 storage buffer limit
 		this.bindGroupLayout = device.createBindGroupLayout({
-			label: 'ComputeMeshBuilder BindGroupLayout',
+			label: "ComputeMeshBuilder BindGroupLayout",
 			entries: [
 				// Binding 0: Block data input [x, y, z, paletteIndex] per block
-				{ binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+				{ binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
 				// Binding 1: Voxel occupancy map (3D grid)
-				{ binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+				{ binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
 				// Binding 2: Palette vertex data (interleaved pos/norm/uv)
-				{ binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+				{ binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
 				// Binding 3: Palette indices
-				{ binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+				{ binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
 				// Binding 4: Palette metadata
-				{ binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+				{ binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
 				// Binding 5: Output geometry (interleaved)
-				{ binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+				{ binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
 				// Binding 6: Output indices
-				{ binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+				{ binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
 				// Binding 7: Atomic counters [vertexCount, indexCount]
-				{ binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+				{ binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
 				// Binding 8: Uniforms (not a storage buffer)
-				{ binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-			]
+				{ binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+			],
 		});
 
 		// WGSL Compute Shader for mesh building
 		const shaderModule = device.createShaderModule({
-			label: 'ComputeMeshBuilder Shader',
-			code: this.getComputeShaderCode()
+			label: "ComputeMeshBuilder Shader",
+			code: this.getComputeShaderCode(),
 		});
 
 		const pipelineLayout = device.createPipelineLayout({
-			label: 'ComputeMeshBuilder PipelineLayout',
-			bindGroupLayouts: [this.bindGroupLayout]
+			label: "ComputeMeshBuilder PipelineLayout",
+			bindGroupLayouts: [this.bindGroupLayout],
 		});
 
 		this.computePipeline = device.createComputePipeline({
-			label: 'ComputeMeshBuilder Pipeline',
+			label: "ComputeMeshBuilder Pipeline",
 			layout: pipelineLayout,
 			compute: {
 				module: shaderModule,
-				entryPoint: 'main'
-			}
+				entryPoint: "main",
+			},
 		});
 	}
 
@@ -134,7 +134,7 @@ export class ComputeMeshBuilder {
 	 * WGSL compute shader code - simplified and consolidated
 	 */
 	private getComputeShaderCode(): string {
-		return /* wgsl */`
+		return /* wgsl */ `
 			// Constants
 			const POSITION_SCALE: f32 = 1024.0;
 			const NORMAL_SCALE: f32 = 127.0;
@@ -366,14 +366,14 @@ export class ComputeMeshBuilder {
 	 */
 	public async uploadPaletteData(paletteCache: PaletteCache): Promise<void> {
 		if (!this.initialized) {
-			console.warn('[ComputeMeshBuilder] Not initialized, cannot upload palette');
+			console.warn("[ComputeMeshBuilder] Not initialized, cannot upload palette");
 			return;
 		}
 
 		const device = this.gpuManager.device;
 		if (!device) return;
 
-		console.log('[ComputeMeshBuilder] Uploading palette data to GPU...');
+		console.log("[ComputeMeshBuilder] Uploading palette data to GPU...");
 		const startTime = performance.now();
 
 		// Convert palette cache to GPU-compatible format
@@ -382,22 +382,24 @@ export class ComputeMeshBuilder {
 		// Create GPU buffers
 		this.paletteVertexBuffer = this.gpuManager.createStorageBuffer(
 			this.paletteData.vertexData,
-			'palette-vertex-data'
+			"palette-vertex-data"
 		);
 
 		this.paletteIndicesBuffer = this.gpuManager.createStorageBuffer(
 			this.paletteData.indices,
-			'palette-indices'
+			"palette-indices"
 		);
 
 		this.paletteMetadataBuffer = this.gpuManager.createStorageBuffer(
 			this.paletteData.metadata,
-			'palette-metadata'
+			"palette-metadata"
 		);
 
 		const duration = performance.now() - startTime;
 		console.log(`[ComputeMeshBuilder] Palette uploaded to GPU in ${duration.toFixed(2)}ms`);
-		console.log(`[ComputeMeshBuilder] ${this.paletteData.paletteCount} palette entries, ${this.paletteData.totalVertices} vertices, ${this.paletteData.totalIndices} indices`);
+		console.log(
+			`[ComputeMeshBuilder] ${this.paletteData.paletteCount} palette entries, ${this.paletteData.totalVertices} vertices, ${this.paletteData.totalIndices} indices`
+		);
 	}
 
 	/**
@@ -512,10 +514,10 @@ export class ComputeMeshBuilder {
 			metadata[i * 8 + 1] = blockVertexCount;
 			metadata[i * 8 + 2] = startIndex;
 			metadata[i * 8 + 3] = blockIndexCount;
-			metadata[i * 8 + 4] = 0;  // occlusionFlags - will be set from palette
+			metadata[i * 8 + 4] = 0; // occlusionFlags - will be set from palette
 			metadata[i * 8 + 5] = this.categoryToNumber(block.category);
-			metadata[i * 8 + 6] = 0;  // reserved
-			metadata[i * 8 + 7] = 0;  // reserved
+			metadata[i * 8 + 6] = 0; // reserved
+			metadata[i * 8 + 7] = 0; // reserved
 		}
 
 		return {
@@ -524,18 +526,24 @@ export class ComputeMeshBuilder {
 			metadata,
 			totalVertices,
 			totalIndices,
-			paletteCount: blockData.length
+			paletteCount: blockData.length,
 		};
 	}
 
 	private categoryToNumber(category: string): number {
 		switch (category) {
-			case 'solid': return 0;
-			case 'transparent': return 1;
-			case 'water': return 2;
-			case 'emissive': return 3;
-			case 'redstone': return 4;
-			default: return 0;
+			case "solid":
+				return 0;
+			case "transparent":
+				return 1;
+			case "water":
+				return 2;
+			case "emissive":
+				return 3;
+			case "redstone":
+				return 4;
+			default:
+				return 0;
 		}
 	}
 
@@ -548,7 +556,7 @@ export class ComputeMeshBuilder {
 		_chunkId: string
 	): Promise<GPUChunkResult | null> {
 		if (!this.initialized || !this.computePipeline || !this.paletteData) {
-			console.warn('[ComputeMeshBuilder] Not ready to build chunk');
+			console.warn("[ComputeMeshBuilder] Not ready to build chunk");
 			return null;
 		}
 
@@ -575,8 +583,12 @@ export class ComputeMeshBuilder {
 		}
 
 		// Calculate bounds
-		let minX = Infinity, minY = Infinity, minZ = Infinity;
-		let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+		let minX = Infinity,
+			minY = Infinity,
+			minZ = Infinity;
+		let maxX = -Infinity,
+			maxY = -Infinity,
+			maxZ = -Infinity;
 
 		for (let i = 0; i < blockArray.length; i += 4) {
 			const x = blockArray[i];
@@ -616,26 +628,26 @@ export class ComputeMeshBuilder {
 		const maxIndices = maxVertices;
 
 		// Create GPU buffers
-		const blockBuffer = this.gpuManager.createStorageBuffer(blockArray, 'block-data');
-		const voxelBuffer = this.gpuManager.createStorageBuffer(voxelMap, 'voxel-map');
+		const blockBuffer = this.gpuManager.createStorageBuffer(blockArray, "block-data");
+		const voxelBuffer = this.gpuManager.createStorageBuffer(voxelMap, "voxel-map");
 
 		// Output geometry buffer: 6 i32s per vertex
 		const outGeometryBuffer = device.createBuffer({
 			size: maxVertices * 6 * 4,
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-			label: 'output-geometry'
+			label: "output-geometry",
 		});
 
 		const outIndicesBuffer = device.createBuffer({
 			size: maxIndices * 4,
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-			label: 'output-indices'
+			label: "output-indices",
 		});
 
 		const countersBuffer = device.createBuffer({
 			size: 8, // 2 x u32
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-			label: 'counters'
+			label: "counters",
 		});
 
 		// Initialize counters to 0
@@ -643,15 +655,21 @@ export class ComputeMeshBuilder {
 
 		// Create uniforms
 		const uniforms = new Int32Array([
-			chunkOrigin[0], chunkOrigin[1], chunkOrigin[2],
+			chunkOrigin[0],
+			chunkOrigin[1],
+			chunkOrigin[2],
 			blockCount,
-			sizeX, sizeY, sizeZ,
-			minX, minY, minZ
+			sizeX,
+			sizeY,
+			sizeZ,
+			minX,
+			minY,
+			minZ,
 		]);
 		const uniformBuffer = device.createBuffer({
 			size: 48, // 12 x i32, padded to 16-byte alignment
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-			label: 'uniforms'
+			label: "uniforms",
 		});
 		device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
@@ -668,7 +686,7 @@ export class ComputeMeshBuilder {
 				{ binding: 6, resource: { buffer: outIndicesBuffer } },
 				{ binding: 7, resource: { buffer: countersBuffer } },
 				{ binding: 8, resource: { buffer: uniformBuffer } },
-			]
+			],
 		});
 
 		// Dispatch compute
@@ -713,9 +731,9 @@ export class ComputeMeshBuilder {
 
 				// Unpack normals
 				const packedNorm = geoI32[srcBase + 3];
-				normals[i * 3 + 0] = (packedNorm & 0xFF);
-				normals[i * 3 + 1] = ((packedNorm >> 8) & 0xFF);
-				normals[i * 3 + 2] = ((packedNorm >> 16) & 0xFF);
+				normals[i * 3 + 0] = packedNorm & 0xff;
+				normals[i * 3 + 1] = (packedNorm >> 8) & 0xff;
+				normals[i * 3 + 2] = (packedNorm >> 16) & 0xff;
 
 				// UVs (bit-cast back to float)
 				const uvView = new DataView(geometryData, (srcBase + 4) * 4, 8);
@@ -723,20 +741,23 @@ export class ComputeMeshBuilder {
 				uvs[i * 2 + 1] = uvView.getFloat32(4, true);
 			}
 
-			const indices = vertexCount > 65535
-				? new Uint32Array(indicesData)
-				: new Uint16Array(new Uint32Array(indicesData));
+			const indices =
+				vertexCount > 65535
+					? new Uint32Array(indicesData)
+					: new Uint16Array(new Uint32Array(indicesData));
 
 			result = {
-				geometries: [{
-					category: 'solid',
-					positions,
-					normals,
-					uvs,
-					indices,
-					groups: [{ start: 0, count: indexCount, materialIndex: 0 }]
-				}],
-				origin: chunkOrigin
+				geometries: [
+					{
+						category: "solid",
+						positions,
+						normals,
+						uvs,
+						indices,
+						groups: [{ start: 0, count: indexCount, materialIndex: 0 }],
+					},
+				],
+				origin: chunkOrigin,
 			};
 		} else {
 			result = { geometries: [], origin: chunkOrigin };
@@ -771,6 +792,6 @@ export class ComputeMeshBuilder {
 		this.paletteData = null;
 		this.initialized = false;
 
-		console.log('[ComputeMeshBuilder] Disposed');
+		console.log("[ComputeMeshBuilder] Disposed");
 	}
 }

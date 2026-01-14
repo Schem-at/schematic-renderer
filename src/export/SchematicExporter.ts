@@ -44,7 +44,7 @@ const QUALITY_PRESETS: Record<ExportQuality, QualityPreset> = {
 
 /**
  * SchematicExporter - Handles exporting schematics to various 3D formats
- * 
+ *
  * Features:
  * - Multiple format support (GLTF, GLB, OBJ, STL)
  * - Normal fixing for proper rendering in external viewers
@@ -71,10 +71,7 @@ export class SchematicExporter {
 	/**
 	 * Export a THREE.Object3D to the specified format
 	 */
-	public async export(
-		object: THREE.Object3D,
-		options: ExportOptions = {}
-	): Promise<ExportResult> {
+	public async export(object: THREE.Object3D, options: ExportOptions = {}): Promise<ExportResult> {
 		const startTime = performance.now();
 		this.currentExport = new AbortController();
 
@@ -163,10 +160,7 @@ export class SchematicExporter {
 	/**
 	 * Subscribe to export events
 	 */
-	public on<T extends ExportEventType>(
-		event: T,
-		handler: ExportEventHandler<T>
-	): () => void {
+	public on<T extends ExportEventType>(event: T, handler: ExportEventHandler<T>): () => void {
 		const handlers = this.eventListeners.get(event);
 		if (handlers) {
 			handlers.add(handler);
@@ -178,10 +172,7 @@ export class SchematicExporter {
 	/**
 	 * Unsubscribe from export events
 	 */
-	public off<T extends ExportEventType>(
-		event: T,
-		handler: ExportEventHandler<T>
-	): void {
+	public off<T extends ExportEventType>(event: T, handler: ExportEventHandler<T>): void {
 		const handlers = this.eventListeners.get(event);
 		if (handlers) {
 			handlers.delete(handler);
@@ -201,11 +192,7 @@ export class SchematicExporter {
 	/**
 	 * Emit progress event
 	 */
-	private emitProgress(
-		phase: ExportProgress["phase"],
-		progress: number,
-		message: string
-	): void {
+	private emitProgress(phase: ExportProgress["phase"], progress: number, message: string): void {
 		this.emit("exportProgress", { phase, progress, message });
 	}
 
@@ -376,12 +363,8 @@ export class SchematicExporter {
 						const ArrayConstructor = array.constructor as new (length: number) => typeof array;
 						const newArray = new ArrayConstructor(array.length);
 						(newArray as Float32Array).set(array as Float32Array);
-						
-						const newAttr = new THREE.BufferAttribute(
-							newArray,
-							attr.itemSize,
-							attr.normalized
-						);
+
+						const newAttr = new THREE.BufferAttribute(newArray, attr.itemSize, attr.normalized);
 						clonedGeometry.setAttribute(name, newAttr);
 					}
 				}
@@ -390,7 +373,9 @@ export class SchematicExporter {
 				const index = originalGeometry.getIndex();
 				if (index) {
 					const indexArray = index.array;
-					const IndexConstructor = indexArray.constructor as new (length: number) => typeof indexArray;
+					const IndexConstructor = indexArray.constructor as new (
+						length: number
+					) => typeof indexArray;
 					const newIndexArray = new IndexConstructor(indexArray.length);
 					(newIndexArray as Uint16Array).set(indexArray as Uint16Array);
 					clonedGeometry.setIndex(new THREE.BufferAttribute(newIndexArray, 1));
@@ -415,7 +400,7 @@ export class SchematicExporter {
 			// Also clone materials to avoid modifying originals
 			if (child instanceof THREE.Mesh && child.material) {
 				if (Array.isArray(child.material)) {
-					child.material = child.material.map(m => m.clone());
+					child.material = child.material.map((m) => m.clone());
 				} else {
 					child.material = child.material.clone();
 				}
@@ -488,9 +473,7 @@ export class SchematicExporter {
 	 * Set materials to double-sided and fix depth settings
 	 */
 	private setDoubleSided(mesh: THREE.Mesh): void {
-		const materials = Array.isArray(mesh.material)
-			? mesh.material
-			: [mesh.material];
+		const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
 		materials.forEach((mat) => {
 			if (mat) {
@@ -507,19 +490,17 @@ export class SchematicExporter {
 	private fixMaterialsForExport(group: THREE.Group, forceOpaque: boolean = false): void {
 		group.traverse((child) => {
 			if (child instanceof THREE.Mesh) {
-				const materials = Array.isArray(child.material)
-					? child.material
-					: [child.material];
+				const materials = Array.isArray(child.material) ? child.material : [child.material];
 
 				materials.forEach((mat) => {
 					if (mat) {
 						// Ensure depth testing is enabled
 						mat.depthTest = true;
 						mat.depthWrite = true;
-						
+
 						// Force nearest neighbor filtering on all textures (pixel art style)
 						this.setNearestFilterOnMaterial(mat);
-						
+
 						if (forceOpaque) {
 							// Force all materials to be fully opaque
 							mat.transparent = false;
@@ -544,13 +525,24 @@ export class SchematicExporter {
 	 */
 	private setNearestFilterOnMaterial(material: THREE.Material): void {
 		const textureProps = [
-			'map', 'alphaMap', 'aoMap', 'bumpMap', 'displacementMap',
-			'emissiveMap', 'envMap', 'lightMap', 'metalnessMap',
-			'normalMap', 'roughnessMap', 'specularMap'
+			"map",
+			"alphaMap",
+			"aoMap",
+			"bumpMap",
+			"displacementMap",
+			"emissiveMap",
+			"envMap",
+			"lightMap",
+			"metalnessMap",
+			"normalMap",
+			"roughnessMap",
+			"specularMap",
 		];
 
 		textureProps.forEach((prop) => {
-			const texture = (material as unknown as Record<string, unknown>)[prop] as THREE.Texture | undefined;
+			const texture = (material as unknown as Record<string, unknown>)[prop] as
+				| THREE.Texture
+				| undefined;
 			if (texture && texture.isTexture) {
 				texture.magFilter = THREE.NearestFilter;
 				texture.minFilter = THREE.NearestFilter;
@@ -718,9 +710,7 @@ export class SchematicExporter {
 				if (child.geometry) {
 					child.geometry.dispose();
 				}
-				const materials = Array.isArray(child.material)
-					? child.material
-					: [child.material];
+				const materials = Array.isArray(child.material) ? child.material : [child.material];
 				materials.forEach((mat) => {
 					if (mat && mat.dispose) {
 						mat.dispose();
@@ -733,11 +723,7 @@ export class SchematicExporter {
 	/**
 	 * Create an export error
 	 */
-	private createError(
-		code: ExportErrorCode,
-		message: string,
-		originalError?: Error
-	): ExportError {
+	private createError(code: ExportErrorCode, message: string, originalError?: Error): ExportError {
 		return {
 			message,
 			code,

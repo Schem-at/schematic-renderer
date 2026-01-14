@@ -1,6 +1,6 @@
 // managers/OverlayManager.ts
-import { EventEmitter } from 'events';
-import { SchematicRenderer } from '../SchematicRenderer';
+import { EventEmitter } from "events";
+import { SchematicRenderer } from "../SchematicRenderer";
 
 export interface OverlayContent {
 	title: string;
@@ -44,8 +44,8 @@ export class OverlayManager extends EventEmitter {
 	 * Create the overlay DOM element
 	 */
 	private createOverlayElement(): void {
-		this.overlayElement = document.createElement('div');
-		this.overlayElement.className = 'schematic-overlay';
+		this.overlayElement = document.createElement("div");
+		this.overlayElement.className = "schematic-overlay";
 		this.overlayElement.style.cssText = `
 			position: fixed;
 			background: rgba(20, 20, 20, 0.95);
@@ -86,7 +86,7 @@ export class OverlayManager extends EventEmitter {
 						? `<div style="font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">
 					${this.escapeHtml(content.subtitle)}
 				</div>`
-						: ''
+						: ""
 				}
 			</div>
 		`;
@@ -104,8 +104,8 @@ export class OverlayManager extends EventEmitter {
 			}
 
 			section.items.forEach((item) => {
-				const valueColor = item.color || '#fff';
-				const icon = item.icon ? `<span style="margin-right: 6px;">${item.icon}</span>` : '';
+				const valueColor = item.color || "#fff";
+				const icon = item.icon ? `<span style="margin-right: 6px;">${item.icon}</span>` : "";
 
 				html += `
 					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 12px;">
@@ -119,12 +119,12 @@ export class OverlayManager extends EventEmitter {
 		});
 
 		this.overlayElement.innerHTML = html;
-		this.overlayElement.style.display = 'block';
+		this.overlayElement.style.display = "block";
 
 		// Position the overlay
 		this.updatePosition(position);
 
-		this.emit('shown', content);
+		this.emit("shown", content);
 	}
 
 	/**
@@ -171,9 +171,9 @@ export class OverlayManager extends EventEmitter {
 
 		this.isVisible = false;
 		this.currentContent = null;
-		this.overlayElement.style.display = 'none';
+		this.overlayElement.style.display = "none";
 
-		this.emit('hidden');
+		this.emit("hidden");
 	}
 
 	/**
@@ -194,10 +194,10 @@ export class OverlayManager extends EventEmitter {
 	 * Format a value for display
 	 */
 	private formatValue(value: string | number | boolean): string {
-		if (typeof value === 'boolean') {
-			return value ? '✓' : '✗';
+		if (typeof value === "boolean") {
+			return value ? "✓" : "✗";
 		}
-		if (typeof value === 'number') {
+		if (typeof value === "number") {
 			return value.toLocaleString();
 		}
 		return this.escapeHtml(String(value));
@@ -207,7 +207,7 @@ export class OverlayManager extends EventEmitter {
 	 * Escape HTML to prevent XSS
 	 */
 	private escapeHtml(text: string): string {
-		const div = document.createElement('div');
+		const div = document.createElement("div");
 		div.textContent = text;
 		return div.innerHTML;
 	}
@@ -224,4 +224,3 @@ export class OverlayManager extends EventEmitter {
 		this.removeAllListeners();
 	}
 }
-

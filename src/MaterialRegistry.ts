@@ -9,7 +9,7 @@ export class MaterialRegistry {
 	private materials = new Map<string, THREE.Material>();
 	private materialRefCount = new Map<string, number>();
 
-	private constructor() { }
+	private constructor() {}
 
 	static getInstance(): MaterialRegistry {
 		if (!MaterialRegistry.instance) {
@@ -38,9 +38,7 @@ export class MaterialRegistry {
 
 		// Clone the material to ensure we don't modify the original
 		const sharedMaterial = sourceMaterial.clone();
-		sharedMaterial.name = `shared_${sourceMaterial.name || "material"
-			}_${key.substring(0, 8)}`;
-
+		sharedMaterial.name = `shared_${sourceMaterial.name || "material"}_${key.substring(0, 8)}`;
 
 		this.materials.set(key, sharedMaterial);
 		this.materialRefCount.set(key, 1);
@@ -48,14 +46,12 @@ export class MaterialRegistry {
 		return sharedMaterial;
 	}
 
-
-
 	/**
 	 * Create a unique key for a material based on its properties
 	 */
 	private createMaterialKey(material: THREE.Material): string {
 		// OPTIMIZATION: Do NOT include material.name in the key
-		// Cubane assigns unique names (e.g. "minecraft:stone", "minecraft:dirt") 
+		// Cubane assigns unique names (e.g. "minecraft:stone", "minecraft:dirt")
 		// even when they share the same texture atlas and properties.
 		// By ignoring the name, we can merge them into a single shared material.
 		const keyParts: string[] = [material.type];
@@ -172,8 +168,7 @@ export class MaterialRegistry {
 		return {
 			totalMaterials,
 			totalReferences,
-			avgReferencesPerMaterial:
-				totalMaterials > 0 ? totalReferences / totalMaterials : 0,
+			avgReferencesPerMaterial: totalMaterials > 0 ? totalReferences / totalMaterials : 0,
 		};
 	}
 
@@ -187,7 +182,7 @@ export class MaterialRegistry {
 	private clearAll(): void {
 		// Log stack trace to find caller
 		console.log("[MaterialRegistry] clearAll called from:", new Error().stack);
-		
+
 		// Dispose all materials
 		this.materials.forEach((material) => {
 			material.dispose();
@@ -209,11 +204,7 @@ export class MaterialRegistry {
 		console.log("[MaterialRegistry] Statistics:");
 		console.log(`  Total unique materials: ${stats.totalMaterials}`);
 		console.log(`  Total references: ${stats.totalReferences}`);
-		console.log(
-			`  Average references per material: ${stats.avgReferencesPerMaterial.toFixed(
-				2
-			)}`
-		);
+		console.log(`  Average references per material: ${stats.avgReferencesPerMaterial.toFixed(2)}`);
 
 		// Log top 5 most referenced materials
 		const sortedMaterials = Array.from(instance.materialRefCount.entries())
@@ -224,17 +215,13 @@ export class MaterialRegistry {
 			console.log("  Top referenced materials:");
 			sortedMaterials.forEach(([key, count]) => {
 				const material = instance.materials.get(key);
-				console.log(
-					`    - ${material?.name || key.substring(0, 30)}: ${count} references`
-				);
+				console.log(`    - ${material?.name || key.substring(0, 30)}: ${count} references`);
 			});
 		}
 	}
 }
 
 // Export a convenience function for getting shared materials
-export function getSharedMaterial(
-	sourceMaterial: THREE.Material
-): THREE.Material {
+export function getSharedMaterial(sourceMaterial: THREE.Material): THREE.Material {
 	return MaterialRegistry.getMaterial(sourceMaterial);
 }

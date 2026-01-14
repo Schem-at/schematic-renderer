@@ -33,9 +33,9 @@ export class InteractionManager {
 	private addEventListeners() {
 		// Only add event listeners if the corresponding functionality is enabled
 		if (this.options.enableSelection) {
-			this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
-			this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
-			window.addEventListener('keydown', this.onKeyDown.bind(this));
+			this.canvas.addEventListener("mousemove", this.onMouseMove.bind(this));
+			this.canvas.addEventListener("mousedown", this.onMouseDown.bind(this));
+			window.addEventListener("keydown", this.onKeyDown.bind(this));
 		}
 
 		// Listen for external selection events (e.g. from RegionManager) to keep state in sync
@@ -72,21 +72,20 @@ export class InteractionManager {
 		if (!this.options.enableMovingSchematics) return;
 
 		switch (event.key) {
-			case 'g': // Press 'g' for translate mode
-				this.schematicRenderer.gizmoManager?.setMode('translate');
+			case "g": // Press 'g' for translate mode
+				this.schematicRenderer.gizmoManager?.setMode("translate");
 				break;
-			case 'r': // Press 'r' for rotate mode
-				this.schematicRenderer.gizmoManager?.setMode('rotate');
+			case "r": // Press 'r' for rotate mode
+				this.schematicRenderer.gizmoManager?.setMode("rotate");
 				break;
-			case 's': // Press 's' for scale mode
-				this.schematicRenderer.gizmoManager?.setMode('scale');
+			case "s": // Press 's' for scale mode
+				this.schematicRenderer.gizmoManager?.setMode("scale");
 				break;
-			case 'Escape': // Press 'Escape' to deselect object
+			case "Escape": // Press 'Escape' to deselect object
 				this.deselectObject();
 				break;
 		}
 	}
-
 
 	private updateMousePosition(event: MouseEvent) {
 		const rect = this.canvas.getBoundingClientRect();
@@ -98,8 +97,7 @@ export class InteractionManager {
 	private checkHover() {
 		this.raycaster.setFromCamera(this.mouse, this.camera);
 
-		const selectableObjects =
-			this.schematicRenderer.schematicManager?.getSelectableObjects();
+		const selectableObjects = this.schematicRenderer.schematicManager?.getSelectableObjects();
 
 		if (!selectableObjects || selectableObjects.length === 0) {
 			console.warn("No selectable objects found");
@@ -111,8 +109,7 @@ export class InteractionManager {
 
 		if (validObjects.length !== selectableObjects.length) {
 			console.warn(
-				`Filtered out ${selectableObjects.length - validObjects.length
-				} undefined objects`
+				`Filtered out ${selectableObjects.length - validObjects.length} undefined objects`
 			);
 		}
 
@@ -125,24 +122,14 @@ export class InteractionManager {
 
 				if (selectableObject && selectableObject !== this.hoveredObject) {
 					if (this.hoveredObject) {
-						this.schematicRenderer.eventEmitter.emit(
-							"hoverExit",
-							this.hoveredObject
-						);
+						this.schematicRenderer.eventEmitter.emit("hoverExit", this.hoveredObject);
 					}
 					this.hoveredObject = selectableObject;
-					this.schematicRenderer.eventEmitter.emit(
-						"hoverEnter",
-						selectableObject,
-						intersects[0]
-					);
+					this.schematicRenderer.eventEmitter.emit("hoverEnter", selectableObject, intersects[0]);
 					console.log("Hovering over object", selectableObject.id);
 				}
 			} else if (this.hoveredObject) {
-				this.schematicRenderer.eventEmitter.emit(
-					"hoverExit",
-					this.hoveredObject
-				);
+				this.schematicRenderer.eventEmitter.emit("hoverExit", this.hoveredObject);
 				this.hoveredObject = null;
 			}
 		} catch (error) {
@@ -153,15 +140,11 @@ export class InteractionManager {
 		}
 	}
 
-	private findSelectableParent(
-		object: THREE.Object3D
-	): SelectableObject | null {
+	private findSelectableParent(object: THREE.Object3D): SelectableObject | null {
 		let current: THREE.Object3D | null = object;
 		while (current) {
 			if (current instanceof THREE.Group && current.name) {
-				const schematic = this.schematicRenderer.schematicManager?.getSchematic(
-					current.name
-				);
+				const schematic = this.schematicRenderer.schematicManager?.getSchematic(current.name);
 				if (schematic) {
 					console.log("Found selectable parent:", schematic.id);
 					return schematic;
@@ -175,8 +158,7 @@ export class InteractionManager {
 
 	// @ts-ignore
 	private visualizeBoundingBoxes() {
-		const selectableObjects =
-			this.schematicRenderer.schematicManager?.getSelectableObjects();
+		const selectableObjects = this.schematicRenderer.schematicManager?.getSelectableObjects();
 		if (!selectableObjects) {
 			console.warn("No selectable objects found");
 			return;
@@ -206,7 +188,7 @@ export class InteractionManager {
 		}
 
 		// Verify objects are in scene
-		const validObjects = selectableObjects.filter(obj =>
+		const validObjects = selectableObjects.filter((obj) =>
 			this.schematicRenderer.sceneManager.scene.getObjectById(obj.id)
 		);
 
@@ -223,11 +205,12 @@ export class InteractionManager {
 			const selectableObject = this.findSelectableParent(intersectedObject);
 
 			// Prevent selecting regions via click (they should be edited via API/UI)
-			if (selectableObject && (
-				selectableObject.id?.startsWith("region_") ||
-				(selectableObject as any).name?.startsWith("region_") ||
-				(selectableObject as any).group?.name?.startsWith("region_")
-			)) {
+			if (
+				selectableObject &&
+				(selectableObject.id?.startsWith("region_") ||
+					(selectableObject as any).name?.startsWith("region_") ||
+					(selectableObject as any).group?.name?.startsWith("region_"))
+			) {
 				return;
 			}
 
@@ -240,10 +223,14 @@ export class InteractionManager {
 				// NEW: If currently selected object is a Region, and the new object is a Schematic,
 				// assume the user is interacting with the schematic content (placing/breaking/toggling)
 				// while keeping the region active.
-				if (this.selectedObject &&
+				if (
+					this.selectedObject &&
 					(this.selectedObject as any).id?.startsWith("region_") &&
-					selectableObject instanceof SchematicObject) {
-					console.log("Ignoring selection change from Region to Schematic (preserving region context)");
+					selectableObject instanceof SchematicObject
+				) {
+					console.log(
+						"Ignoring selection change from Region to Schematic (preserving region context)"
+					);
 					return; // Don't switch selection to schematic
 				}
 

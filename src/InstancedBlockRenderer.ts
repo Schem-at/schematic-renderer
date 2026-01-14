@@ -8,7 +8,10 @@ export class InstancedBlockRenderer {
 	private maxInstancesPerType: number = 50000; // Increased limit
 	private overflowInstances: Map<string, THREE.Object3D[]> = new Map(); // For overflow blocks
 
-	constructor(private group: THREE.Group, private paletteCache: any) {}
+	constructor(
+		private group: THREE.Group,
+		private paletteCache: any
+	) {}
 
 	private createBlockTypeKey(blockData: any, paletteIndex: number): string {
 		const blockState = this.paletteCache?.blockData?.[paletteIndex];
@@ -25,15 +28,12 @@ export class InstancedBlockRenderer {
 		return `${blockData.blockName}${propertyString}`;
 	}
 
-	private mergeGeometriesManual(
-		geometries: THREE.BufferGeometry[]
-	): THREE.BufferGeometry | null {
+	private mergeGeometriesManual(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
 		if (!geometries || geometries.length === 0) return null;
 		if (geometries.length === 1) return geometries[0].clone();
 
 		const validGeometries = geometries.filter(
-			(geo) =>
-				geo && geo.attributes.position && geo.attributes.position.count > 0
+			(geo) => geo && geo.attributes.position && geo.attributes.position.count > 0
 		);
 
 		if (validGeometries.length === 0) return null;
@@ -57,9 +57,7 @@ export class InstancedBlockRenderer {
 		});
 
 		const mergedPositions = new Float32Array(totalVertices * 3);
-		const mergedNormals = hasNormals
-			? new Float32Array(totalVertices * 3)
-			: null;
+		const mergedNormals = hasNormals ? new Float32Array(totalVertices * 3) : null;
 		const mergedUVs = hasUVs ? new Float32Array(totalVertices * 2) : null;
 		const mergedIndices = new Uint32Array(totalIndices);
 
@@ -104,23 +102,14 @@ export class InstancedBlockRenderer {
 		});
 
 		const mergedGeometry = new THREE.BufferGeometry();
-		mergedGeometry.setAttribute(
-			"position",
-			new THREE.BufferAttribute(mergedPositions, 3)
-		);
+		mergedGeometry.setAttribute("position", new THREE.BufferAttribute(mergedPositions, 3));
 
 		if (mergedNormals) {
-			mergedGeometry.setAttribute(
-				"normal",
-				new THREE.BufferAttribute(mergedNormals, 3)
-			);
+			mergedGeometry.setAttribute("normal", new THREE.BufferAttribute(mergedNormals, 3));
 		}
 
 		if (mergedUVs) {
-			mergedGeometry.setAttribute(
-				"uv",
-				new THREE.BufferAttribute(mergedUVs, 2)
-			);
+			mergedGeometry.setAttribute("uv", new THREE.BufferAttribute(mergedUVs, 2));
 		}
 
 		mergedGeometry.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
@@ -139,61 +128,51 @@ export class InstancedBlockRenderer {
 
 		const uniqueBlockTypes = new Set<string>();
 
-		this.paletteCache.blockData.forEach(
-			(blockData: any, paletteIndex: number) => {
-				const blockName = blockData.blockName;
+		this.paletteCache.blockData.forEach((blockData: any, paletteIndex: number) => {
+			const blockName = blockData.blockName;
 
-				if (INVISIBLE_BLOCKS.has(blockName)) {
-					return;
-				}
-
-				const blockTypeKey = this.createBlockTypeKey(blockData, paletteIndex);
-
-				if (uniqueBlockTypes.has(blockTypeKey)) {
-					return;
-				}
-				uniqueBlockTypes.add(blockTypeKey);
-
-				const instancedMeshesForBlock: THREE.InstancedMesh[] = [];
-
-				blockData.materialGroups.forEach(
-					(materialGroup: any, groupIndex: number) => {
-						const geometry = materialGroup.baseGeometry;
-						const material = materialGroup.material;
-
-						if (!geometry || geometry.attributes.position.count === 0) {
-							return;
-						}
-
-						const instancedMesh = new THREE.InstancedMesh(
-							geometry,
-							material,
-							this.maxInstancesPerType
-						);
-
-						instancedMesh.name = `instanced_${blockTypeKey}_part${groupIndex}`;
-						instancedMesh.userData.paletteIndex = paletteIndex;
-						instancedMesh.userData.blockTypeKey = blockTypeKey;
-						instancedMesh.userData.materialGroupIndex = groupIndex;
-
-						this.configureMeshForCategory(instancedMesh, blockData.category);
-
-						instancedMesh.visible = false;
-						instancedMesh.count = 0;
-
-						instancedMeshesForBlock.push(instancedMesh);
-						this.group.add(instancedMesh);
-					}
-				);
-
-				this.instancedMeshes.set(blockTypeKey, instancedMeshesForBlock);
-				this.instanceCounts.set(blockTypeKey, 0);
+			if (INVISIBLE_BLOCKS.has(blockName)) {
+				return;
 			}
-		);
 
-		console.log(
-			`🎯 Created instanced meshes for ${uniqueBlockTypes.size} unique block variants`
-		);
+			const blockTypeKey = this.createBlockTypeKey(blockData, paletteIndex);
+
+			if (uniqueBlockTypes.has(blockTypeKey)) {
+				return;
+			}
+			uniqueBlockTypes.add(blockTypeKey);
+
+			const instancedMeshesForBlock: THREE.InstancedMesh[] = [];
+
+			blockData.materialGroups.forEach((materialGroup: any, groupIndex: number) => {
+				const geometry = materialGroup.baseGeometry;
+				const material = materialGroup.material;
+
+				if (!geometry || geometry.attributes.position.count === 0) {
+					return;
+				}
+
+				const instancedMesh = new THREE.InstancedMesh(geometry, material, this.maxInstancesPerType);
+
+				instancedMesh.name = `instanced_${blockTypeKey}_part${groupIndex}`;
+				instancedMesh.userData.paletteIndex = paletteIndex;
+				instancedMesh.userData.blockTypeKey = blockTypeKey;
+				instancedMesh.userData.materialGroupIndex = groupIndex;
+
+				this.configureMeshForCategory(instancedMesh, blockData.category);
+
+				instancedMesh.visible = false;
+				instancedMesh.count = 0;
+
+				instancedMeshesForBlock.push(instancedMesh);
+				this.group.add(instancedMesh);
+			});
+
+			this.instancedMeshes.set(blockTypeKey, instancedMeshesForBlock);
+			this.instanceCounts.set(blockTypeKey, 0);
+		});
+
+		console.log(`🎯 Created instanced meshes for ${uniqueBlockTypes.size} unique block variants`);
 	}
 
 	public initializeInstancedMeshesMerged(): void {
@@ -207,72 +186,68 @@ export class InstancedBlockRenderer {
 
 		const uniqueBlockTypes = new Set<string>();
 
-		this.paletteCache.blockData.forEach(
-			(blockData: any, paletteIndex: number) => {
-				const blockName = blockData.blockName;
+		this.paletteCache.blockData.forEach((blockData: any, paletteIndex: number) => {
+			const blockName = blockData.blockName;
 
-				if (INVISIBLE_BLOCKS.has(blockName)) {
-					return;
-				}
-
-				const blockTypeKey = this.createBlockTypeKey(blockData, paletteIndex);
-
-				if (uniqueBlockTypes.has(blockTypeKey)) {
-					return;
-				}
-				uniqueBlockTypes.add(blockTypeKey);
-
-				const geometriesToMerge = blockData.materialGroups
-					.map((group: any) => group.baseGeometry)
-					.filter(
-						(geo: THREE.BufferGeometry) =>
-							geo &&
-							geo.attributes.position &&
-							geo.attributes.position.count > 0
-					);
-
-				if (geometriesToMerge.length === 0) {
-					console.warn(`No valid geometries for ${blockTypeKey}`);
-					return;
-				}
-
-				const mergedGeometry = this.mergeGeometriesManual(geometriesToMerge);
-
-				if (!mergedGeometry || mergedGeometry.attributes.position.count === 0) {
-					console.warn(`Failed to merge geometries for ${blockTypeKey}`);
-					return;
-				}
-
-				const materials = blockData.materialGroups
-					.map((group: any) => group.material)
-					.filter((mat: THREE.Material) => mat);
-
-				const material = materials[0];
-
-				const instancedMesh = new THREE.InstancedMesh(
-					mergedGeometry,
-					material,
-					this.maxInstancesPerType
-				);
-
-				instancedMesh.name = `instanced_${blockTypeKey}_merged`;
-				instancedMesh.userData.paletteIndex = paletteIndex;
-				instancedMesh.userData.blockTypeKey = blockTypeKey;
-
-				this.configureMeshForCategory(instancedMesh, blockData.category);
-
-				instancedMesh.visible = false;
-				instancedMesh.count = 0;
-
-				this.instancedMeshes.set(blockTypeKey, [instancedMesh]);
-				this.instanceCounts.set(blockTypeKey, 0);
-				this.group.add(instancedMesh);
-
-				console.log(
-					`✅ Created merged instanced mesh for ${blockTypeKey} with ${mergedGeometry.attributes.position.count} vertices`
-				);
+			if (INVISIBLE_BLOCKS.has(blockName)) {
+				return;
 			}
-		);
+
+			const blockTypeKey = this.createBlockTypeKey(blockData, paletteIndex);
+
+			if (uniqueBlockTypes.has(blockTypeKey)) {
+				return;
+			}
+			uniqueBlockTypes.add(blockTypeKey);
+
+			const geometriesToMerge = blockData.materialGroups
+				.map((group: any) => group.baseGeometry)
+				.filter(
+					(geo: THREE.BufferGeometry) =>
+						geo && geo.attributes.position && geo.attributes.position.count > 0
+				);
+
+			if (geometriesToMerge.length === 0) {
+				console.warn(`No valid geometries for ${blockTypeKey}`);
+				return;
+			}
+
+			const mergedGeometry = this.mergeGeometriesManual(geometriesToMerge);
+
+			if (!mergedGeometry || mergedGeometry.attributes.position.count === 0) {
+				console.warn(`Failed to merge geometries for ${blockTypeKey}`);
+				return;
+			}
+
+			const materials = blockData.materialGroups
+				.map((group: any) => group.material)
+				.filter((mat: THREE.Material) => mat);
+
+			const material = materials[0];
+
+			const instancedMesh = new THREE.InstancedMesh(
+				mergedGeometry,
+				material,
+				this.maxInstancesPerType
+			);
+
+			instancedMesh.name = `instanced_${blockTypeKey}_merged`;
+			instancedMesh.userData.paletteIndex = paletteIndex;
+			instancedMesh.userData.blockTypeKey = blockTypeKey;
+
+			this.configureMeshForCategory(instancedMesh, blockData.category);
+
+			instancedMesh.visible = false;
+			instancedMesh.count = 0;
+
+			this.instancedMeshes.set(blockTypeKey, [instancedMesh]);
+			this.instanceCounts.set(blockTypeKey, 0);
+			this.group.add(instancedMesh);
+
+			console.log(
+				`✅ Created merged instanced mesh for ${blockTypeKey} with ${mergedGeometry.attributes.position.count} vertices`
+			);
+		});
 
 		console.log(
 			`🎯 Created merged instanced meshes for ${uniqueBlockTypes.size} unique block variants`
@@ -282,9 +257,7 @@ export class InstancedBlockRenderer {
 	public renderBlocksInstanced(
 		allBlocks: Array<{ x: number; y: number; z: number; paletteIndex: number }>
 	): void {
-		console.log(
-			`🚀 Rendering ${allBlocks.length} blocks with overflow handling...`
-		);
+		console.log(`🚀 Rendering ${allBlocks.length} blocks with overflow handling...`);
 		const startTime = performance.now();
 
 		this.instanceCounts.forEach((_, blockTypeKey) => {
@@ -292,10 +265,7 @@ export class InstancedBlockRenderer {
 		});
 		this.clearOverflowInstances();
 
-		const blocksByType = new Map<
-			string,
-			Array<{ x: number; y: number; z: number }>
-		>();
+		const blocksByType = new Map<string, Array<{ x: number; y: number; z: number }>>();
 
 		for (const block of allBlocks) {
 			const blockData = this.paletteCache.blockData[block.paletteIndex];
@@ -303,17 +273,12 @@ export class InstancedBlockRenderer {
 
 			if (INVISIBLE_BLOCKS.has(blockData.blockName)) continue;
 
-			const blockTypeKey = this.createBlockTypeKey(
-				blockData,
-				block.paletteIndex
-			);
+			const blockTypeKey = this.createBlockTypeKey(blockData, block.paletteIndex);
 
 			if (!blocksByType.has(blockTypeKey)) {
 				blocksByType.set(blockTypeKey, []);
 			}
-			blocksByType
-				.get(blockTypeKey)!
-				.push({ x: block.x, y: block.y, z: block.z });
+			blocksByType.get(blockTypeKey)!.push({ x: block.x, y: block.y, z: block.z });
 		}
 
 		blocksByType.forEach((positions, blockTypeKey) => {
@@ -330,11 +295,7 @@ export class InstancedBlockRenderer {
 		});
 
 		const duration = performance.now() - startTime;
-		console.log(
-			`⚡ Instanced rendering with overflow completed in ${duration.toFixed(
-				2
-			)}ms`
-		);
+		console.log(`⚡ Instanced rendering with overflow completed in ${duration.toFixed(2)}ms`);
 
 		this.logInstancedStats();
 	}
@@ -370,10 +331,7 @@ export class InstancedBlockRenderer {
 			for (let i = instanceCount; i < positions.length; i++) {
 				const pos = positions[i];
 				instancedMeshes.forEach((instancedMesh, groupIndex) => {
-					const overflowMesh = new THREE.Mesh(
-						instancedMesh.geometry,
-						instancedMesh.material
-					);
+					const overflowMesh = new THREE.Mesh(instancedMesh.geometry, instancedMesh.material);
 
 					overflowMesh.position.set(pos.x, pos.y, pos.z);
 					overflowMesh.name = `overflow_${blockTypeKey}_${i}_part${groupIndex}`;
@@ -420,9 +378,7 @@ export class InstancedBlockRenderer {
 					);
 					typesWithOverflow++;
 				} else {
-					console.log(
-						`  ${blockTypeKey}: ${count} instances × ${meshes.length} parts`
-					);
+					console.log(`  ${blockTypeKey}: ${count} instances × ${meshes.length} parts`);
 				}
 
 				totalInstances += count;
@@ -436,15 +392,10 @@ export class InstancedBlockRenderer {
 		console.log(`Instanced Mesh Objects: ${totalInstancedMeshObjects}`);
 		console.log(`Overflow Individual Meshes: ${totalOverflowMeshes}`);
 		console.log(`Block Types with Overflow: ${typesWithOverflow}`);
-		console.log(
-			`Estimated Draw Calls: ${totalInstancedMeshObjects + totalOverflowMeshes}`
-		);
+		console.log(`Estimated Draw Calls: ${totalInstancedMeshObjects + totalOverflowMeshes}`);
 	}
 
-	private configureMeshForCategory(
-		mesh: THREE.InstancedMesh,
-		category: string
-	): void {
+	private configureMeshForCategory(mesh: THREE.InstancedMesh, category: string): void {
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
 		mesh.frustumCulled = false;
@@ -470,7 +421,6 @@ export class InstancedBlockRenderer {
 		}
 	}
 
-
 	public disposeInstancedMeshes(): void {
 		this.instancedMeshes.forEach((meshes) => {
 			meshes.forEach((mesh) => {
@@ -481,7 +431,6 @@ export class InstancedBlockRenderer {
 		this.instancedMeshes.clear();
 		this.instanceCounts.clear();
 	}
-
 
 	public getInstancedMeshes(blockName: string): THREE.InstancedMesh[] {
 		return this.instancedMeshes.get(blockName) || [];

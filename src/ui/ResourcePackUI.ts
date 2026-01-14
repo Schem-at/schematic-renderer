@@ -54,7 +54,10 @@ export class ResourcePackUI {
 		container.className = "resource-pack-ui";
 
 		// Position styles
-		const positions: Record<string, { top?: string; right?: string; bottom?: string; left?: string }> = {
+		const positions: Record<
+			string,
+			{ top?: string; right?: string; bottom?: string; left?: string }
+		> = {
 			"top-left": { top: "10px", left: "10px" },
 			"top-right": { top: "10px", right: "10px" },
 			"bottom-left": { bottom: "10px", left: "10px" },
@@ -148,11 +151,7 @@ export class ResourcePackUI {
 		return list;
 	}
 
-	private createIconButton(
-		icon: string,
-		title: string,
-		onClick: () => void
-	): HTMLButtonElement {
+	private createIconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
 		const btn = document.createElement("button");
 		btn.textContent = icon;
 		btn.title = title;
@@ -268,9 +267,7 @@ export class ResourcePackUI {
 			padding: "10px 12px",
 			marginBottom: "4px",
 			borderRadius: "6px",
-			backgroundColor: pack.enabled
-				? "rgba(74, 108, 247, 0.15)"
-				: "rgba(255, 255, 255, 0.03)",
+			backgroundColor: pack.enabled ? "rgba(74, 108, 247, 0.15)" : "rgba(255, 255, 255, 0.03)",
 			border: "1px solid " + (pack.enabled ? "rgba(74, 108, 247, 0.3)" : "transparent"),
 			cursor: this.options.enableDragReorder ? "grab" : "default",
 			transition: "all 0.15s",
@@ -397,7 +394,7 @@ export class ResourcePackUI {
 			// Handle async onChange properly
 			const result = onChange();
 			if (result instanceof Promise) {
-				result.catch(err => console.error('Toggle error:', err));
+				result.catch((err) => console.error("Toggle error:", err));
 			}
 		});
 		label.appendChild(input);

@@ -19,24 +19,24 @@ export const UIColors = {
 	inputBackground: "rgba(255, 255, 255, 0.05)",
 	hoverBackground: "rgba(255, 255, 255, 0.15)",
 	activeBackground: "rgba(74, 108, 247, 0.15)",
-	
+
 	// Border colors
 	border: "rgba(255, 255, 255, 0.1)",
 	inputBorder: "rgba(255, 255, 255, 0.15)",
 	activeBorder: "rgba(74, 108, 247, 0.3)",
-	
+
 	// Text colors
 	text: "#e0e0e0",
 	textMuted: "rgba(255, 255, 255, 0.7)",
 	textDim: "rgba(255, 255, 255, 0.5)",
-	
+
 	// Accent colors
 	primary: "#4a6cf7",
 	primaryHover: "#5b7af8",
 	success: "#4caf50",
 	warning: "#ff9800",
 	danger: "#ff6b6b",
-	
+
 	// Shadow
 	shadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
 };
@@ -59,7 +59,7 @@ export const UIStyles = {
 		overflow: "hidden",
 		border: `1px solid ${UIColors.border}`,
 	},
-	
+
 	header: {
 		display: "flex",
 		justifyContent: "space-between",
@@ -68,7 +68,7 @@ export const UIStyles = {
 		borderBottom: `1px solid ${UIColors.border}`,
 		background: UIColors.headerBackground,
 	},
-	
+
 	content: {
 		padding: "16px",
 		display: "flex",
@@ -77,13 +77,13 @@ export const UIStyles = {
 		maxHeight: "60vh",
 		overflowY: "auto" as const,
 	},
-	
+
 	section: {
 		borderBottom: `1px solid ${UIColors.border}`,
 		paddingBottom: "16px",
 		marginBottom: "0",
 	},
-	
+
 	sectionTitle: {
 		fontSize: "11px",
 		fontWeight: "600" as const,
@@ -92,7 +92,7 @@ export const UIStyles = {
 		marginBottom: "12px",
 		letterSpacing: "0.5px",
 	},
-	
+
 	label: {
 		display: "block",
 		fontSize: "12px",
@@ -100,7 +100,7 @@ export const UIStyles = {
 		marginBottom: "6px",
 		color: UIColors.textMuted,
 	},
-	
+
 	input: {
 		width: "100%",
 		padding: "8px 12px",
@@ -112,7 +112,7 @@ export const UIStyles = {
 		outline: "none",
 		boxSizing: "border-box" as const,
 	},
-	
+
 	select: {
 		width: "100%",
 		padding: "8px 12px",
@@ -124,7 +124,7 @@ export const UIStyles = {
 		outline: "none",
 		cursor: "pointer",
 	},
-	
+
 	button: {
 		padding: "8px 16px",
 		border: "none",
@@ -136,7 +136,7 @@ export const UIStyles = {
 		fontWeight: "500" as const,
 		transition: "background-color 0.15s",
 	},
-	
+
 	buttonSecondary: {
 		padding: "8px 16px",
 		border: `1px solid ${UIColors.inputBorder}`,
@@ -147,7 +147,7 @@ export const UIStyles = {
 		fontSize: "13px",
 		transition: "background-color 0.15s",
 	},
-	
+
 	iconButton: {
 		width: "28px",
 		height: "28px",
@@ -159,7 +159,7 @@ export const UIStyles = {
 		fontSize: "12px",
 		transition: "background-color 0.15s",
 	},
-	
+
 	footer: {
 		padding: "12px 16px",
 		borderTop: `1px solid ${UIColors.border}`,
@@ -174,7 +174,10 @@ export const UIStyles = {
  * Get position styles based on UIPosition
  */
 export function getPositionStyles(position: UIPosition): Record<string, string> {
-	const positions: Record<UIPosition, { top?: string; right?: string; bottom?: string; left?: string }> = {
+	const positions: Record<
+		UIPosition,
+		{ top?: string; right?: string; bottom?: string; left?: string }
+	> = {
 		"top-left": { top: "10px", left: "10px" },
 		"top-right": { top: "10px", right: "10px" },
 		"bottom-left": { bottom: "10px", left: "10px" },
@@ -220,7 +223,7 @@ export function createSelect(
 	select.addEventListener("blur", () => {
 		select.style.borderColor = UIColors.inputBorder;
 	});
-	
+
 	if (onChange) {
 		select.addEventListener("change", () => onChange(select.value));
 	}
@@ -242,7 +245,7 @@ export function createNumberInput(
 	} = {}
 ): HTMLDivElement {
 	const { min, max, step = 1, unit, onChange } = options;
-	
+
 	const container = document.createElement("div");
 	Object.assign(container.style, {
 		display: "flex",
@@ -268,7 +271,7 @@ export function createNumberInput(
 	input.addEventListener("blur", () => {
 		input.style.borderColor = UIColors.inputBorder;
 	});
-	
+
 	if (onChange) {
 		input.addEventListener("change", () => {
 			const val = parseFloat(input.value);
@@ -314,7 +317,7 @@ export function createToggle(
 	input.style.opacity = "0";
 	input.style.width = "0";
 	input.style.height = "0";
-	
+
 	const slider = document.createElement("span");
 	Object.assign(slider.style, {
 		position: "absolute",
@@ -339,17 +342,17 @@ export function createToggle(
 		transition: "0.2s",
 	});
 	slider.appendChild(knob);
-	
+
 	// Update visual state on change
 	input.addEventListener("change", () => {
 		const checked = input.checked;
 		slider.style.backgroundColor = checked ? UIColors.primary : "rgba(255, 255, 255, 0.2)";
 		knob.style.left = checked ? "19px" : "3px";
-		
+
 		if (onChange) {
 			const result = onChange(checked);
 			if (result instanceof Promise) {
-				result.catch(err => console.error('Toggle error:', err));
+				result.catch((err) => console.error("Toggle error:", err));
 			}
 		}
 	});
@@ -379,7 +382,7 @@ export function createCheckbox(
 		fontSize: "12px",
 		color: UIColors.textMuted,
 	});
-	
+
 	if (tooltip) {
 		container.title = tooltip;
 	}
@@ -393,11 +396,11 @@ export function createCheckbox(
 		height: "14px",
 		cursor: "pointer",
 	});
-	
+
 	if (onChange) {
 		input.addEventListener("change", () => onChange(input.checked));
 	}
-	
+
 	container.appendChild(input);
 
 	const label = document.createElement("span");
@@ -419,7 +422,7 @@ export function createIconButton(
 	btn.textContent = icon;
 	btn.title = title;
 	Object.assign(btn.style, UIStyles.iconButton);
-	
+
 	btn.addEventListener("mouseenter", () => {
 		btn.style.backgroundColor = UIColors.hoverBackground;
 	});
@@ -427,7 +430,7 @@ export function createIconButton(
 		btn.style.backgroundColor = "rgba(255, 255, 255, 0.08)";
 	});
 	btn.addEventListener("click", onClick);
-	
+
 	return btn;
 }
 
@@ -440,17 +443,17 @@ export function createButton(
 	options: { primary?: boolean; disabled?: boolean } = {}
 ): HTMLButtonElement {
 	const { primary = true, disabled = false } = options;
-	
+
 	const btn = document.createElement("button");
 	btn.textContent = text;
 	btn.disabled = disabled;
 	Object.assign(btn.style, primary ? UIStyles.button : UIStyles.buttonSecondary);
-	
+
 	if (disabled) {
 		btn.style.opacity = "0.5";
 		btn.style.cursor = "not-allowed";
 	}
-	
+
 	if (!disabled) {
 		btn.addEventListener("mouseenter", () => {
 			btn.style.backgroundColor = primary ? UIColors.primaryHover : UIColors.hoverBackground;
@@ -459,9 +462,9 @@ export function createButton(
 			btn.style.backgroundColor = primary ? UIColors.primary : "transparent";
 		});
 	}
-	
+
 	btn.addEventListener("click", onClick);
-	
+
 	return btn;
 }
 
@@ -491,7 +494,7 @@ export function createColorPicker(
 		padding: "2px",
 		backgroundColor: UIColors.inputBackground,
 	});
-	
+
 	const hexInput = document.createElement("input");
 	hexInput.type = "text";
 	hexInput.value = value.toUpperCase();
@@ -507,7 +510,7 @@ export function createColorPicker(
 		hexInput.value = colorInput.value.toUpperCase();
 		if (onChange) onChange(colorInput.value);
 	});
-	
+
 	hexInput.addEventListener("change", () => {
 		let hex = hexInput.value;
 		if (!hex.startsWith("#")) hex = "#" + hex;
@@ -538,15 +541,15 @@ export function createSlider(
 		onChange?: (value: number) => void;
 	} = {}
 ): HTMLDivElement {
-	const { 
-		min = 0, 
-		max = 100, 
-		step = 1, 
+	const {
+		min = 0,
+		max = 100,
+		step = 1,
 		showValue = true,
 		formatValue = (v) => v.toString(),
-		onChange 
+		onChange,
 	} = options;
-	
+
 	const container = document.createElement("div");
 	Object.assign(container.style, {
 		display: "flex",
@@ -602,7 +605,7 @@ export function createSettingRow(
 	options: { tooltip?: string; fullWidth?: boolean } = {}
 ): HTMLDivElement {
 	const { tooltip, fullWidth = false } = options;
-	
+
 	const row = document.createElement("div");
 	Object.assign(row.style, {
 		display: fullWidth ? "block" : "flex",
@@ -619,14 +622,14 @@ export function createSettingRow(
 		color: UIColors.textMuted,
 		flexShrink: "0",
 	});
-	
+
 	if (tooltip) {
 		label.title = tooltip;
 		label.style.cursor = "help";
 	}
-	
+
 	row.appendChild(label);
-	
+
 	if (fullWidth) {
 		const controlWrapper = document.createElement("div");
 		controlWrapper.style.marginTop = "8px";
@@ -670,7 +673,7 @@ export abstract class BaseUI {
 		};
 
 		this.container = this.createContainer();
-		
+
 		if (this.options.enableKeyboardShortcuts && this.options.toggleUIShortcut) {
 			this.setupKeyboardShortcuts();
 		}
@@ -746,7 +749,7 @@ export abstract class BaseUI {
 				this.toggle();
 			}
 		};
-		
+
 		document.addEventListener("keydown", this.keydownHandler);
 	}
 

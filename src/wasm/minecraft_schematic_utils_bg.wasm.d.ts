@@ -23,12 +23,57 @@ export const schematicwrapper_from_litematic: (a: number, b: number, c: number) 
 export const schematicwrapper_to_litematic: (a: number) => [number, number, number, number];
 export const schematicwrapper_from_schematic: (a: number, b: number, c: number) => [number, number];
 export const schematicwrapper_to_schematic: (a: number) => [number, number, number, number];
-export const schematicwrapper_set_block: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-export const schematicwrapper_set_block_from_string: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-export const schematicwrapper_copy_region: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: any) => [number, number];
-export const schematicwrapper_set_block_with_properties: (a: number, b: number, c: number, d: number, e: number, f: number, g: any) => [number, number];
-export const schematicwrapper_get_block: (a: number, b: number, c: number, d: number) => [number, number];
-export const schematicwrapper_get_block_with_properties: (a: number, b: number, c: number, d: number) => number;
+export const schematicwrapper_set_block: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number
+) => void;
+export const schematicwrapper_set_block_from_string: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number
+) => [number, number];
+export const schematicwrapper_copy_region: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number,
+	g: number,
+	h: number,
+	i: number,
+	j: number,
+	k: number,
+	l: any
+) => [number, number];
+export const schematicwrapper_set_block_with_properties: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number,
+	g: any
+) => [number, number];
+export const schematicwrapper_get_block: (
+	a: number,
+	b: number,
+	c: number,
+	d: number
+) => [number, number];
+export const schematicwrapper_get_block_with_properties: (
+	a: number,
+	b: number,
+	c: number,
+	d: number
+) => number;
 export const schematicwrapper_get_block_entity: (a: number, b: number, c: number, d: number) => any;
 export const schematicwrapper_get_all_block_entities: (a: number) => any;
 export const schematicwrapper_print_schematic: (a: number) => [number, number];
@@ -39,19 +84,53 @@ export const schematicwrapper_get_volume: (a: number) => number;
 export const schematicwrapper_get_region_names: (a: number) => [number, number];
 export const schematicwrapper_blocks: (a: number) => any;
 export const schematicwrapper_chunks: (a: number, b: number, c: number, d: number) => any;
-export const schematicwrapper_chunks_with_strategy: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
-export const schematicwrapper_get_chunk_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+export const schematicwrapper_chunks_with_strategy: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number,
+	g: number,
+	h: number,
+	i: number
+) => any;
+export const schematicwrapper_get_chunk_blocks: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number,
+	f: number,
+	g: number
+) => any;
 export const schematicwrapper_get_block_palette: (a: number) => any;
 export const mchprsworldwrapper_new: (a: number) => [number, number, number];
 export const mchprsworldwrapper_on_use_block: (a: number, b: number, c: number, d: number) => void;
 export const mchprsworldwrapper_tick: (a: number, b: number) => void;
 export const mchprsworldwrapper_flush: (a: number) => void;
 export const mchprsworldwrapper_is_lit: (a: number, b: number, c: number, d: number) => number;
-export const mchprsworldwrapper_get_lever_power: (a: number, b: number, c: number, d: number) => number;
-export const mchprsworldwrapper_get_redstone_power: (a: number, b: number, c: number, d: number) => number;
+export const mchprsworldwrapper_get_lever_power: (
+	a: number,
+	b: number,
+	c: number,
+	d: number
+) => number;
+export const mchprsworldwrapper_get_redstone_power: (
+	a: number,
+	b: number,
+	c: number,
+	d: number
+) => number;
 export const mchprsworldwrapper_get_truth_table: (a: number) => any;
 export const blockstatewrapper_new: (a: number, b: number) => number;
-export const blockstatewrapper_with_property: (a: number, b: number, c: number, d: number, e: number) => void;
+export const blockstatewrapper_with_property: (
+	a: number,
+	b: number,
+	c: number,
+	d: number,
+	e: number
+) => void;
 export const blockstatewrapper_name: (a: number) => [number, number];
 export const blockstatewrapper_properties: (a: number) => any;
 export const debug_schematic: (a: number) => [number, number];

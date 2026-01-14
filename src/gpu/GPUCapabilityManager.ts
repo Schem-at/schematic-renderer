@@ -1,6 +1,6 @@
 /**
  * GPUCapabilityManager
- * 
+ *
  * Handles WebGPU detection, initialization, and capability management.
  * Provides a singleton interface for GPU resource access throughout the application.
  */
@@ -24,7 +24,7 @@ export class GPUCapabilityManager {
 	private _initPromise: Promise<boolean> | null = null;
 	private _initialized: boolean = false;
 
-	private constructor() { }
+	private constructor() {}
 
 	public static getInstance(): GPUCapabilityManager {
 		if (!GPUCapabilityManager.instance) {
@@ -37,8 +37,8 @@ export class GPUCapabilityManager {
 	 * Check if WebGPU is available in this browser
 	 */
 	public static async isWebGPUAvailable(): Promise<boolean> {
-		if (typeof navigator === 'undefined') return false;
-		if (!('gpu' in navigator)) return false;
+		if (typeof navigator === "undefined") return false;
+		if (!("gpu" in navigator)) return false;
 
 		try {
 			const adapter = await navigator.gpu.requestAdapter();
@@ -70,18 +70,18 @@ export class GPUCapabilityManager {
 		try {
 			// Check for WebGPU support
 			if (!navigator.gpu) {
-				console.warn('[GPUCapabilityManager] WebGPU not supported in this browser');
+				console.warn("[GPUCapabilityManager] WebGPU not supported in this browser");
 				this._initialized = true;
 				return false;
 			}
 
 			// Request adapter
 			this._adapter = await navigator.gpu.requestAdapter({
-				powerPreference: 'high-performance'
+				powerPreference: "high-performance",
 			});
 
 			if (!this._adapter) {
-				console.warn('[GPUCapabilityManager] Failed to get GPU adapter');
+				console.warn("[GPUCapabilityManager] Failed to get GPU adapter");
 				this._initialized = true;
 				return false;
 			}
@@ -92,21 +92,22 @@ export class GPUCapabilityManager {
 			// Request maximum storage buffer size for large geometry data
 			const adapterLimits = this._adapter.limits;
 			requiredLimits.maxStorageBufferBindingSize = adapterLimits.maxStorageBufferBindingSize;
-			requiredLimits.maxComputeWorkgroupsPerDimension = adapterLimits.maxComputeWorkgroupsPerDimension;
+			requiredLimits.maxComputeWorkgroupsPerDimension =
+				adapterLimits.maxComputeWorkgroupsPerDimension;
 
 			this._device = await this._adapter.requestDevice({
-				requiredLimits
+				requiredLimits,
 			});
 
 			if (!this._device) {
-				console.warn('[GPUCapabilityManager] Failed to get GPU device');
+				console.warn("[GPUCapabilityManager] Failed to get GPU device");
 				this._initialized = true;
 				return false;
 			}
 
 			// Set up device lost handler
 			this._device.lost.then((info) => {
-				console.error('[GPUCapabilityManager] GPU device lost:', info.message);
+				console.error("[GPUCapabilityManager] GPU device lost:", info.message);
 				this._device = null;
 				this._initialized = false;
 				this._initPromise = null;
@@ -123,8 +124,8 @@ export class GPUCapabilityManager {
 				maxComputeWorkgroupSizeZ: this._device.limits.maxComputeWorkgroupSizeZ,
 			};
 
-			console.log('[GPUCapabilityManager] WebGPU initialized successfully');
-			console.log('[GPUCapabilityManager] Device limits:', {
+			console.log("[GPUCapabilityManager] WebGPU initialized successfully");
+			console.log("[GPUCapabilityManager] Device limits:", {
 				maxStorageBufferBindingSize: `${(this._capabilities.maxStorageBufferBindingSize / 1024 / 1024).toFixed(1)} MB`,
 				maxComputeWorkgroupsPerDimension: this._capabilities.maxComputeWorkgroupsPerDimension,
 				maxComputeInvocationsPerWorkgroup: this._capabilities.maxComputeInvocationsPerWorkgroup,
@@ -132,9 +133,8 @@ export class GPUCapabilityManager {
 
 			this._initialized = true;
 			return true;
-
 		} catch (error) {
-			console.error('[GPUCapabilityManager] WebGPU initialization failed:', error);
+			console.error("[GPUCapabilityManager] WebGPU initialization failed:", error);
 			this._initialized = true;
 			return false;
 		}
@@ -171,13 +171,9 @@ export class GPUCapabilityManager {
 	/**
 	 * Create a GPU buffer
 	 */
-	public createBuffer(
-		size: number,
-		usage: GPUBufferUsageFlags,
-		label?: string
-	): GPUBuffer | null {
+	public createBuffer(size: number, usage: GPUBufferUsageFlags, label?: string): GPUBuffer | null {
 		if (!this._device) {
-			console.warn('[GPUCapabilityManager] Cannot create buffer: device not initialized');
+			console.warn("[GPUCapabilityManager] Cannot create buffer: device not initialized");
 			return null;
 		}
 
@@ -185,7 +181,7 @@ export class GPUCapabilityManager {
 			size,
 			usage,
 			label,
-			mappedAtCreation: false
+			mappedAtCreation: false,
 		});
 	}
 
@@ -197,7 +193,7 @@ export class GPUCapabilityManager {
 		label?: string
 	): GPUBuffer | null {
 		if (!this._device) {
-			console.warn('[GPUCapabilityManager] Cannot create storage buffer: device not initialized');
+			console.warn("[GPUCapabilityManager] Cannot create storage buffer: device not initialized");
 			return null;
 		}
 
@@ -205,14 +201,16 @@ export class GPUCapabilityManager {
 			size: data.byteLength,
 			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
 			label,
-			mappedAtCreation: true
+			mappedAtCreation: true,
 		});
 
 		const mappedRange = buffer.getMappedRange();
 		if (data instanceof ArrayBuffer) {
 			new Uint8Array(mappedRange).set(new Uint8Array(data));
 		} else {
-			new Uint8Array(mappedRange).set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+			new Uint8Array(mappedRange).set(
+				new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+			);
 		}
 		buffer.unmap();
 
@@ -222,9 +220,13 @@ export class GPUCapabilityManager {
 	/**
 	 * Write data to an existing buffer
 	 */
-	public writeBuffer(buffer: GPUBuffer, data: BufferSource | SharedArrayBuffer, offset: number = 0): void {
+	public writeBuffer(
+		buffer: GPUBuffer,
+		data: BufferSource | SharedArrayBuffer,
+		offset: number = 0
+	): void {
 		if (!this._device) {
-			console.warn('[GPUCapabilityManager] Cannot write buffer: device not initialized');
+			console.warn("[GPUCapabilityManager] Cannot write buffer: device not initialized");
 			return;
 		}
 
@@ -237,7 +239,7 @@ export class GPUCapabilityManager {
 	 */
 	public async readBuffer(buffer: GPUBuffer, size?: number): Promise<ArrayBuffer> {
 		if (!this._device) {
-			throw new Error('[GPUCapabilityManager] Cannot read buffer: device not initialized');
+			throw new Error("[GPUCapabilityManager] Cannot read buffer: device not initialized");
 		}
 
 		const readSize = size ?? buffer.size;
@@ -246,7 +248,7 @@ export class GPUCapabilityManager {
 		const stagingBuffer = this._device.createBuffer({
 			size: readSize,
 			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-			label: 'staging-read-buffer'
+			label: "staging-read-buffer",
 		});
 
 		// Copy from source to staging
@@ -276,7 +278,7 @@ export class GPUCapabilityManager {
 		this._initialized = false;
 		this._initPromise = null;
 
-		console.log('[GPUCapabilityManager] Disposed');
+		console.log("[GPUCapabilityManager] Disposed");
 	}
 }
 

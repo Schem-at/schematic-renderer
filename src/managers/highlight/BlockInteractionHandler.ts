@@ -36,11 +36,7 @@ export class BlockInteractionHandler {
 		this.processInteraction(schematicObject, interactionPosition);
 	};
 
-	private async processInteraction(
-		schematicObject: any,
-		interactionPosition: THREE.Vector3
-	) {
-
+	private async processInteraction(schematicObject: any, interactionPosition: THREE.Vector3) {
 		const schematic = schematicObject?.getSchematicWrapper();
 
 		if (!schematic) {
@@ -79,12 +75,8 @@ export class BlockInteractionHandler {
 		}
 	}
 
-	private async handleSimulatedInteraction(
-		schematicObject: any,
-		position: THREE.Vector3
-	) {
+	private async handleSimulatedInteraction(schematicObject: any, position: THREE.Vector3) {
 		if (!this.simulationManager) return;
-
 
 		// Use simulation to interact with the block - this returns the updated schematic
 		const updatedSchematic = await this.simulationManager.interactWithBlock(
@@ -99,10 +91,12 @@ export class BlockInteractionHandler {
 		}
 
 		// Validation to debug "get_all_palettes" error
-		if (typeof updatedSchematic.get_all_palettes !== 'function') {
-			console.warn("Updated schematic missing get_all_palettes function. Available keys:", Object.keys(Object.getPrototypeOf(updatedSchematic) || updatedSchematic));
+		if (typeof updatedSchematic.get_all_palettes !== "function") {
+			console.warn(
+				"Updated schematic missing get_all_palettes function. Available keys:",
+				Object.keys(Object.getPrototypeOf(updatedSchematic) || updatedSchematic)
+			);
 		}
-
 
 		// Replace the schematic wrapper with the updated one
 		schematicObject.schematicWrapper = updatedSchematic;
@@ -111,11 +105,7 @@ export class BlockInteractionHandler {
 		await schematicObject.rebuildMesh();
 	}
 
-	private async toggleLever(
-		schematic: SchematicWrapper,
-		block: any,
-		position: THREE.Vector3
-	) {
+	private async toggleLever(schematic: SchematicWrapper, block: any, position: THREE.Vector3) {
 		// Get the current 'powered' state of the lever
 		const properties = block.properties();
 		const blockName = block.name();
@@ -149,7 +139,8 @@ export class BlockInteractionHandler {
 		);
 
 		console.log(
-			`Lever at ${position.x}, ${position.y}, ${position.z} toggled to ${newPoweredState ? "ON" : "OFF"
+			`Lever at ${position.x}, ${position.y}, ${position.z} toggled to ${
+				newPoweredState ? "ON" : "OFF"
 			}`
 		);
 	}

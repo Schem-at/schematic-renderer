@@ -10,7 +10,7 @@ import type { SchematicWrapper, MchprsWorldWrapper, SimulationOptionsWrapper } f
  * - 'headless': No automatic syncing (fastest, manual sync when needed)
  * - 'io-only': Only syncs IO positions (good middle ground)
  */
-export type SyncMode = 'synced' | 'headless' | 'io-only';
+export type SyncMode = "synced" | "headless" | "io-only";
 
 /**
  * Options for initializing a simulation
@@ -77,7 +77,7 @@ export class SimulationManager {
 		tickCount: 0,
 		autoTickEnabled: false,
 		tickSpeed: 20,
-		syncMode: 'synced',
+		syncMode: "synced",
 		customIoPositions: [],
 	};
 	private autoTickInterval: NodeJS.Timeout | null = null;
@@ -89,7 +89,7 @@ export class SimulationManager {
 
 	/**
 	 * Initialize simulation for a schematic
-	 * 
+	 *
 	 * @example
 	 * // Visual mode with custom IO
 	 * await sim.initializeSimulation(schematic, {
@@ -97,14 +97,14 @@ export class SimulationManager {
 	 *   optimize: false,
 	 *   customIo: [{ x: 0, y: 1, z: 0 }]
 	 * });
-	 * 
+	 *
 	 * @example
 	 * // Performance mode - manual sync
 	 * await sim.initializeSimulation(schematic, {
 	 *   syncMode: 'headless',
 	 *   optimize: true
 	 * });
-	 * 
+	 *
 	 * @example
 	 * // IO-only mode - best of both worlds
 	 * await sim.initializeSimulation(schematic, {
@@ -118,14 +118,11 @@ export class SimulationManager {
 		config?: SimulationConfig
 	): Promise<boolean> {
 		try {
-			const {
-				syncMode = 'synced',
-				optimize = false,
-				customIo = [],
-				tickSpeed = 20
-			} = config || {};
+			const { syncMode = "synced", optimize = false, customIo = [], tickSpeed = 20 } = config || {};
 
-			SimulationLogger.info(`Initializing simulation [mode=${syncMode}, optimize=${optimize}, customIo=${customIo.length}]`);
+			SimulationLogger.info(
+				`Initializing simulation [mode=${syncMode}, optimize=${optimize}, customIo=${customIo.length}]`
+			);
 
 			// Store config
 			this.state.syncMode = syncMode;
@@ -134,7 +131,9 @@ export class SimulationManager {
 
 			// Check schematic dimensions
 			const dimensions = schematic.get_dimensions();
-			SimulationLogger.info(`Schematic dimensions: [${dimensions[0]}, ${dimensions[1]}, ${dimensions[2]}]`);
+			SimulationLogger.info(
+				`Schematic dimensions: [${dimensions[0]}, ${dimensions[1]}, ${dimensions[2]}]`
+			);
 
 			// Create simulation world with options
 			SimulationLogger.info("Creating MCHPRS simulation world...");
@@ -147,7 +146,7 @@ export class SimulationManager {
 			simOptions.optimize = optimize;
 
 			// Set IO-only mode (only affects flush, not compilation)
-			simOptions.io_only = syncMode === 'io-only';
+			simOptions.io_only = syncMode === "io-only";
 
 			// Add custom IO positions
 			if (customIo.length > 0) {
@@ -188,27 +187,27 @@ export class SimulationManager {
 
 	/**
 	 * Tick the simulation forward
-	 * 
+	 *
 	 * @param numTicks - Number of ticks to advance
 	 * @param syncOverride - Override the default sync behavior:
 	 *   - 'auto': Use configured syncMode
 	 *   - 'force': Force sync regardless of mode
 	 *   - 'none': Skip sync regardless of mode
-	 * 
+	 *
 	 * @example
 	 * // Normal tick with auto-sync based on mode
 	 * sim.tick(1);
-	 * 
+	 *
 	 * @example
 	 * // Run 100 ticks in headless mode, then force sync
 	 * sim.tick(100, 'none');
 	 * sim.tick(0, 'force'); // Just sync, no ticks
-	 * 
+	 *
 	 * @example
 	 * // Run 10 ticks and force sync even in headless mode
 	 * sim.tick(10, 'force');
 	 */
-	tick(numTicks: number = 1, syncOverride: 'auto' | 'force' | 'none' = 'auto'): void {
+	tick(numTicks: number = 1, syncOverride: "auto" | "force" | "none" = "auto"): void {
 		if (!this.isSimulationActive() || !this.simulationWorld) {
 			SimulationLogger.warn("Simulation not active");
 			return;
@@ -228,13 +227,13 @@ export class SimulationManager {
 
 			// Determine if we should sync
 			let shouldSync = false;
-			if (syncOverride === 'force') {
+			if (syncOverride === "force") {
 				shouldSync = true;
-			} else if (syncOverride === 'none') {
+			} else if (syncOverride === "none") {
 				shouldSync = false;
 			} else {
 				// Auto mode - use configured syncMode
-				shouldSync = this.state.syncMode === 'synced';
+				shouldSync = this.state.syncMode === "synced";
 				// io-only mode syncs automatically via flush() with io_only flag
 			}
 
@@ -256,9 +255,9 @@ export class SimulationManager {
 	/**
 	 * Manually sync simulation state to schematic
 	 * Useful in headless mode to periodically update visuals
-	 * 
+	 *
 	 * @returns The updated schematic, or null if sync failed
-	 * 
+	 *
 	 * @example
 	 * // Run 1000 ticks headless, then sync once
 	 * for (let i = 0; i < 1000; i++) {
@@ -287,10 +286,12 @@ export class SimulationManager {
 			// Debug custom IO blocks if present
 			if (this.state.customIoPositions.length > 0) {
 				console.log("[SimulationManager] DEBUG: Checking custom IO blocks after sync:");
-				this.state.customIoPositions.forEach(pos => {
+				this.state.customIoPositions.forEach((pos) => {
 					const blockString = updatedSchematic.get_block_string(pos.x, pos.y, pos.z);
 					const signalStrength = this.simulationWorld!.getSignalStrength(pos.x, pos.y, pos.z);
-					console.log(`  [${pos.x},${pos.y},${pos.z}] signal=${signalStrength}, block="${blockString}"`);
+					console.log(
+						`  [${pos.x},${pos.y},${pos.z}] signal=${signalStrength}, block="${blockString}"`
+					);
 				});
 			}
 
@@ -310,16 +311,16 @@ export class SimulationManager {
 
 	/**
 	 * Change the synchronization mode at runtime
-	 * 
+	 *
 	 * @example
 	 * // Start in synced mode for debugging
 	 * sim.setSyncMode('synced');
 	 * sim.tick(10);
-	 * 
+	 *
 	 * // Switch to headless for performance
 	 * sim.setSyncMode('headless');
 	 * sim.tick(1000);
-	 * 
+	 *
 	 * // Manually sync to see results
 	 * sim.syncToSchematic();
 	 */
@@ -349,7 +350,7 @@ export class SimulationManager {
 
 	/**
 	 * Set signal strength at a custom IO position
-	 * 
+	 *
 	 * @example
 	 * // Inject power into input wire
 	 * sim.setSignalStrength(0, 1, 0, 15); // Full power
@@ -377,7 +378,7 @@ export class SimulationManager {
 
 	/**
 	 * Get signal strength at a custom IO position
-	 * 
+	 *
 	 * @example
 	 * // Read power from output wire
 	 * const power = sim.getSignalStrength(4, 1, 1);
@@ -401,7 +402,7 @@ export class SimulationManager {
 	 * Add a custom IO position at runtime
 	 */
 	addCustomIoPosition(x: number, y: number, z: number): void {
-		if (!this.state.customIoPositions.some(p => p.x === x && p.y === y && p.z === z)) {
+		if (!this.state.customIoPositions.some((p) => p.x === x && p.y === y && p.z === z)) {
 			this.state.customIoPositions.push({ x, y, z });
 			console.log(`[SimulationManager] Added custom IO position: (${x},${y},${z})`);
 			this.eventEmitter.emit("customIoPositionsChanged", {
@@ -417,7 +418,7 @@ export class SimulationManager {
 	 */
 	removeCustomIoPosition(x: number, y: number, z: number): void {
 		const index = this.state.customIoPositions.findIndex(
-			p => p.x === x && p.y === y && p.z === z
+			(p) => p.x === x && p.y === y && p.z === z
 		);
 		if (index !== -1) {
 			this.state.customIoPositions.splice(index, 1);
@@ -502,7 +503,7 @@ export class SimulationManager {
 						power: change.newPower,
 						tick: this.state.tickCount,
 					};
-					callbacks.forEach(cb => cb(state));
+					callbacks.forEach((cb) => cb(state));
 				}
 			}
 		} catch (error) {
@@ -536,7 +537,7 @@ export class SimulationManager {
 			this.simulationWorld.flush();
 
 			// Sync to schematic if in synced mode
-			if (this.state.syncMode === 'synced') {
+			if (this.state.syncMode === "synced") {
 				this.simulationWorld.sync_to_schematic();
 			}
 
@@ -561,11 +562,11 @@ export class SimulationManager {
 
 	/**
 	 * Start automatic ticking at configured tick speed
-	 * 
+	 *
 	 * @example
 	 * // Start auto-ticking at 20 TPS (Minecraft default)
 	 * sim.startAutoTick();
-	 * 
+	 *
 	 * // Change speed to 10 TPS
 	 * sim.setTickSpeed(10);
 	 */
@@ -580,7 +581,7 @@ export class SimulationManager {
 
 		this.autoTickInterval = setInterval(() => {
 			if (this.isSimulationActive()) {
-				this.tick(1, 'auto');
+				this.tick(1, "auto");
 			}
 		}, tickInterval);
 

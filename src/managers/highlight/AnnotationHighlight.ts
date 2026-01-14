@@ -20,10 +20,7 @@ export class AnnotationHighlight implements Highlight {
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 
-		this.schematicRenderer.eventEmitter.on(
-			"addAnnotation",
-			this.onAddAnnotation
-		);
+		this.schematicRenderer.eventEmitter.on("addAnnotation", this.onAddAnnotation);
 		this.annotationInput = document.createElement("div");
 		this.raycaster = new THREE.Raycaster();
 		this.mouse = new THREE.Vector2();
@@ -39,10 +36,7 @@ export class AnnotationHighlight implements Highlight {
 	deactivate() {
 		this.clearAllAnnotations();
 		this.annotationInput.remove();
-		this.schematicRenderer.eventEmitter.off(
-			"addAnnotation",
-			this.onAddAnnotation
-		);
+		this.schematicRenderer.eventEmitter.off("addAnnotation", this.onAddAnnotation);
 	}
 
 	// @ts-ignore
@@ -61,13 +55,9 @@ export class AnnotationHighlight implements Highlight {
     `;
 		document.body.appendChild(this.annotationInput);
 
-		const submitButton =
-			this.annotationInput.querySelector("#submit-annotation");
-		const cancelButton =
-			this.annotationInput.querySelector("#cancel-annotation");
-		const inputField = this.annotationInput.querySelector(
-			"#annotation-text"
-		) as HTMLInputElement;
+		const submitButton = this.annotationInput.querySelector("#submit-annotation");
+		const cancelButton = this.annotationInput.querySelector("#cancel-annotation");
+		const inputField = this.annotationInput.querySelector("#annotation-text") as HTMLInputElement;
 
 		submitButton?.addEventListener("click", () => this.submitAnnotation());
 		cancelButton?.addEventListener("click", () => this.hideAnnotationInput());
@@ -77,7 +67,7 @@ export class AnnotationHighlight implements Highlight {
 	}
 
 	private showAnnotationInput(position: THREE.Vector3) {
-		if(!this.schematicRenderer.renderManager) return;
+		if (!this.schematicRenderer.renderManager) return;
 		// Convert world position to screen coordinates
 		const screenPosition = position
 			.clone()
@@ -87,32 +77,23 @@ export class AnnotationHighlight implements Highlight {
 			this.schematicRenderer.renderManager.getRenderer().domElement.clientWidth;
 		const y =
 			(-screenPosition.y * 0.5 + 0.5) *
-			this.schematicRenderer.renderManager.getRenderer().domElement
-				.clientHeight;
+			this.schematicRenderer.renderManager.getRenderer().domElement.clientHeight;
 
 		this.annotationInput.style.display = "block";
 		this.annotationInput.style.left = `${x}px`;
 		this.annotationInput.style.top = `${y}px`;
-		(
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).focus();
+		(this.annotationInput.querySelector("#annotation-text") as HTMLInputElement).focus();
 		this.annotationInput.dataset.position = JSON.stringify(position.toArray());
 	}
 
 	private hideAnnotationInput() {
 		this.annotationInput.style.display = "none";
-		(
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).value = "";
+		(this.annotationInput.querySelector("#annotation-text") as HTMLInputElement).value = "";
 	}
 
 	private submitAnnotation() {
-		const text = (
-			this.annotationInput.querySelector("#annotation-text") as HTMLInputElement
-		).value;
-		const positionArray = JSON.parse(
-			this.annotationInput.dataset.position || "[]"
-		);
+		const text = (this.annotationInput.querySelector("#annotation-text") as HTMLInputElement).value;
+		const positionArray = JSON.parse(this.annotationInput.dataset.position || "[]");
 		const position = new THREE.Vector3().fromArray(positionArray);
 		if (text) {
 			this.addAnnotation(position, text);
@@ -121,11 +102,7 @@ export class AnnotationHighlight implements Highlight {
 		this.hideAnnotationInput();
 	}
 
-	private addAnnotation(
-		position: THREE.Vector3,
-		text: string,
-		color: number = 0x00aaff
-	) {
+	private addAnnotation(position: THREE.Vector3, text: string, color: number = 0x00aaff) {
 		const key = `${position.x},${position.y},${position.z}`;
 
 		// Remove existing annotation at this position if it exists
@@ -139,9 +116,7 @@ export class AnnotationHighlight implements Highlight {
 			transparent: true,
 		});
 		const highlightCube = new THREE.Mesh(geometry, material);
-		highlightCube.position.copy(
-			new THREE.Vector3(position.x, position.y, position.z)
-		);
+		highlightCube.position.copy(new THREE.Vector3(position.x, position.y, position.z));
 		highlightCube.userData.isHighlight = true;
 
 		// Create text sprite
@@ -155,9 +130,7 @@ export class AnnotationHighlight implements Highlight {
 			context.fillRect(0, 0, canvas.width, canvas.height);
 
 			// Draw a border
-			context.strokeStyle = `rgb(${(color >> 16) & 255}, ${
-				(color >> 8) & 255
-			}, ${color & 255})`;
+			context.strokeStyle = `rgb(${(color >> 16) & 255}, ${(color >> 8) & 255}, ${color & 255})`;
 			context.lineWidth = 2;
 			context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
 
@@ -185,24 +158,16 @@ export class AnnotationHighlight implements Highlight {
 	private removeAnnotation(position: THREE.Vector3) {
 		const key = `${position.x},${position.y},${position.z}`;
 		if (this.annotations[key]) {
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.annotations[key].mesh
-			);
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.annotations[key].label
-			);
+			this.schematicRenderer.sceneManager.scene.remove(this.annotations[key].mesh);
+			this.schematicRenderer.sceneManager.scene.remove(this.annotations[key].label);
 			delete this.annotations[key];
 		}
 	}
 
 	private clearAllAnnotations() {
 		for (const key in this.annotations) {
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.annotations[key].mesh
-			);
-			this.schematicRenderer.sceneManager.scene.remove(
-				this.annotations[key].label
-			);
+			this.schematicRenderer.sceneManager.scene.remove(this.annotations[key].mesh);
+			this.schematicRenderer.sceneManager.scene.remove(this.annotations[key].label);
 		}
 		this.annotations = {};
 	}
@@ -211,8 +176,8 @@ export class AnnotationHighlight implements Highlight {
 		if (!this.schematicRenderer.cameraManager?.activeCamera) {
 			return;
 		}
-		const cameraPosition =
-			this.schematicRenderer.cameraManager.activeCamera.position as THREE.Vector3;
+		const cameraPosition = this.schematicRenderer.cameraManager.activeCamera
+			.position as THREE.Vector3;
 		for (const key in this.annotations) {
 			const annotation = this.annotations[key];
 			if (annotation && annotation.label && annotation.label.position) {
@@ -221,13 +186,8 @@ export class AnnotationHighlight implements Highlight {
 				if (annotation.label.material) {
 					(annotation.label.material as THREE.SpriteMaterial).opacity = opacity;
 				}
-				if (
-					annotation.mesh &&
-					annotation.mesh.material &&
-					"opacity" in annotation.mesh.material
-				) {
-					(annotation.mesh.material as THREE.MeshBasicMaterial).opacity =
-						opacity * 0.3;
+				if (annotation.mesh && annotation.mesh.material && "opacity" in annotation.mesh.material) {
+					(annotation.mesh.material as THREE.MeshBasicMaterial).opacity = opacity * 0.3;
 				}
 			}
 		}

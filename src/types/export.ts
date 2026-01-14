@@ -209,6 +209,4 @@ export interface ExportEventMap {
 /**
  * Export event handler type
  */
-export type ExportEventHandler<T extends ExportEventType> = (
-	event: ExportEventMap[T]
-) => void;
+export type ExportEventHandler<T extends ExportEventType> = (event: ExportEventMap[T]) => void;

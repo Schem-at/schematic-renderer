@@ -49,7 +49,7 @@ export class RecordingManager {
 		pixelRatio: number;
 		aspect: number;
 	} | null = null;
-	
+
 	// Optimization: frame buffer for batch writing
 	private frameBuffer: FrameBuffer[] = [];
 	private pendingWrites: Promise<void>[] = [];
@@ -90,7 +90,7 @@ export class RecordingManager {
 
 		// Use JPEG for video frames - much faster to encode and smaller
 		const mimeType = this.useJpegFrames ? "image/jpeg" : "image/png";
-		const frameQuality = this.useJpegFrames ? (quality || this.jpegQuality) : 1.0;
+		const frameQuality = this.useJpegFrames ? quality || this.jpegQuality : 1.0;
 
 		return new Promise<Uint8Array>((resolve, reject) => {
 			this.recordingCanvas.toBlob(
@@ -99,9 +99,12 @@ export class RecordingManager {
 						reject(new Error("Failed to create blob from canvas"));
 						return;
 					}
-					blob.arrayBuffer().then(buffer => {
-						resolve(new Uint8Array(buffer));
-					}).catch(reject);
+					blob
+						.arrayBuffer()
+						.then((buffer) => {
+							resolve(new Uint8Array(buffer));
+						})
+						.catch(reject);
 				},
 				mimeType,
 				frameQuality
@@ -126,9 +129,12 @@ export class RecordingManager {
 						reject(new Error("Failed to create blob from canvas"));
 						return;
 					}
-					blob.arrayBuffer().then(buffer => {
-						resolve(new Uint8Array(buffer));
-					}).catch(reject);
+					blob
+						.arrayBuffer()
+						.then((buffer) => {
+							resolve(new Uint8Array(buffer));
+						})
+						.catch(reject);
 				},
 				"image/png",
 				quality
@@ -139,10 +145,7 @@ export class RecordingManager {
 	public setCameraToFirstPathPoint(): void {
 		const camera = this.schematicRenderer.cameraManager.activeCamera
 			.camera as THREE.PerspectiveCamera;
-		const path =
-			this.schematicRenderer.cameraManager.cameraPathManager.getPath(
-				"circularPath"
-			);
+		const path = this.schematicRenderer.cameraManager.cameraPathManager.getPath("circularPath");
 		if (!path) throw new Error("Path not found");
 		const { position, target } = path.getPoint(0);
 		camera.position.copy(position);
@@ -154,10 +157,8 @@ export class RecordingManager {
 	 */
 	public async takeScreenshot(options: ScreenshotOptions = {}): Promise<Blob> {
 		const {
-			width = this.schematicRenderer.renderManager?.renderer.domElement.width ||
-				3840,
-			height = this.schematicRenderer.renderManager?.renderer.domElement
-				.height || 2160,
+			width = this.schematicRenderer.renderManager?.renderer.domElement.width || 3840,
+			height = this.schematicRenderer.renderManager?.renderer.domElement.height || 2160,
 			quality = 0.95,
 			format = "image/png",
 		} = options;
@@ -248,27 +249,23 @@ export class RecordingManager {
 		camera.updateProjectionMatrix();
 	}
 
-
 	/**
 	 * Write frames to FFmpeg in batches for better performance
 	 */
 	private async flushFrameBuffer(): Promise<void> {
 		if (!this.ffmpeg || this.frameBuffer.length === 0) return;
-		
+
 		const writePromises = this.frameBuffer.map(async (frame) => {
 			const ext = this.useJpegFrames ? "jpg" : "png";
 			const filename = `frame${frame.index.toString().padStart(6, "0")}.${ext}`;
 			await this.ffmpeg!.writeFile(filename, frame.data);
 		});
-		
+
 		await Promise.all(writePromises);
 		this.frameBuffer = [];
 	}
 
-	public async startRecording(
-		duration: number,
-		options: RecordingOptions = {}
-	): Promise<void> {
+	public async startRecording(duration: number, options: RecordingOptions = {}): Promise<void> {
 		if (!this.ffmpeg) {
 			console.error("FFmpeg not found");
 			this.stopRecording();
@@ -302,9 +299,9 @@ export class RecordingManager {
 			console.log("Setting up recording...");
 			console.log(`  Resolution: ${width}x${height}`);
 			console.log(`  Frame rate: ${frameRate} FPS`);
-			console.log(`  Frame format: ${useJpegFrames ? 'JPEG' : 'PNG'}`);
+			console.log(`  Frame format: ${useJpegFrames ? "JPEG" : "PNG"}`);
 			console.log(`  Encoding preset: ${encodingPreset}`);
-			
+
 			await this.setupRecording(width, height);
 			console.log("Recording setup complete");
 			this.frameCount = 0;
@@ -327,7 +324,7 @@ export class RecordingManager {
 
 					// Capture frame
 					const frame = await this.captureFrame(jpegQuality);
-					
+
 					// Add to buffer
 					this.frameBuffer.push({
 						data: frame,
@@ -345,20 +342,20 @@ export class RecordingManager {
 				},
 				onComplete: async () => {
 					if (!this.isRecording) return;
-					
+
 					const captureTime = performance.now() - startTime;
 					console.log(`Frame capture complete in ${(captureTime / 1000).toFixed(1)}s`);
-					
+
 					// Flush any remaining frames
 					await this.flushFrameBuffer();
-					
+
 					// Wait for all pending writes to complete
 					await Promise.all(this.pendingWrites);
 					this.pendingWrites = [];
-					
+
 					console.log("Encoding video...");
 					const encodeStart = performance.now();
-					
+
 					try {
 						if (!this.ffmpeg) {
 							console.error("FFmpeg not found");
@@ -369,10 +366,16 @@ export class RecordingManager {
 						// FFmpeg WASM progress is unreliable, so we estimate based on elapsed time
 						const estimatedEncodingTimeMs = this.frameCount * 15; // ~15ms per frame estimate
 						let progressInterval: ReturnType<typeof setInterval> | null = null;
-						
+
 						if (onFfmpegProgress) {
 							// Also try the native progress callback
-							const progressCallback = ({ progress = 0, time = 0 }: { progress?: number; time?: number }) => {
+							const progressCallback = ({
+								progress = 0,
+								time = 0,
+							}: {
+								progress?: number;
+								time?: number;
+							}) => {
 								// FFmpeg WASM uses 'progress' not 'ratio' in newer versions
 								const progressPercent = progress * 100;
 								if (progressPercent > 0) {
@@ -398,26 +401,36 @@ export class RecordingManager {
 
 						// Build FFmpeg command with optimized settings
 						const ffmpegArgs = [
-							"-framerate", frameRate.toString(),
-							"-pattern_type", "sequence",
-							"-start_number", "0",
-							"-i", `frame%06d.${ext}`,
-							"-c:v", "libx264",
-							"-preset", encodingPreset,
-							"-threads", "0", // Use all available threads
-							"-crf", crf.toString(),
-							"-pix_fmt", "yuv420p",
-							"-movflags", "+faststart", // Enable fast start for web playback
+							"-framerate",
+							frameRate.toString(),
+							"-pattern_type",
+							"sequence",
+							"-start_number",
+							"0",
+							"-i",
+							`frame%06d.${ext}`,
+							"-c:v",
+							"libx264",
+							"-preset",
+							encodingPreset,
+							"-threads",
+							"0", // Use all available threads
+							"-crf",
+							crf.toString(),
+							"-pix_fmt",
+							"yuv420p",
+							"-movflags",
+							"+faststart", // Enable fast start for web playback
 							"output.mp4",
 						];
 
 						await this.ffmpeg.exec(ffmpegArgs);
-						
+
 						// Clear progress interval
 						if (progressInterval) {
 							clearInterval(progressInterval);
 						}
-						
+
 						// Report 100% completion
 						if (onFfmpegProgress) {
 							onFfmpegProgress(100, performance.now() - encodeStart);
@@ -449,7 +462,7 @@ export class RecordingManager {
 
 						// Cleanup frames in background (don't wait)
 						this.cleanupFramesAsync(this.frameCount, ext);
-						
+
 						// Delete output file
 						try {
 							await this.ffmpeg.deleteFile("output.mp4");
@@ -480,7 +493,7 @@ export class RecordingManager {
 	 */
 	private async cleanupFramesAsync(frameCount: number, ext: string = "png"): Promise<void> {
 		if (!this.ffmpeg) return;
-		
+
 		// Delete in batches to avoid blocking
 		const batchSize = 50;
 		for (let i = 0; i < frameCount; i += batchSize) {
@@ -503,11 +516,7 @@ export class RecordingManager {
 			if (!renderer) throw new Error("Renderer not found");
 			const camera = this.schematicRenderer.cameraManager.activeCamera
 				.camera as THREE.PerspectiveCamera;
-			renderer.setSize(
-				this.originalSettings.width,
-				this.originalSettings.height,
-				false
-			);
+			renderer.setSize(this.originalSettings.width, this.originalSettings.height, false);
 			renderer.setPixelRatio(this.originalSettings.pixelRatio);
 			camera.aspect = this.originalSettings.aspect;
 			camera.updateProjectionMatrix();

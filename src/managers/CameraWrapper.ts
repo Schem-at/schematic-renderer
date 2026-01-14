@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 // @ts-ignore
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 // @ts-ignore
-import { CreativeControls } from "three-creative-controls"
+import { CreativeControls } from "three-creative-controls";
 
 import { SchematicRenderer } from "../SchematicRenderer";
 
@@ -50,19 +50,19 @@ export class CameraWrapper extends EventEmitter {
 			}
 		} else {
 			const d = params.size ?? 20;
-            const aspect = params.aspect ?? window.innerWidth / window.innerHeight;
-            
-            const isometricScale = Math.sqrt(2) / 2; // This helps correct the "squishiness"
-            const correctedD = d * isometricScale;
-            
-            this._camera = new THREE.OrthographicCamera(
-                -correctedD * aspect,
-                correctedD * aspect,
-                correctedD,
-                -correctedD,
-                params.near ?? 0.1,
-                params.far ?? 1000
-            );
+			const aspect = params.aspect ?? window.innerWidth / window.innerHeight;
+
+			const isometricScale = Math.sqrt(2) / 2; // This helps correct the "squishiness"
+			const correctedD = d * isometricScale;
+
+			this._camera = new THREE.OrthographicCamera(
+				-correctedD * aspect,
+				correctedD * aspect,
+				correctedD,
+				-correctedD,
+				params.near ?? 0.1,
+				params.far ?? 1000
+			);
 		}
 	}
 
@@ -134,9 +134,9 @@ export class CameraWrapper extends EventEmitter {
 			this._camera.aspect = aspect;
 			this._camera.updateProjectionMatrix();
 		} else if (this._camera instanceof THREE.OrthographicCamera) {
-            this._camera.left = -aspect;
-            this._camera.right = aspect;
-            this._camera.updateProjectionMatrix();
+			this._camera.left = -aspect;
+			this._camera.right = aspect;
+			this._camera.updateProjectionMatrix();
 		}
 		this.emit("propertyChanged", { property: "aspect", value: aspect });
 	}
@@ -144,32 +144,19 @@ export class CameraWrapper extends EventEmitter {
 	createControls(type: "orbit" | "creative" | any) {
 		let controls: any;
 		if (type === "orbit") {
-			controls = new OrbitControls(
-				this._camera,
-				this.rendererDomElement
-			);
+			controls = new OrbitControls(this._camera, this.rendererDomElement);
 		} else if (type === "creative") {
 			// Add null checks and default values
 			const uiManager = this.schematicRenderer.uiManager;
 			if (!uiManager) {
-				console.warn('UIManager not initialized, creative controls might not work as expected');
-				controls = CreativeControls.Controls(
-					this._camera,
-					this.rendererDomElement,
-					null,
-					null
-				);
+				console.warn("UIManager not initialized, creative controls might not work as expected");
+				controls = CreativeControls.Controls(this._camera, this.rendererDomElement, null, null);
 				return controls;
 			}
-	
+
 			const { menu, blocker } = uiManager.createFPVElements();
-			
-			controls = CreativeControls.Controls(
-				this._camera,
-				this.rendererDomElement,
-				menu,
-				blocker
-			);
+
+			controls = CreativeControls.Controls(this._camera, this.rendererDomElement, menu, blocker);
 		}
 		return controls;
 	}
@@ -198,18 +185,18 @@ export class CameraWrapper extends EventEmitter {
 		this.emit("propertyChanged", { property: "lookAt", value: target });
 	}
 
-
-	setPositionLookAt(position: THREE.Vector3 | THREE.Vector3Tuple, target: THREE.Vector3 | THREE.Vector3Tuple) {
+	setPositionLookAt(
+		position: THREE.Vector3 | THREE.Vector3Tuple,
+		target: THREE.Vector3 | THREE.Vector3Tuple
+	) {
 		if (Array.isArray(position)) {
 			this._camera.position.set(position[0], position[1], position[2]);
-		}
-		else {
+		} else {
 			this._camera.position.copy(position);
 		}
 		if (Array.isArray(target)) {
 			this._camera.lookAt(new THREE.Vector3(...target));
-		}
-		else {
+		} else {
 			this._camera.lookAt(target);
 		}
 		if (this._camera instanceof THREE.PerspectiveCamera) {
@@ -217,19 +204,14 @@ export class CameraWrapper extends EventEmitter {
 		}
 		this.emit("propertyChanged", { property: "position", value: position });
 		this.emit("propertyChanged", { property: "lookAt", value: target });
-	}	
+	}
 
 	changeType(type: "perspective" | "orthographic") {
 		this._type = type;
 		if (type === "perspective") {
 			const currentCamera = this._camera as THREE.OrthographicCamera;
 			const aspect = window.innerWidth / window.innerHeight;
-			this._camera = new THREE.PerspectiveCamera(
-				75,
-				aspect,
-				currentCamera.near,
-				currentCamera.far
-			);
+			this._camera = new THREE.PerspectiveCamera(75, aspect, currentCamera.near, currentCamera.far);
 		} else {
 			const currentCamera = this._camera as THREE.PerspectiveCamera;
 			const d = 20;

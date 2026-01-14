@@ -8,26 +8,14 @@ import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
 import { SceneManager } from "./managers/SceneManager";
 import { RenderManager } from "./managers/RenderManager";
-import {
-	DragAndDropManager,
-	DragAndDropManagerOptions,
-} from "./managers/DragAndDropManager";
-import {
-	InteractionManager,
-	InteractionManagerOptions,
-} from "./managers/InteractionManager";
+import { DragAndDropManager, DragAndDropManagerOptions } from "./managers/DragAndDropManager";
+import { InteractionManager, InteractionManagerOptions } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
-import {
-	SchematicManager,
-	SchematicManagerOptions,
-} from "./managers/SchematicManager";
+import { SchematicManager, SchematicManagerOptions } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { MaterialRegistry } from "./MaterialRegistry";
 import { EventEmitter } from "events";
-import {
-	ResourcePackManager,
-	DefaultPackCallback,
-} from "./managers/ResourcePackManager";
+import { ResourcePackManager, DefaultPackCallback } from "./managers/ResourcePackManager";
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
 import { ResourcePackUI } from "./ui/ResourcePackUI";
 import { ExportUI } from "./ui/ExportUI";
@@ -45,10 +33,7 @@ import type {
 } from "./types/resourcePack";
 
 import { GizmoManager } from "./managers/GizmoManager";
-import {
-	SchematicRendererOptions,
-	DEFAULT_OPTIONS,
-} from "./SchematicRendererOptions";
+import { SchematicRendererOptions, DEFAULT_OPTIONS } from "./SchematicRendererOptions";
 import { merge } from "lodash";
 import { UIManager } from "./managers/UIManager";
 import { SimulationManager } from "./managers/SimulationManager";
@@ -151,13 +136,13 @@ export class SchematicRenderer {
 
 		// Initialize ResourcePackManager with options
 		this.resourcePackManager = new ResourcePackManager(this.options.resourcePackOptions);
-		
+
 		// Create proxy for external API access
 		this.packs = new ResourcePackManagerProxy(this.resourcePackManager);
-		
+
 		// Wire up resource pack callbacks
 		this.setupResourcePackCallbacks();
-		
+
 		// Initialize Resource Pack UI if enabled
 		if (this.options.resourcePackOptions?.enableUI !== false) {
 			this.resourcePackUI = new ResourcePackUI(
@@ -224,9 +209,7 @@ export class SchematicRenderer {
 	}
 
 	public updateCameraPosition(): void {
-		this.state.cameraPosition.copy(
-			this.cameraManager.activeCamera.position as THREE.Vector3
-		);
+		this.state.cameraPosition.copy(this.cameraManager.activeCamera.position as THREE.Vector3);
 	}
 
 	/**
@@ -271,7 +254,7 @@ export class SchematicRenderer {
 			this.inspectorManager = new InspectorManager(this, {
 				enableInspector: true,
 				showOnStartup: true,
-				...this.options.debugOptions
+				...this.options.debugOptions,
 			});
 		} else {
 			this.inspectorManager.show();
@@ -338,14 +321,10 @@ export class SchematicRenderer {
 				singleSchematicMode: this.options.singleSchematicMode,
 				callbacks: {
 					onSchematicFileLoaded: this.options?.callbacks?.onSchematicFileLoaded,
-					onSchematicFileLoadFailure:
-						this.options?.callbacks?.onSchematicFileLoadFailure,
+					onSchematicFileLoadFailure: this.options?.callbacks?.onSchematicFileLoadFailure,
 				},
 			};
-			this.schematicManager = new SchematicManager(
-				this,
-				schematicManagerOptions
-			);
+			this.schematicManager = new SchematicManager(this, schematicManagerOptions);
 
 			// Initialize RenderManager (async for WebGPU support)
 			this.renderManager = new RenderManager(this);
@@ -353,9 +332,12 @@ export class SchematicRenderer {
 
 			// Log renderer type
 			if (this.renderManager.isWebGPU) {
-				console.log('%c[SchematicRenderer] Using WebGPU Renderer', 'color: #4caf50; font-weight: bold');
+				console.log(
+					"%c[SchematicRenderer] Using WebGPU Renderer",
+					"color: #4caf50; font-weight: bold"
+				);
 			} else {
-				console.log('[SchematicRenderer] Using WebGL Renderer');
+				console.log("[SchematicRenderer] Using WebGL Renderer");
 			}
 
 			this.highlightManager = new HighlightManager(this);
@@ -418,24 +400,20 @@ export class SchematicRenderer {
 		}
 	}
 
-
 	private initializeInteractionComponents(): void {
 		// Initialize simulation manager if enabled
 		if (this.options.simulationOptions?.enableSimulation) {
 			this.simulationManager = new SimulationManager(this.eventEmitter);
 
 			// Hook up simulation callbacks through eventEmitter
-			this.eventEmitter.on(
-				"simulationInitialized",
-				() => {
-					if (this.schematicManager) {
-						const firstSchematic = this.schematicManager.getFirstSchematic();
-						if (firstSchematic) {
-							this.options.callbacks?.onSimulationInitialized?.(firstSchematic.id);
-						}
+			this.eventEmitter.on("simulationInitialized", () => {
+				if (this.schematicManager) {
+					const firstSchematic = this.schematicManager.getFirstSchematic();
+					if (firstSchematic) {
+						this.options.callbacks?.onSimulationInitialized?.(firstSchematic.id);
 					}
 				}
-			);
+			});
 			this.eventEmitter.on("blockInteracted", (data: any) => {
 				const [x, y, z] = data.position || [0, 0, 0];
 				this.options.callbacks?.onBlockInteracted?.(x, y, z);
@@ -477,46 +455,40 @@ export class SchematicRenderer {
 
 		if (this.options.enableInteraction) {
 			const interactionOptions: InteractionManagerOptions = {
-				enableSelection:
-					this.options.interactionOptions?.enableSelection || false,
-				enableMovingSchematics:
-					this.options.interactionOptions?.enableMovingSchematics || false,
+				enableSelection: this.options.interactionOptions?.enableSelection || false,
+				enableMovingSchematics: this.options.interactionOptions?.enableMovingSchematics || false,
 			};
-			this.interactionManager = new InteractionManager(
-				this,
-				interactionOptions
-			);
+			this.interactionManager = new InteractionManager(this, interactionOptions);
 		}
 
 		if (this.options.enableDragAndDrop) {
 			const dragAndDropOptions: DragAndDropManagerOptions = {
-				acceptedFileTypes:
-					this.options.dragAndDropOptions?.acceptedFileTypes || ["schematic", "nbt", "schem", "litematic", "mcstructure"],
+				acceptedFileTypes: this.options.dragAndDropOptions?.acceptedFileTypes || [
+					"schematic",
+					"nbt",
+					"schem",
+					"litematic",
+					"mcstructure",
+				],
 				callbacks: {
 					// Schematic callbacks
 					onSchematicLoaded: this.options.callbacks?.onSchematicLoaded,
 					onSchematicDropped: this.options.callbacks?.onSchematicDropped,
-					onSchematicDropSuccess:
-						this.options.callbacks?.onSchematicDropSuccess,
+					onSchematicDropSuccess: this.options.callbacks?.onSchematicDropSuccess,
 					onSchematicDropFailed: this.options.callbacks?.onSchematicDropFailed,
 
 					// Resource pack callbacks
 					onResourcePackLoaded: this.options.callbacks?.onResourcePackLoaded,
 					onResourcePackDropped: this.options.callbacks?.onResourcePackDropped,
-					onResourcePackDropSuccess:
-						this.options.callbacks?.onResourcePackDropSuccess,
-					onResourcePackDropFailed:
-						this.options.callbacks?.onResourcePackDropFailed,
+					onResourcePackDropSuccess: this.options.callbacks?.onResourcePackDropSuccess,
+					onResourcePackDropFailed: this.options.callbacks?.onResourcePackDropFailed,
 
 					// General callbacks
 					onInvalidFileType: this.options.callbacks?.onInvalidFileType,
 					onLoadingProgress: this.options.callbacks?.onLoadingProgress,
 				},
 			};
-			this.dragAndDropManager = new DragAndDropManager(
-				this,
-				dragAndDropOptions
-			);
+			this.dragAndDropManager = new DragAndDropManager(this, dragAndDropOptions);
 		}
 	}
 
@@ -526,59 +498,59 @@ export class SchematicRenderer {
 	private setupResourcePackCallbacks(): void {
 		const callbacks = this.options.callbacks;
 		const rpCallbacks = this.options.resourcePackOptions;
-		
+
 		// Pack changed events
-		this.resourcePackManager.on('packsChanged', (event: PacksChangedEvent) => {
+		this.resourcePackManager.on("packsChanged", (event: PacksChangedEvent) => {
 			callbacks?.onPacksChanged?.(event.reason);
 			rpCallbacks?.onPacksChanged?.(event);
 		});
-		
+
 		// Pack toggled events
-		this.resourcePackManager.on('packToggled', (event: PackToggledEvent) => {
+		this.resourcePackManager.on("packToggled", (event: PackToggledEvent) => {
 			callbacks?.onPackToggled?.(event.packId, event.enabled);
 			rpCallbacks?.onPackToggled?.(event.packId, event.enabled);
 		});
-		
+
 		// Atlas rebuild events
-		this.resourcePackManager.on('atlasRebuilt', (event: { textureCount: number }) => {
+		this.resourcePackManager.on("atlasRebuilt", (event: { textureCount: number }) => {
 			callbacks?.onAtlasRebuilt?.(event.textureCount);
 			rpCallbacks?.onAtlasRebuilt?.();
 		});
-		
+
 		// Pack added events
-		this.resourcePackManager.on('packAdded', (event: PackAddedEvent) => {
+		this.resourcePackManager.on("packAdded", (event: PackAddedEvent) => {
 			rpCallbacks?.onPackAdded?.(event);
 		});
-		
+
 		// Pack removed events
-		this.resourcePackManager.on('packRemoved', (event: PackRemovedEvent) => {
+		this.resourcePackManager.on("packRemoved", (event: PackRemovedEvent) => {
 			rpCallbacks?.onPackRemoved?.(event.packId);
 		});
-		
+
 		// Load progress events
-		this.resourcePackManager.on('loadProgress', (event: LoadProgressEvent) => {
+		this.resourcePackManager.on("loadProgress", (event: LoadProgressEvent) => {
 			rpCallbacks?.onLoadProgress?.(event);
 		});
-		
+
 		// Load complete events
-		this.resourcePackManager.on('loadComplete', (event: LoadCompleteEvent) => {
+		this.resourcePackManager.on("loadComplete", (event: LoadCompleteEvent) => {
 			rpCallbacks?.onLoadComplete?.(event);
 		});
-		
+
 		// Load error events
-		this.resourcePackManager.on('loadError', (event: LoadErrorEvent) => {
+		this.resourcePackManager.on("loadError", (event: LoadErrorEvent) => {
 			rpCallbacks?.onLoadError?.(event);
 		});
-		
+
 		// Error events
-		this.resourcePackManager.on('error', (event: PackErrorEvent) => {
+		this.resourcePackManager.on("error", (event: PackErrorEvent) => {
 			rpCallbacks?.onError?.(event);
 		});
-		
+
 		// Set atlas rebuild callback to reload resources
 		// This is called when packs are toggled/changed, so always force reload
 		this.resourcePackManager.setAtlasRebuildCallback(async () => {
-			console.log('[SchematicRenderer] Atlas rebuild callback invoked - forcing reload');
+			console.log("[SchematicRenderer] Atlas rebuild callback invoked - forcing reload");
 			await this.reloadResourcePacksIntoCubane(true); // Force reload when packs change
 		});
 	}
@@ -589,33 +561,37 @@ export class SchematicRenderer {
 	 */
 	private async reloadResourcePacksIntoCubane(force: boolean = false): Promise<void> {
 		if (!this.cubane) return;
-		
+
 		try {
 			const enabledPacks = this.resourcePackManager.getEnabledPacksWithBlobs();
-			
+
 			// Only skip on initial load (not forced) if Cubane already has the same number of packs
 			if (!force) {
 				const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
 				if (cubanePackCount > 0 && cubanePackCount >= enabledPacks.length) {
-					console.log(`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) loaded, skipping reload`);
+					console.log(
+						`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) loaded, skipping reload`
+					);
 					return;
 				}
 			}
-			
+
 			// IMPORTANT: In Cubane/Minecraft, packs loaded LAST override earlier packs.
 			// Our priority system: lower number = higher priority = should override others.
 			// So we need to REVERSE the order: load low-priority packs first, high-priority last.
 			const packsToLoad = [...enabledPacks].reverse();
-			
-			console.log(`[SchematicRenderer] Reloading ${packsToLoad.length} resource pack(s) into Cubane...`);
-			
+
+			console.log(
+				`[SchematicRenderer] Reloading ${packsToLoad.length} resource pack(s) into Cubane...`
+			);
+
 			// Use batch mode to clear and reload all packs at once (single atlas rebuild at end)
 			this.cubane.beginPackBatchUpdate();
-			
+
 			try {
 				// Clear existing packs first (important when packs are disabled)
 				await this.cubane.removeAllPacks();
-				
+
 				// Load enabled packs
 				for (const pack of packsToLoad) {
 					try {
@@ -629,35 +605,35 @@ export class SchematicRenderer {
 				// End batch mode - this triggers a single atlas rebuild with all packs
 				await this.cubane.endPackBatchUpdate();
 			}
-			
+
 			// Clear MaterialRegistry cache so new textures are used
 			MaterialRegistry.clear();
-			
+
 			// Invalidate WorldMeshBuilder cache so new textures are used
 			if (this.worldMeshBuilder) {
 				this.worldMeshBuilder.invalidateCache();
 			}
-			
+
 			// Rebuild all loaded schematics with new textures
 			await this.rebuildAllSchematics();
-			
+
 			// Trigger event for external listeners
-			this.eventEmitter.emit('resourcePacksReloaded');
-			console.log('Resource pack reload complete');
+			this.eventEmitter.emit("resourcePacksReloaded");
+			console.log("Resource pack reload complete");
 		} catch (error) {
-			console.error('Failed to reload resource packs into Cubane:', error);
+			console.error("Failed to reload resource packs into Cubane:", error);
 		}
 	}
-	
+
 	/**
 	 * Rebuild all loaded schematics (e.g., after resource pack changes)
 	 */
 	public async rebuildAllSchematics(): Promise<void> {
 		if (!this.schematicManager) return;
-		
+
 		const schematics = this.schematicManager.getAllSchematics();
 		console.log(`Rebuilding ${schematics.length} schematic(s) with updated textures...`);
-		
+
 		for (const schematic of schematics) {
 			try {
 				await schematic.rebuildMesh();
@@ -665,52 +641,55 @@ export class SchematicRenderer {
 				console.error(`Failed to rebuild schematic ${schematic.name}:`, error);
 			}
 		}
-		
+
 		// Mark scene as needing update
 		if (this.sceneManager?.scene) {
 			this.sceneManager.scene.traverse((obj) => {
 				if ((obj as any).material) {
 					const mat = (obj as any).material;
 					if (Array.isArray(mat)) {
-						mat.forEach((m: any) => { if (m) m.needsUpdate = true; });
+						mat.forEach((m: any) => {
+							if (m) m.needsUpdate = true;
+						});
 					} else {
 						mat.needsUpdate = true;
 					}
 				}
 			});
 		}
-		
-		console.log('Schematic rebuild complete');
+
+		console.log("Schematic rebuild complete");
 	}
 
 	private async initializeResourcePacks(
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	): Promise<void> {
 		await this.resourcePackManager.initPromise;
-		
+
 		// Check if Cubane already has packs loaded (from auto-restore)
 		const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
 		if (cubanePackCount > 0) {
-			console.log(`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) from auto-restore, skipping initial pack loading`);
+			console.log(
+				`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) from auto-restore, skipping initial pack loading`
+			);
 			return;
 		}
 
 		// Get resource pack blobs from your existing system
-		const resourcePackBlobs =
-			await this.resourcePackManager.getResourcePackBlobs(
-				defaultResourcePacks || {}
-			);
+		const resourcePackBlobs = await this.resourcePackManager.getResourcePackBlobs(
+			defaultResourcePacks || {}
+		);
 
 		if (resourcePackBlobs.length === 0) {
-			console.log('[SchematicRenderer] No resource packs to load');
+			console.log("[SchematicRenderer] No resource packs to load");
 			return;
 		}
 
 		console.log(`[SchematicRenderer] Loading ${resourcePackBlobs.length} resource pack(s)...`);
-		
+
 		// Use batch mode to load all packs at once (single atlas rebuild at the end)
 		this.cubane.beginPackBatchUpdate();
-		
+
 		try {
 			for (let i = 0; i < resourcePackBlobs.length; i++) {
 				const blob = resourcePackBlobs[i];
@@ -780,11 +759,11 @@ export class SchematicRenderer {
 		};
 
 		// Listen to pointer events that indicate user interaction
-		this.canvas.addEventListener('pointerdown', this.wakeUpHandler);
-		this.canvas.addEventListener('pointermove', this.wakeUpHandler);
-		this.canvas.addEventListener('wheel', this.wakeUpHandler);
-		this.canvas.addEventListener('touchstart', this.wakeUpHandler);
-		this.canvas.addEventListener('touchmove', this.wakeUpHandler);
+		this.canvas.addEventListener("pointerdown", this.wakeUpHandler);
+		this.canvas.addEventListener("pointermove", this.wakeUpHandler);
+		this.canvas.addEventListener("wheel", this.wakeUpHandler);
+		this.canvas.addEventListener("touchstart", this.wakeUpHandler);
+		this.canvas.addEventListener("touchmove", this.wakeUpHandler);
 
 		this.pointerEventBound = true;
 	}
@@ -795,11 +774,11 @@ export class SchematicRenderer {
 	private unbindPointerEvents(): void {
 		if (!this.pointerEventBound || !this.wakeUpHandler) return;
 
-		this.canvas.removeEventListener('pointerdown', this.wakeUpHandler);
-		this.canvas.removeEventListener('pointermove', this.wakeUpHandler);
-		this.canvas.removeEventListener('wheel', this.wakeUpHandler);
-		this.canvas.removeEventListener('touchstart', this.wakeUpHandler);
-		this.canvas.removeEventListener('touchmove', this.wakeUpHandler);
+		this.canvas.removeEventListener("pointerdown", this.wakeUpHandler);
+		this.canvas.removeEventListener("pointermove", this.wakeUpHandler);
+		this.canvas.removeEventListener("wheel", this.wakeUpHandler);
+		this.canvas.removeEventListener("touchstart", this.wakeUpHandler);
+		this.canvas.removeEventListener("touchmove", this.wakeUpHandler);
 
 		this.wakeUpHandler = null;
 		this.pointerEventBound = false;
@@ -826,7 +805,8 @@ export class SchematicRenderer {
 		if (this.enableAdaptiveFPS) {
 			// Detect camera movement for adaptive FPS
 			const camera = this.cameraManager.activeCamera.camera;
-			const cameraMoved = !camera.position.equals(this.lastCameraPosition) ||
+			const cameraMoved =
+				!camera.position.equals(this.lastCameraPosition) ||
 				!camera.quaternion.equals(this.lastCameraQuaternion);
 
 			if (cameraMoved) {
@@ -845,7 +825,9 @@ export class SchematicRenderer {
 
 			// Log state changes
 			if (wasIdle !== this.isIdle) {
-				console.log(`[Renderer] ${this.isIdle ? 'Entering idle mode' : 'Exiting idle mode'} (target FPS: ${currentTargetFPS})`);
+				console.log(
+					`[Renderer] ${this.isIdle ? "Entering idle mode" : "Exiting idle mode"} (target FPS: ${currentTargetFPS})`
+				);
 			}
 		}
 
@@ -895,12 +877,15 @@ export class SchematicRenderer {
 		if (now - this.lastDebugTime > 2000) {
 			const actualFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
 			this.fps = actualFPS;
-			const renderFPS = (this.frameCount - this.throttledFrames) / ((now - this.lastDebugTime) / 1000);
-			const mode = this.enableAdaptiveFPS ? (this.isIdle ? 'idle' : 'active') : 'fixed';
-			const fpsTarget = currentTargetFPS === 0 ? 'uncapped' : `${currentTargetFPS}`;
+			const renderFPS =
+				(this.frameCount - this.throttledFrames) / ((now - this.lastDebugTime) / 1000);
+			const mode = this.enableAdaptiveFPS ? (this.isIdle ? "idle" : "active") : "fixed";
+			const fpsTarget = currentTargetFPS === 0 ? "uncapped" : `${currentTargetFPS}`;
 
 			if (this.options.logFPS) {
-				console.log(`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`);
+				console.log(
+					`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`
+				);
 			}
 
 			this.frameCount = 0;
@@ -1019,10 +1004,7 @@ export class SchematicRenderer {
 	 * @param schematicId ID of the schematic
 	 * @param disable Whether to disable the rendering bounds (default: true)
 	 */
-	public resetRenderingBounds(
-		schematicId: string,
-		disable: boolean = true
-	): void {
+	public resetRenderingBounds(schematicId: string, disable: boolean = true): void {
 		const schematic = this.schematicManager?.getSchematic(schematicId);
 		if (!schematic) {
 			console.error(`Schematic with ID ${schematicId} not found`);
@@ -1039,10 +1021,7 @@ export class SchematicRenderer {
 	 * @param schematicId ID of the schematic
 	 * @param visible Whether the helper should be visible
 	 */
-	public showRenderingBoundsHelper(
-		schematicId: string,
-		visible: boolean
-	): void {
+	public showRenderingBoundsHelper(schematicId: string, visible: boolean): void {
 		const schematic = this.schematicManager?.getSchematic(schematicId);
 		if (!schematic) {
 			console.error(`Schematic with ID ${schematicId} not found`);
@@ -1057,9 +1036,7 @@ export class SchematicRenderer {
 	 * @param schematicId ID of the schematic
 	 * @returns The dimensions as an array [width, height, depth] or null if schematic not found
 	 */
-	public getSchematicDimensions(
-		schematicId: string
-	): Int32Array | number[] | null {
+	public getSchematicDimensions(schematicId: string): Int32Array | number[] | null {
 		const schematic = this.schematicManager?.getSchematic(schematicId);
 		if (!schematic) {
 			console.error(`Schematic with ID ${schematicId} not found`);
@@ -1075,9 +1052,7 @@ export class SchematicRenderer {
 	 */
 	public getLoadedSchematics(): string[] {
 		if (!this.schematicManager) return [];
-		return this.schematicManager
-			.getAllSchematics()
-			.map((schematic) => schematic.id);
+		return this.schematicManager.getAllSchematics().map((schematic) => schematic.id);
 	}
 
 	/**
@@ -1158,10 +1133,7 @@ export class SchematicRenderer {
 		}
 	}
 
-	public async toggleResourcePackEnabled(
-		name: string,
-		enabled: boolean
-	): Promise<void> {
+	public async toggleResourcePackEnabled(name: string, enabled: boolean): Promise<void> {
 		// Show progress for resource pack toggling
 		if (this.options.enableProgressBar && this.uiManager) {
 			const actionText = enabled ? "Enabling" : "Disabling";
@@ -1522,7 +1494,6 @@ export class SchematicRenderer {
 		this.renderManager?.setSSAOEnabled(enabled);
 	}
 
-
 	/**
 	 * Check if SSAO is enabled
 	 */
@@ -1744,19 +1715,19 @@ export class SchematicRenderer {
 		this.dragAndDropManager?.dispose();
 		this.uiManager.dispose();
 		this.cameraManager.dispose();
-		
+
 		// Clean up resource pack UI
 		this.resourcePackUI?.dispose();
-		
+
 		// Clean up export UI
 		this.exportUI?.dispose();
-		
+
 		// Clean up render settings UI
 		this.renderSettingsUI?.dispose();
-		
+
 		// Clean up capture UI
 		this.captureUI?.dispose();
-		
+
 		// Clean up resource pack manager
 		this.resourcePackManager.dispose();
 

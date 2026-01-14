@@ -17,13 +17,27 @@ export { CaptureUI } from "./ui/CaptureUI";
 export { BaseUI, UIColors, UIStyles } from "./ui/UIComponents";
 export { SchematicExporter } from "./export/SchematicExporter";
 export type { SimulationConfig, SimulationState, SyncMode } from "./managers/SimulationManager";
-export type { SchematicRendererOptions, KeyboardControlsOptions, DebugOptions, GPUComputeOptions, WasmMeshBuilderOptions } from "./SchematicRendererOptions";
-export type { InsignRegionStyle, InsignRegionOptions } from "./managers/highlight/InsignRegionHighlight";
+export type {
+	SchematicRendererOptions,
+	KeyboardControlsOptions,
+	DebugOptions,
+	GPUComputeOptions,
+	WasmMeshBuilderOptions,
+} from "./SchematicRendererOptions";
+export type {
+	InsignRegionStyle,
+	InsignRegionOptions,
+} from "./managers/highlight/InsignRegionHighlight";
 export type { InsignRegionFilter } from "./managers/InsignManager";
 export type { InsignIoRegion, InsignIoFilter } from "./managers/InsignIoManager";
 export type { InsignIoStyle } from "./managers/highlight/InsignIoHighlight";
 export { InsignIoHighlight } from "./managers/highlight/InsignIoHighlight";
-export type { OverlayContent, OverlaySection, OverlayItem, OverlayPosition } from "./managers/OverlayManager";
+export type {
+	OverlayContent,
+	OverlaySection,
+	OverlayItem,
+	OverlayPosition,
+} from "./managers/OverlayManager";
 export type { DslMap, DslEntry, BoxPair } from "./types/insign";
 
 // Export types
@@ -49,10 +63,7 @@ export type {
 } from "./types/export";
 
 // Render settings types
-export type {
-	RenderSettingsUIOptions,
-	RenderSettings,
-} from "./ui/RenderSettingsUI";
+export type { RenderSettingsUIOptions, RenderSettings } from "./ui/RenderSettingsUI";
 
 // Capture types
 export type {
@@ -63,10 +74,7 @@ export type {
 } from "./ui/CaptureUI";
 
 // UI component types
-export type {
-	UIPosition,
-	BaseUIOptions,
-} from "./ui/UIComponents";
+export type { UIPosition, BaseUIOptions } from "./ui/UIComponents";
 
 // Resource pack types
 export type {

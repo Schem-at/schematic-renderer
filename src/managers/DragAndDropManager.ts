@@ -15,10 +15,7 @@ export interface DragAndDropManagerOptions {
 		onResourcePackLoaded?: (packName: string) => void | Promise<void>;
 		onResourcePackDropped?: (file: File) => void | Promise<void>;
 		onResourcePackDropSuccess?: (file: File) => void | Promise<void>;
-		onResourcePackDropFailed?: (
-			file: File,
-			error: Error
-		) => void | Promise<void>;
+		onResourcePackDropFailed?: (file: File, error: Error) => void | Promise<void>;
 
 		// General callbacks
 		onInvalidFileType?: (file: File) => void | Promise<void>;
@@ -93,20 +90,12 @@ export class DragAndDropManager {
 				const startTime = performance.now();
 
 				const fileType = FileTypeUtility.determineFileType(file);
-				console.log(
-					"File type determined in",
-					performance.now() - startTime,
-					"ms"
-				);
+				console.log("File type determined in", performance.now() - startTime, "ms");
 
 				if (fileType === FileType.SCHEMATIC && this.isAcceptedFileType(file)) {
 					const startTime = performance.now();
 					await this.handleSchematicDrop(file);
-					console.log(
-						"Schematic drop handled in",
-						performance.now() - startTime,
-						"ms"
-					);
+					console.log("Schematic drop handled in", performance.now() - startTime, "ms");
 				} else if (fileType === FileType.RESOURCE_PACK) {
 					await this.handleResourcePackDrop(file);
 				} else {
@@ -164,11 +153,8 @@ export class DragAndDropManager {
 			// Hide loading indicator and show error message
 			console.error(error);
 			this.uiManager.hideLoadingIndicator();
-			const errorMessage =
-				error instanceof Error ? error.message : "Unknown error";
-			this.uiManager.showMessage(
-				`Error loading schematic ${file.name}: ${errorMessage}`
-			);
+			const errorMessage = error instanceof Error ? error.message : "Unknown error";
+			this.uiManager.showMessage(`Error loading schematic ${file.name}: ${errorMessage}`);
 
 			// Call the failure callback
 			await this.options.callbacks?.onSchematicDropFailed?.(
@@ -184,9 +170,7 @@ export class DragAndDropManager {
 			await this.options.callbacks?.onResourcePackDropped?.(file);
 
 			// Show loading indicator
-			this.uiManager.showLoadingIndicator(
-				`Loading resource pack: ${file.name}...`
-			);
+			this.uiManager.showLoadingIndicator(`Loading resource pack: ${file.name}...`);
 
 			console.log("Loading resource pack", file.name);
 
@@ -204,9 +188,7 @@ export class DragAndDropManager {
 
 			// Hide loading indicator
 			this.uiManager.hideLoadingIndicator();
-			this.uiManager.showMessage(
-				`Resource pack ${file.name} loaded successfully!`
-			);
+			this.uiManager.showMessage(`Resource pack ${file.name} loaded successfully!`);
 
 			// Call the resource pack loaded callback
 			await this.options.callbacks?.onResourcePackLoaded?.(file.name);
@@ -214,11 +196,8 @@ export class DragAndDropManager {
 			// Hide loading indicator and show error message
 			console.error(error);
 			this.uiManager.hideLoadingIndicator();
-			const errorMessage =
-				error instanceof Error ? error.message : "Unknown error";
-			this.uiManager.showMessage(
-				`Error loading resource pack ${file.name}: ${errorMessage}`
-			);
+			const errorMessage = error instanceof Error ? error.message : "Unknown error";
+			this.uiManager.showMessage(`Error loading resource pack ${file.name}: ${errorMessage}`);
 
 			// Call the failure callback
 			await this.options.callbacks?.onResourcePackDropFailed?.(
@@ -229,10 +208,7 @@ export class DragAndDropManager {
 	}
 
 	private isAcceptedFileType(file: File): boolean {
-		if (
-			!this.options.acceptedFileTypes ||
-			this.options.acceptedFileTypes.length === 0
-		) {
+		if (!this.options.acceptedFileTypes || this.options.acceptedFileTypes.length === 0) {
 			return true; // Accept all file types by default
 		}
 		const extension = file.name.split(".").pop()?.toLowerCase();

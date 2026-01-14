@@ -1,14 +1,14 @@
 /**
  * ChunkComputePipeline
- * 
+ *
  * High-level orchestration for GPU compute-based chunk mesh building.
  * Manages the compute passes (occupancy map + geometry merge) and
  * provides a clean interface for the WorldMeshBuilder.
  */
 
-import * as THREE from 'three';
-import { ComputeMeshBuilder } from './ComputeMeshBuilder';
-import type { ChunkGeometryData, PaletteCache } from '../types';
+import * as THREE from "three";
+import { ComputeMeshBuilder } from "./ComputeMeshBuilder";
+import type { ChunkGeometryData, PaletteCache } from "../types";
 
 // Constants matching worker output format
 const POSITION_SCALE = 1024;
@@ -66,11 +66,14 @@ export class ChunkComputePipeline {
 	};
 
 	// Pending builds queue for batching
-	private pendingBuilds: Map<string, {
-		request: ChunkBuildRequest;
-		resolve: (result: ChunkBuildResult) => void;
-		reject: (error: Error) => void;
-	}> = new Map();
+	private pendingBuilds: Map<
+		string,
+		{
+			request: ChunkBuildRequest;
+			resolve: (result: ChunkBuildResult) => void;
+			reject: (error: Error) => void;
+		}
+	> = new Map();
 
 	// Build in progress flag
 	private buildingChunks: boolean = false;
@@ -87,12 +90,12 @@ export class ChunkComputePipeline {
 
 		const success = await this.computeMeshBuilder.initialize();
 		if (!success) {
-			console.warn('[ChunkComputePipeline] Failed to initialize compute mesh builder');
+			console.warn("[ChunkComputePipeline] Failed to initialize compute mesh builder");
 			return false;
 		}
 
 		this.initialized = true;
-		console.log('[ChunkComputePipeline] Initialized successfully');
+		console.log("[ChunkComputePipeline] Initialized successfully");
 		return true;
 	}
 
@@ -101,7 +104,7 @@ export class ChunkComputePipeline {
 	 */
 	public async uploadPalette(paletteCache: PaletteCache): Promise<void> {
 		if (!this.initialized) {
-			throw new Error('[ChunkComputePipeline] Not initialized');
+			throw new Error("[ChunkComputePipeline] Not initialized");
 		}
 
 		await this.computeMeshBuilder.uploadPaletteData(paletteCache);
@@ -113,7 +116,7 @@ export class ChunkComputePipeline {
 	 */
 	public async buildChunk(request: ChunkBuildRequest): Promise<ChunkBuildResult> {
 		if (!this.initialized || !this.paletteUploaded) {
-			throw new Error('[ChunkComputePipeline] Not ready - initialize and upload palette first');
+			throw new Error("[ChunkComputePipeline] Not ready - initialize and upload palette first");
 		}
 
 		const startTime = performance.now();
@@ -121,7 +124,7 @@ export class ChunkComputePipeline {
 		const origin: [number, number, number] = [
 			request.chunkX * request.chunkSize,
 			request.chunkY * request.chunkSize,
-			request.chunkZ * request.chunkSize
+			request.chunkZ * request.chunkSize,
 		];
 
 		const gpuResult = await this.computeMeshBuilder.buildChunk(
@@ -142,14 +145,14 @@ export class ChunkComputePipeline {
 			return {
 				geometries: [],
 				origin,
-				buildTimeMs: buildTime
+				buildTimeMs: buildTime,
 			};
 		}
 
 		return {
 			geometries: gpuResult.geometries,
 			origin: gpuResult.origin,
-			buildTimeMs: buildTime
+			buildTimeMs: buildTime,
 		};
 	}
 
@@ -274,19 +277,19 @@ export class ChunkComputePipeline {
 			if (!(mat instanceof THREE.Material)) return;
 
 			switch (category) {
-				case 'water':
+				case "water":
 					mesh.renderOrder = 3;
 					mat.transparent = true;
-					if ('opacity' in mat) (mat as any).opacity = 0.8;
+					if ("opacity" in mat) (mat as any).opacity = 0.8;
 					break;
-				case 'transparent':
+				case "transparent":
 					mesh.renderOrder = 2;
 					mat.transparent = true;
 					break;
-				case 'emissive':
+				case "emissive":
 					mesh.renderOrder = 1;
 					break;
-				case 'redstone':
+				case "redstone":
 					mesh.userData.isDynamic = true;
 					break;
 			}
@@ -326,7 +329,7 @@ export class ChunkComputePipeline {
 	public dispose(): void {
 		// Reject any pending builds
 		this.pendingBuilds.forEach(({ reject }) => {
-			reject(new Error('Pipeline disposed'));
+			reject(new Error("Pipeline disposed"));
 		});
 		this.pendingBuilds.clear();
 
@@ -334,7 +337,7 @@ export class ChunkComputePipeline {
 		this.initialized = false;
 		this.paletteUploaded = false;
 
-		console.log('[ChunkComputePipeline] Disposed');
+		console.log("[ChunkComputePipeline] Disposed");
 	}
 }
 

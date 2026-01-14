@@ -21,10 +21,7 @@ export class CircularCameraPath extends CameraPath {
 	private endAngle: number;
 	private schematicRenderer: SchematicRenderer;
 
-	constructor(
-		schematicRenderer: SchematicRenderer,
-		params: CircularPathParams
-	) {
+	constructor(schematicRenderer: SchematicRenderer, params: CircularPathParams) {
 		super();
 		this.schematicRenderer = schematicRenderer;
 		this.params = {
@@ -32,9 +29,7 @@ export class CircularCameraPath extends CameraPath {
 			centerOffset: params.centerOffset || [0, 0, 0],
 		};
 		this.targetVec = this.vectorFromInput(params.target);
-		this.centerOffsetVec = this.vectorFromInput(
-			params.centerOffset || [0, 0, 0]
-		);
+		this.centerOffsetVec = this.vectorFromInput(params.centerOffset || [0, 0, 0]);
 		this.startAngle = params.startAngle || 0;
 		this.endAngle = params.endAngle || Math.PI * 2;
 		this.updatePathFunction();
@@ -108,8 +103,7 @@ export class CircularCameraPath extends CameraPath {
 			return;
 		}
 
-		const schematicCenters =
-			this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
+		const schematicCenters = this.schematicRenderer.schematicManager.getSchematicsAveragePosition();
 		const cameraPosition = this.schematicRenderer.cameraManager.activeCamera
 			.position as THREE.Vector3;
 

@@ -75,10 +75,7 @@ export class SceneManager extends EventEmitter {
 	}
 
 	// Method to add a target indicator
-	public addTargetIndicator(
-		position: THREE.Vector3,
-		name: string = "targetIndicator"
-	): void {
+	public addTargetIndicator(position: THREE.Vector3, name: string = "targetIndicator"): void {
 		// Remove existing target indicator if any
 		this.removeTargetIndicator(name);
 
@@ -161,9 +158,7 @@ export class SceneManager extends EventEmitter {
 	}
 	toggleGrid(show: boolean) {
 		if (show && !this.gridHelper) {
-			this.gridHelper = new Grid(
-				this.schematicRenderer.cameraManager.activeCamera.camera
-			);
+			this.gridHelper = new Grid(this.schematicRenderer.cameraManager.activeCamera.camera);
 
 			// EXCLUDE GRID FROM SSAO - This prevents artifacts!
 			this.gridHelper.userData.cannotReceiveAO = true;
@@ -183,10 +178,7 @@ export class SceneManager extends EventEmitter {
 	}
 	toggleAxes(show: boolean) {
 		if (show && !this.axesHelper) {
-			this.axesHelper = new Axes(
-				5,
-				this.schematicRenderer.cameraManager.activeCamera.camera
-			);
+			this.axesHelper = new Axes(5, this.schematicRenderer.cameraManager.activeCamera.camera);
 
 			// EXCLUDE AXES FROM SSAO TOO
 			this.axesHelper.userData.cannotReceiveAO = true;
@@ -213,17 +205,10 @@ export class SceneManager extends EventEmitter {
 		this.scene.add(cube);
 	}
 
-	addDebugBoundingBox(
-		position: THREE.Vector3,
-		size: THREE.Vector3,
-		color: number
-	) {
+	addDebugBoundingBox(position: THREE.Vector3, size: THREE.Vector3, color: number) {
 		const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 		const edges = new THREE.EdgesGeometry(geometry);
-		const line = new THREE.LineSegments(
-			edges,
-			new THREE.LineBasicMaterial({ color: color })
-		);
+		const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: color }));
 		line.position.copy(position);
 		this.scene.add(line);
 	}

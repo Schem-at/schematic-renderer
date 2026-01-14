@@ -1,8 +1,8 @@
 // managers/highlight/InsignIoHoverHandler.ts
-import * as THREE from 'three';
-import { Highlight } from './Highlight';
-import { SchematicRenderer } from '../../SchematicRenderer';
-import { OverlayContent } from '../OverlayManager';
+import * as THREE from "three";
+import { Highlight } from "./Highlight";
+import { SchematicRenderer } from "../../SchematicRenderer";
+import { OverlayContent } from "../OverlayManager";
 
 /**
  * Hover handler for Insign IO regions
@@ -20,7 +20,7 @@ export class InsignIoHoverHandler implements Highlight {
 	}
 
 	getName(): string {
-		return 'insign_io_hover_handler';
+		return "insign_io_hover_handler";
 	}
 
 	activate(): void {
@@ -28,14 +28,14 @@ export class InsignIoHoverHandler implements Highlight {
 		this.isActive = true;
 
 		// Listen to mouse move events
-		this.renderer.canvas.addEventListener('mousemove', this.onMouseMove);
+		this.renderer.canvas.addEventListener("mousemove", this.onMouseMove);
 	}
 
 	deactivate(): void {
 		if (!this.isActive) return;
 		this.isActive = false;
 
-		this.renderer.canvas.removeEventListener('mousemove', this.onMouseMove);
+		this.renderer.canvas.removeEventListener("mousemove", this.onMouseMove);
 		this.hideOverlay();
 	}
 
@@ -54,7 +54,7 @@ export class InsignIoHoverHandler implements Highlight {
 		// Update raycaster
 		const camera = this.renderer.cameraManager.activeCamera?.camera;
 		if (!camera) return;
-		
+
 		this.raycaster.setFromCamera(this.mouse, camera);
 
 		// Check for intersections with IO region meshes
@@ -141,44 +141,44 @@ export class InsignIoHoverHandler implements Highlight {
 
 		// Build overlay content
 		const content: OverlayContent = {
-			title: regionId.replace(/^io\./, ''),
+			title: regionId.replace(/^io\./, ""),
 			subtitle: region.ioDirection.toUpperCase(),
 			sections: [
 				{
-					title: 'Type Information',
+					title: "Type Information",
 					items: [
 						{
-							label: 'Data Type',
+							label: "Data Type",
 							value: region.dataType,
-							color: '#4fc3f7',
-							icon: '📊',
+							color: "#4fc3f7",
+							icon: "📊",
 						},
 						{
-							label: 'Bit Width',
+							label: "Bit Width",
 							value: region.positions.length,
-							color: '#81c784',
-							icon: '🔢',
+							color: "#81c784",
+							icon: "🔢",
 						},
 						{
-							label: 'Direction',
-							value: region.ioDirection === 'input' ? 'Input' : 'Output',
-							color: region.ioDirection === 'input' ? '#64b5f6' : '#e57373',
-							icon: region.ioDirection === 'input' ? '⬇️' : '⬆️',
+							label: "Direction",
+							value: region.ioDirection === "input" ? "Input" : "Output",
+							color: region.ioDirection === "input" ? "#64b5f6" : "#e57373",
+							icon: region.ioDirection === "input" ? "⬇️" : "⬆️",
 						},
 					],
 				},
 				{
-					title: 'Position Details',
+					title: "Position Details",
 					items: [
 						{
-							label: 'First Position',
+							label: "First Position",
 							value: `(${region.positions[0][0]}, ${region.positions[0][1]}, ${region.positions[0][2]})`,
-							color: '#ffb74d',
+							color: "#ffb74d",
 						},
 						{
-							label: 'Last Position',
+							label: "Last Position",
 							value: `(${region.positions[region.positions.length - 1][0]}, ${region.positions[region.positions.length - 1][1]}, ${region.positions[region.positions.length - 1][2]})`,
-							color: '#ffb74d',
+							color: "#ffb74d",
 						},
 					],
 				},
@@ -188,10 +188,10 @@ export class InsignIoHoverHandler implements Highlight {
 		// Add sort strategy if available
 		if (region.sortStrategy) {
 			content.sections[0].items.push({
-				label: 'Sort Strategy',
+				label: "Sort Strategy",
 				value: region.sortStrategy,
-				color: '#ba68c8',
-				icon: '🔀',
+				color: "#ba68c8",
+				icon: "🔀",
 			});
 		}
 
@@ -207,4 +207,3 @@ export class InsignIoHoverHandler implements Highlight {
 		}
 	}
 }
-

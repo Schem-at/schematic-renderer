@@ -1,21 +1,21 @@
 // managers/InsignIoManager.ts
-import { EventEmitter } from 'events';
-import { SchematicRenderer } from '../SchematicRenderer';
-import { InsignIoHighlight, InsignIoStyle } from './highlight/InsignIoHighlight';
-import { DslMap, DslEntry } from '../types/insign';
+import { EventEmitter } from "events";
+import { SchematicRenderer } from "../SchematicRenderer";
+import { InsignIoHighlight, InsignIoStyle } from "./highlight/InsignIoHighlight";
+import { DslMap, DslEntry } from "../types/insign";
 
 export interface InsignIoRegion {
 	regionId: string;
 	entry: DslEntry;
 	positions: Array<[number, number, number]>;
 	dataType: string;
-	ioDirection: 'input' | 'output';
+	ioDirection: "input" | "output";
 	sortStrategy?: string;
 }
 
 export interface InsignIoFilter {
 	/** Filter by IO direction */
-	direction?: 'input' | 'output';
+	direction?: "input" | "output";
 	/** Filter by data type pattern (e.g., 'unsigned', 'signed:8') */
 	dataTypePattern?: string;
 	/** Filter by minimum bit count */
@@ -47,26 +47,28 @@ export class InsignIoManager extends EventEmitter {
 
 		for (const [regionId, entry] of Object.entries(dslMap)) {
 			// Only process regions starting with 'io.'
-			if (!regionId.startsWith('io.')) {
+			if (!regionId.startsWith("io.")) {
 				continue;
 			}
 
 			// Extract metadata
-			const ioType = entry.metadata?.['type'] as string;
-			const dataType = entry.metadata?.['data_type'] as string;
-			const sortStrategy = entry.metadata?.['sort'] as string | undefined;
+			const ioType = entry.metadata?.["type"] as string;
+			const dataType = entry.metadata?.["data_type"] as string;
+			const sortStrategy = entry.metadata?.["sort"] as string | undefined;
 
 			if (!ioType || !dataType) {
-				console.warn(`[InsignIoManager] Region ${regionId} missing required metadata (type or data_type)`);
+				console.warn(
+					`[InsignIoManager] Region ${regionId} missing required metadata (type or data_type)`
+				);
 				continue;
 			}
 
 			// Map 'input'/'output' to 'input'/'output' direction
-			let ioDirection: 'input' | 'output';
-			if (ioType === 'input') {
-				ioDirection = 'input';
-			} else if (ioType === 'output') {
-				ioDirection = 'output';
+			let ioDirection: "input" | "output";
+			if (ioType === "input") {
+				ioDirection = "input";
+			} else if (ioType === "output") {
+				ioDirection = "output";
 			} else {
 				console.warn(`[InsignIoManager] Unknown IO type '${ioType}' for region ${regionId}`);
 				continue;
@@ -95,7 +97,7 @@ export class InsignIoManager extends EventEmitter {
 		}
 
 		console.log(`[InsignIoManager] Parsed ${this.ioRegions.size} IO regions`);
-		this.emit('regionsLoaded', this.ioRegions);
+		this.emit("regionsLoaded", this.ioRegions);
 	}
 
 	/**
@@ -139,14 +141,14 @@ export class InsignIoManager extends EventEmitter {
 	public async loadFromSchematic(schematicName?: string): Promise<void> {
 		const insignManager = this.renderer.insignManager;
 		if (!insignManager) {
-			console.warn('[InsignIoManager] InsignManager not available');
+			console.warn("[InsignIoManager] InsignManager not available");
 			return;
 		}
 
 		// Load Insign data
 		const dslMap = await insignManager.loadFromSchematic(schematicName);
 		if (!dslMap) {
-			console.warn('[InsignIoManager] No Insign data available');
+			console.warn("[InsignIoManager] No Insign data available");
 			return;
 		}
 
@@ -218,7 +220,7 @@ export class InsignIoManager extends EventEmitter {
 		highlight.activate();
 		this.activeHighlights.set(regionId, highlight);
 
-		this.emit('regionShown', regionId);
+		this.emit("regionShown", regionId);
 	}
 
 	/**
@@ -247,14 +249,14 @@ export class InsignIoManager extends EventEmitter {
 	 * Show all inputs
 	 */
 	public showAllInputs(style?: Partial<InsignIoStyle>): void {
-		this.showFilteredRegions({ direction: 'input' }, style);
+		this.showFilteredRegions({ direction: "input" }, style);
 	}
 
 	/**
 	 * Show all outputs
 	 */
 	public showAllOutputs(style?: Partial<InsignIoStyle>): void {
-		this.showFilteredRegions({ direction: 'output' }, style);
+		this.showFilteredRegions({ direction: "output" }, style);
 	}
 
 	/**
@@ -267,7 +269,7 @@ export class InsignIoManager extends EventEmitter {
 		highlight.deactivate();
 		this.activeHighlights.delete(regionId);
 
-		this.emit('regionHidden', regionId);
+		this.emit("regionHidden", regionId);
 	}
 
 	/**
@@ -340,14 +342,14 @@ export class InsignIoManager extends EventEmitter {
 	 * Get all input regions
 	 */
 	public getAllInputs(): InsignIoRegion[] {
-		return this.getFilteredRegions({ direction: 'input' });
+		return this.getFilteredRegions({ direction: "input" });
 	}
 
 	/**
 	 * Get all output regions
 	 */
 	public getAllOutputs(): InsignIoRegion[] {
-		return this.getFilteredRegions({ direction: 'output' });
+		return this.getFilteredRegions({ direction: "output" });
 	}
 
 	/**
@@ -362,8 +364,8 @@ export class InsignIoManager extends EventEmitter {
 		dataTypes: Record<string, number>;
 	} {
 		const regions = Array.from(this.ioRegions.values());
-		const inputs = regions.filter((r) => r.ioDirection === 'input');
-		const outputs = regions.filter((r) => r.ioDirection === 'output');
+		const inputs = regions.filter((r) => r.ioDirection === "input");
+		const outputs = regions.filter((r) => r.ioDirection === "output");
 
 		const dataTypes: Record<string, number> = {};
 		regions.forEach((r) => {
@@ -386,7 +388,7 @@ export class InsignIoManager extends EventEmitter {
 	public clear(): void {
 		this.hideAllRegions();
 		this.ioRegions.clear();
-		this.emit('cleared');
+		this.emit("cleared");
 	}
 
 	/**
@@ -397,4 +399,3 @@ export class InsignIoManager extends EventEmitter {
 		this.removeAllListeners();
 	}
 }
-

@@ -37,16 +37,12 @@ export class GizmoManager {
 		}
 
 		// Disable camera controls when transforming
-		this.transformControls.addEventListener(
-			"dragging-changed",
-			(event: any) => {
-				const controls =
-					this.schematicRenderer.cameraManager.controls.get("orbit");
-				if (controls) {
-					controls.enabled = !event.value;
-				}
+		this.transformControls.addEventListener("dragging-changed", (event: any) => {
+			const controls = this.schematicRenderer.cameraManager.controls.get("orbit");
+			if (controls) {
+				controls.enabled = !event.value;
 			}
-		);
+		});
 
 		// Update bounding box helper when transforming
 		this.transformControls.addEventListener("change", () => {
@@ -57,7 +53,7 @@ export class GizmoManager {
 			if (this.transformControls.object) {
 				this.schematicRenderer.eventEmitter.emit("gizmoObjectModified", {
 					object: this.transformControls.object,
-					mode: this.transformControls.getMode()
+					mode: this.transformControls.getMode(),
 				});
 			}
 		});
@@ -66,39 +62,27 @@ export class GizmoManager {
 		this.transformControls.addEventListener("objectChange", () => {
 			const object = this.transformControls.object;
 			if (object && object instanceof THREE.Object3D) {
-				const schematic = this.schematicRenderer.schematicManager?.getSchematic(
-					object.name
-				);
+				const schematic = this.schematicRenderer.schematicManager?.getSchematic(object.name);
 				if (schematic) {
 					schematic.syncTransformFromGroup();
 				}
 			}
 		});
 
-		this.transformControls.addEventListener(
-			"dragging-changed",
-			(event: any) => {
-				const controls =
-					this.schematicRenderer.cameraManager.controls.get("orbit");
-				console.log(controls);
-				if (controls) {
-					controls.enabled = !event.value;
-				}
+		this.transformControls.addEventListener("dragging-changed", (event: any) => {
+			const controls = this.schematicRenderer.cameraManager.controls.get("orbit");
+			console.log(controls);
+			if (controls) {
+				controls.enabled = !event.value;
 			}
-		);
+		});
 
 		this.setupEventListeners();
 	}
 
 	private setupEventListeners() {
-		this.schematicRenderer.eventEmitter.on(
-			"objectSelected",
-			this.onObjectSelected.bind(this)
-		);
-		this.schematicRenderer.eventEmitter.on(
-			"objectDeselected",
-			this.onObjectDeselected.bind(this)
-		);
+		this.schematicRenderer.eventEmitter.on("objectSelected", this.onObjectSelected.bind(this));
+		this.schematicRenderer.eventEmitter.on("objectDeselected", this.onObjectDeselected.bind(this));
 
 		// Listen for camera changes to update TransformControls
 		this.schematicRenderer.cameraManager.on("cameraChanged", () => {
@@ -153,9 +137,7 @@ export class GizmoManager {
 
 			// Remove any existing bounding box helper
 			if (this.boundingBoxHelper) {
-				this.schematicRenderer.sceneManager.scene.remove(
-					this.boundingBoxHelper
-				);
+				this.schematicRenderer.sceneManager.scene.remove(this.boundingBoxHelper);
 				this.boundingBoxHelper = null;
 			}
 
@@ -174,7 +156,7 @@ export class GizmoManager {
 			this.transformControls.enabled = true;
 
 			// Re-apply renderOrder and depthTest settings on attach
-			if (typeof this.transformControls.traverse === 'function') {
+			if (typeof this.transformControls.traverse === "function") {
 				this.transformControls.traverse((child: THREE.Object3D) => {
 					if ((child as any).material) {
 						(child as any).material.depthTest = false;
@@ -230,9 +212,7 @@ export class GizmoManager {
 	private handleTransformError() {
 		if (
 			this.transformControls.object &&
-			!this.schematicRenderer.sceneManager.scene.getObjectById(
-				this.transformControls.object.id
-			)
+			!this.schematicRenderer.sceneManager.scene.getObjectById(this.transformControls.object.id)
 		) {
 			this.detach();
 		}

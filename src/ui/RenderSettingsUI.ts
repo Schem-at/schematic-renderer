@@ -89,10 +89,7 @@ export class RenderSettingsUI extends BaseUI {
 	private ssaoToggle!: HTMLLabelElement;
 	private autoOrbitToggle!: HTMLLabelElement;
 
-	constructor(
-		renderer: SchematicRenderer,
-		options: RenderSettingsUIOptions = {}
-	) {
+	constructor(renderer: SchematicRenderer, options: RenderSettingsUIOptions = {}) {
 		super(renderer.canvas, {
 			...options,
 			toggleUIShortcut: options.toggleUIShortcut ?? "KeyR",
@@ -120,7 +117,11 @@ export class RenderSettingsUI extends BaseUI {
 		const cameraManager = this.renderer.cameraManager;
 		if (cameraManager) {
 			const activeCameraKey = (cameraManager as any).activeCameraKey;
-			if (activeCameraKey === "isometric" || activeCameraKey === "perspective" || activeCameraKey === "perspective_fpv") {
+			if (
+				activeCameraKey === "isometric" ||
+				activeCameraKey === "perspective" ||
+				activeCameraKey === "perspective_fpv"
+			) {
 				settings.cameraMode = activeCameraKey;
 			}
 
@@ -212,9 +213,11 @@ export class RenderSettingsUI extends BaseUI {
 			this.applyHDRISetting(enabled);
 			this.emitChange();
 		});
-		section.appendChild(createSettingRow("HDRI Environment", this.hdriToggle, {
-			tooltip: "Use HDRI for realistic lighting and reflections (works in all camera modes)",
-		}));
+		section.appendChild(
+			createSettingRow("HDRI Environment", this.hdriToggle, {
+				tooltip: "Use HDRI for realistic lighting and reflections (works in all camera modes)",
+			})
+		);
 
 		// Background Color
 		const colorPicker = createColorPicker(this.settings.backgroundColor, (color) => {
@@ -222,9 +225,11 @@ export class RenderSettingsUI extends BaseUI {
 			this.applyBackgroundColor(color);
 			this.emitChange();
 		});
-		section.appendChild(createSettingRow("Background Color", colorPicker, {
-			tooltip: "Solid background color (visible when HDRI is disabled)",
-		}));
+		section.appendChild(
+			createSettingRow("Background Color", colorPicker, {
+				tooltip: "Solid background color (visible when HDRI is disabled)",
+			})
+		);
 
 		return section;
 	}
@@ -290,13 +295,17 @@ export class RenderSettingsUI extends BaseUI {
 		this.isometricControls.appendChild(yawSlider);
 
 		// Reset isometric button
-		const resetIsoBtn = createButton("Reset to True Isometric", () => {
-			this.settings.isometricPitch = 35.264;
-			this.settings.isometricYaw = 45;
-			this.renderer.cameraManager.resetIsometricAngles(true);
-			this.updateUIFromSettings();
-			this.emitChange();
-		}, { primary: false });
+		const resetIsoBtn = createButton(
+			"Reset to True Isometric",
+			() => {
+				this.settings.isometricPitch = 35.264;
+				this.settings.isometricYaw = 45;
+				this.renderer.cameraManager.resetIsometricAngles(true);
+				this.updateUIFromSettings();
+				this.emitChange();
+			},
+			{ primary: false }
+		);
 		resetIsoBtn.style.marginTop = "12px";
 		resetIsoBtn.style.width = "100%";
 		this.isometricControls.appendChild(resetIsoBtn);
@@ -346,9 +355,11 @@ export class RenderSettingsUI extends BaseUI {
 			this.renderer.renderManager?.setSSAOEnabled(enabled);
 			this.emitChange();
 		});
-		section.appendChild(createSettingRow("Ambient Occlusion (SSAO)", this.ssaoToggle, {
-			tooltip: "Adds soft shadows in corners and crevices for realistic depth",
-		}));
+		section.appendChild(
+			createSettingRow("Ambient Occlusion (SSAO)", this.ssaoToggle, {
+				tooltip: "Adds soft shadows in corners and crevices for realistic depth",
+			})
+		);
 
 		// SSAO Intensity
 		const intensitySlider = createSlider(this.settings.ssaoIntensity, {
@@ -388,9 +399,11 @@ export class RenderSettingsUI extends BaseUI {
 			}
 			this.emitChange();
 		});
-		section.appendChild(createSettingRow("Anti-Aliasing (SMAA)", smaaToggle, {
-			tooltip: "Smooths jagged edges for cleaner visuals",
-		}));
+		section.appendChild(
+			createSettingRow("Anti-Aliasing (SMAA)", smaaToggle, {
+				tooltip: "Smooths jagged edges for cleaner visuals",
+			})
+		);
 
 		// Gamma Toggle & Value
 		const gammaToggle = createToggle(this.settings.gammaEnabled, (enabled) => {
@@ -488,9 +501,13 @@ export class RenderSettingsUI extends BaseUI {
 		Object.assign(footer.style, UIStyles.footer);
 
 		// Reset button
-		const resetBtn = createButton("Reset All", () => {
-			this.resetToDefaults();
-		}, { primary: false });
+		const resetBtn = createButton(
+			"Reset All",
+			() => {
+				this.resetToDefaults();
+			},
+			{ primary: false }
+		);
 		footer.appendChild(resetBtn);
 
 		// Focus camera button

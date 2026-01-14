@@ -1,13 +1,13 @@
 /**
  * GPUMeshFactory
- * 
+ *
  * Creates THREE.js meshes from GPU compute output buffers.
  * Supports both zero-copy GPU path (when using WebGPU renderer)
  * and traditional CPU readback path (for WebGL compatibility).
  */
 
-import * as THREE from 'three';
-import type { ChunkGeometryData } from '../types';
+import * as THREE from "three";
+import type { ChunkGeometryData } from "../types";
 
 // Constants matching compute output format
 const POSITION_SCALE = 1024;
@@ -41,7 +41,6 @@ export interface GPUMeshOptions {
  * Factory for creating meshes from GPU compute output
  */
 export class GPUMeshFactory {
-
 	/**
 	 * Create a mesh from ChunkGeometryData (CPU readback path)
 	 * This is the standard path that works with both WebGL and WebGPU renderers
@@ -56,11 +55,11 @@ export class GPUMeshFactory {
 		if (geoData.positions) {
 			if (geoData.positions instanceof Int16Array) {
 				const posAttr = new THREE.BufferAttribute(geoData.positions, 3, false);
-				geometry.setAttribute('position', posAttr);
+				geometry.setAttribute("position", posAttr);
 			} else {
 				// Float32Array path
 				const posAttr = new THREE.BufferAttribute(geoData.positions, 3);
-				geometry.setAttribute('position', posAttr);
+				geometry.setAttribute("position", posAttr);
 			}
 		}
 
@@ -69,18 +68,18 @@ export class GPUMeshFactory {
 			if (geoData.normals instanceof Int8Array) {
 				const float32Normals = convertInt8NormalsToFloat32(geoData.normals);
 				const normAttr = new THREE.BufferAttribute(float32Normals, 3);
-				geometry.setAttribute('normal', normAttr);
+				geometry.setAttribute("normal", normAttr);
 			} else {
 				// Already Float32Array
 				const normAttr = new THREE.BufferAttribute(geoData.normals as Float32Array, 3);
-				geometry.setAttribute('normal', normAttr);
+				geometry.setAttribute("normal", normAttr);
 			}
 		}
 
 		// UVs are always Float32Array
 		if (geoData.uvs) {
 			const uvAttr = new THREE.BufferAttribute(geoData.uvs, 2);
-			geometry.setAttribute('uv', uvAttr);
+			geometry.setAttribute("uv", uvAttr);
 		}
 
 		// Indices
@@ -125,7 +124,7 @@ export class GPUMeshFactory {
 		origin: [number, number, number],
 		materials: THREE.Material[]
 	): THREE.Mesh[] {
-		return geometries.map(geoData =>
+		return geometries.map((geoData) =>
 			GPUMeshFactory.createMeshFromGeometryData(geoData, {
 				category: geoData.category,
 				origin,
@@ -147,19 +146,19 @@ export class GPUMeshFactory {
 			if (!(mat instanceof THREE.Material)) return;
 
 			switch (category) {
-				case 'water':
+				case "water":
 					mesh.renderOrder = 3;
 					mat.transparent = true;
-					if ('opacity' in mat) (mat as any).opacity = 0.8;
+					if ("opacity" in mat) (mat as any).opacity = 0.8;
 					break;
-				case 'transparent':
+				case "transparent":
 					mesh.renderOrder = 2;
 					mat.transparent = true;
 					break;
-				case 'emissive':
+				case "emissive":
 					mesh.renderOrder = 1;
 					break;
-				case 'redstone':
+				case "redstone":
 					mesh.userData.isDynamic = true;
 					break;
 				default:
@@ -173,51 +172,49 @@ export class GPUMeshFactory {
 	 * Update an existing mesh's geometry with new data
 	 * This is more efficient than creating a new mesh when updating chunks
 	 */
-	public static updateMeshGeometry(
-		mesh: THREE.Mesh,
-		geoData: ChunkGeometryData
-	): void {
+	public static updateMeshGeometry(mesh: THREE.Mesh, geoData: ChunkGeometryData): void {
 		const geometry = mesh.geometry;
 
 		// Update positions
 		if (geoData.positions) {
-			const posAttr = geometry.getAttribute('position');
+			const posAttr = geometry.getAttribute("position");
 			if (posAttr && posAttr.array.length === geoData.positions.length) {
 				(posAttr.array as typeof geoData.positions).set(geoData.positions);
 				posAttr.needsUpdate = true;
 			} else {
 				// Size changed, need to recreate attribute
 				if (geoData.positions instanceof Int16Array) {
-					geometry.setAttribute('position', new THREE.BufferAttribute(geoData.positions, 3, false));
+					geometry.setAttribute("position", new THREE.BufferAttribute(geoData.positions, 3, false));
 				} else {
-					geometry.setAttribute('position', new THREE.BufferAttribute(geoData.positions, 3));
+					geometry.setAttribute("position", new THREE.BufferAttribute(geoData.positions, 3));
 				}
 			}
 		}
 
 		// Update normals - convert Int8 to Float32 for WebGPU compatibility
 		if (geoData.normals) {
-			const float32Normals = geoData.normals instanceof Int8Array
-				? convertInt8NormalsToFloat32(geoData.normals)
-				: geoData.normals as Float32Array;
+			const float32Normals =
+				geoData.normals instanceof Int8Array
+					? convertInt8NormalsToFloat32(geoData.normals)
+					: (geoData.normals as Float32Array);
 
-			const normAttr = geometry.getAttribute('normal');
+			const normAttr = geometry.getAttribute("normal");
 			if (normAttr && normAttr.array.length === float32Normals.length) {
 				(normAttr.array as Float32Array).set(float32Normals);
 				normAttr.needsUpdate = true;
 			} else {
-				geometry.setAttribute('normal', new THREE.BufferAttribute(float32Normals, 3));
+				geometry.setAttribute("normal", new THREE.BufferAttribute(float32Normals, 3));
 			}
 		}
 
 		// Update UVs
 		if (geoData.uvs) {
-			const uvAttr = geometry.getAttribute('uv');
+			const uvAttr = geometry.getAttribute("uv");
 			if (uvAttr && uvAttr.array.length === geoData.uvs.length) {
 				(uvAttr.array as Float32Array).set(geoData.uvs);
 				uvAttr.needsUpdate = true;
 			} else {
-				geometry.setAttribute('uv', new THREE.BufferAttribute(geoData.uvs, 2));
+				geometry.setAttribute("uv", new THREE.BufferAttribute(geoData.uvs, 2));
 			}
 		}
 

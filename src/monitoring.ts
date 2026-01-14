@@ -8,11 +8,7 @@ interface PerformanceMetrics {
 
 const performanceMetrics: PerformanceMetrics = {};
 
-export function MonitorAsync(
-	target: any,
-	propertyKey: string,
-	descriptor: PropertyDescriptor
-) {
+export function MonitorAsync(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
 	const className = target.constructor.name;
 	const originalMethod = descriptor.value;
 
@@ -48,11 +44,7 @@ export function MonitorAsync(
 	return descriptor;
 }
 
-export function Monitor(
-	target: any,
-	propertyKey: string,
-	descriptor: PropertyDescriptor
-) {
+export function Monitor(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
 	const className = target.constructor.name;
 	const originalMethod = descriptor.value;
 
@@ -105,9 +97,7 @@ export function displayPerformanceMetrics() {
 	for (const [funcName, metrics] of sortedMetrics) {
 		console.log(`Function ${funcName} called ${metrics.callCount} times`);
 		console.log(`Total time: ${metrics.totalTime.toFixed(2)} ms`);
-		console.log(
-			`Total memory used: ${(metrics.totalMemory / 1024 / 1024).toFixed(2)} MB`
-		);
+		console.log(`Total memory used: ${(metrics.totalMemory / 1024 / 1024).toFixed(2)} MB`);
 		console.log("---");
 	}
 }

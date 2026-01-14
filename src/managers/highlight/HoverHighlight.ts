@@ -5,7 +5,6 @@ import { BlockData } from "./types";
 import { SchematicRenderer } from "../../SchematicRenderer";
 import { SelectableObject } from "../../managers/SelectableObject";
 
-
 export class HoverHighlight implements Highlight {
 	private schematicRenderer: SchematicRenderer;
 	private hoverMesh: THREE.Mesh | null = null;
@@ -43,10 +42,7 @@ export class HoverHighlight implements Highlight {
 		// No periodic update needed for hover effect
 	}
 
-	private onHoverEnter = (
-		object: SelectableObject,
-		intersect: THREE.Intersection
-	) => {
+	private onHoverEnter = (object: SelectableObject, intersect: THREE.Intersection) => {
 		this.removeHoverMesh();
 		this.lastHoveredObject = object;
 		console.log("Hovering over object", object);
@@ -70,9 +66,7 @@ export class HoverHighlight implements Highlight {
 		this.schematicRenderer.eventEmitter.emit("hover", {
 			object,
 			position,
-			faceNormal: intersect.face?.normal
-				.clone()
-				.transformDirection(intersect.object.matrixWorld),
+			faceNormal: intersect.face?.normal.clone().transformDirection(intersect.object.matrixWorld),
 		});
 	};
 
@@ -91,14 +85,11 @@ export class HoverHighlight implements Highlight {
 		}
 	}
 
-
-
 	// @ts-ignore
 	private getBlockData(position: THREE.Vector3): BlockData | null {
 		// Access the schematic to get block data
 		if (!this.schematicRenderer.schematicManager) return null;
-		const firstSchematic =
-			this.schematicRenderer.schematicManager.getAllSchematics()[0];
+		const firstSchematic = this.schematicRenderer.schematicManager.getAllSchematics()[0];
 		if (!firstSchematic) return null;
 
 		const block = firstSchematic.schematicWrapper.get_block_with_properties(
