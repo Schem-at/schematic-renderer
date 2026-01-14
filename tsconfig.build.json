@@ -7,9 +7,8 @@
 		"declarationMap": true,
 		"emitDeclarationOnly": false,
 		"outDir": "./dist",
-		"types": [],
 		"skipLibCheck": true
 	},
 	"include": ["src/**/*"],
-	"exclude": ["test", "**/*.test.ts", "dist"]
+	"exclude": ["test", "**/*.test.ts", "src/test/**/*", "dist"]
 }
