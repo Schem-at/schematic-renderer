@@ -1,1 +1,2 @@
-*
+# Only ignore package.json as it's auto-generated
+package.json
