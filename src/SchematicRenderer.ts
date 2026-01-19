@@ -17,10 +17,8 @@ import { MaterialRegistry } from "./MaterialRegistry";
 import { EventEmitter } from "events";
 import { ResourcePackManager, DefaultPackCallback } from "./managers/ResourcePackManager";
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
-import { ResourcePackUI } from "./ui/ResourcePackUI";
-import { ExportUI } from "./ui/ExportUI";
-import { RenderSettingsUI } from "./ui/RenderSettingsUI";
-import { CaptureUI } from "./ui/CaptureUI";
+import { SidebarManager } from "./ui/sidebar/SidebarManager";
+import type { SidebarTabId } from "./ui/sidebar/types";
 import type {
 	PacksChangedEvent,
 	PackToggledEvent,
@@ -45,7 +43,6 @@ import { OverlayManager } from "./managers/OverlayManager";
 import { CreativeControls } from "three-creative-controls";
 
 import { Cubane } from "cubane";
-import { performanceDashboard } from "./ui/PerformanceDashboard";
 import { KeyboardControls } from "./managers/KeyboardControls";
 import { InspectorManager } from "./managers/InspectorManager";
 import { RegionManager } from "./managers/RegionManager";
@@ -80,10 +77,8 @@ export class SchematicRenderer {
 	public fps: number = 0;
 	private resourcePackManager: ResourcePackManager;
 	public packs!: ResourcePackManagerProxy;
-	public resourcePackUI: ResourcePackUI | undefined;
-	public exportUI: ExportUI | undefined;
-	public renderSettingsUI: RenderSettingsUI | undefined;
-	public captureUI: CaptureUI | undefined;
+	/** Unified sidebar UI manager */
+	public sidebar: SidebarManager | undefined;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -122,14 +117,12 @@ export class SchematicRenderer {
 		// Initialize camera manager
 		this.cameraManager = new CameraManager(this, options.cameraOptions);
 
-		// Initialize keyboard controls
-		if (options.keyboardControlsOptions?.enabled !== false) {
-			this.keyboardControls = new KeyboardControls(
-				this.cameraManager.activeCamera.camera,
-				this.canvas,
-				options.keyboardControlsOptions
-			);
-		}
+		// Initialize keyboard controls (always create, but disabled by default)
+		this.keyboardControls = new KeyboardControls(
+			this.cameraManager.activeCamera.camera,
+			this.canvas,
+			options.keyboardControlsOptions
+		);
 
 		this.sceneManager.updateHelpers();
 		this.eventEmitter.emit("sceneReady");
@@ -143,51 +136,10 @@ export class SchematicRenderer {
 		// Wire up resource pack callbacks
 		this.setupResourcePackCallbacks();
 
-		// Initialize Resource Pack UI if enabled
-		if (this.options.resourcePackOptions?.enableUI !== false) {
-			this.resourcePackUI = new ResourcePackUI(
-				this.resourcePackManager,
-				this.canvas,
-				this.options.resourcePackOptions
-			);
+		// Initialize unified sidebar UI
+		if (this.options.sidebarOptions?.enabled !== false) {
+			this.sidebar = new SidebarManager(this, this.options.sidebarOptions);
 		}
-
-		// Initialize Export UI
-		this.exportUI = new ExportUI(
-			this.canvas,
-			() => this.schematicManager?.getFirstSchematic() || null,
-			{
-				enableUI: true,
-				uiPosition: "top-right",
-				enableKeyboardShortcuts: true,
-				toggleUIShortcut: "KeyE",
-			}
-		);
-
-		// Initialize Render Settings UI
-		this.renderSettingsUI = new RenderSettingsUI(this, {
-			enableUI: true,
-			uiPosition: "top-right",
-			enableKeyboardShortcuts: true,
-			toggleUIShortcut: "KeyR",
-			onSettingsChange: (settings) => {
-				this.options.callbacks?.onRenderSettingsChanged?.(settings);
-			},
-		});
-
-		// Initialize Capture UI
-		this.captureUI = new CaptureUI(this, {
-			enableUI: true,
-			uiPosition: "top-right",
-			enableKeyboardShortcuts: true,
-			toggleUIShortcut: "KeyC",
-			onScreenshotTaken: (blob, filename) => {
-				this.options.callbacks?.onScreenshotTaken?.(blob, filename);
-			},
-			onRecordingComplete: (blob, filename) => {
-				this.options.callbacks?.onRecordingComplete?.(blob, filename);
-			},
-		});
 
 		this.state = {
 			cameraPosition: new THREE.Vector3(),
@@ -834,70 +786,63 @@ export class SchematicRenderer {
 		// Update frame interval (0 = uncapped)
 		this.frameInterval = currentTargetFPS > 0 ? 1000 / currentTargetFPS : 0;
 
-		// Schedule next frame NOW (before any early returns)
-		// Use setTimeout for idle mode to avoid unnecessary rAF calls
-		if (this.isIdle && this.frameInterval > 0) {
-			this.idleTimeoutId = setTimeout(() => this.animate(), this.frameInterval) as any;
-		} else {
-			this.animationFrameId = requestAnimationFrame(() => this.animate());
-		}
-
-		const elapsed = now - this.lastFrameTime;
-		const shouldUpdate = this.frameInterval === 0 || elapsed >= this.frameInterval;
-
-		if (shouldUpdate) {
-			this.lastFrameTime = this.frameInterval === 0 ? now : now - (elapsed % this.frameInterval);
-		}
-
 		const deltaTime = this.clock.getDelta();
 
 		// ALWAYS update controls for smooth interaction (critical for responsiveness)
-		const activeControlKey = this.cameraManager.activeControlKey;
-		if (activeControlKey) {
-			const controls = this.cameraManager.controls.get(activeControlKey);
-			if (controls) {
-				if (activeControlKey.includes("creative")) {
-					// Update creative controls
-					const speed = new THREE.Vector3(200, 200, 200);
-					CreativeControls.update(controls, speed);
-				} else if ((controls as any).update) {
-					// Update OrbitControls or other controls that have an update method
-					(controls as any).update();
-				}
-			}
-		}
+		// This runs at full refresh rate for immediate feedback
+		// CameraManager.update() handles all control types: orbit, creative, and fly
+		this.cameraManager.update(deltaTime);
 
-		// Update keyboard controls (WASD movement while right-clicking)
-		if (this.keyboardControls) {
+		// Update legacy keyboard controls (WASD movement while right-clicking)
+		// This is the old workaround; FlyControls is now the preferred method
+		if (this.keyboardControls && !this.cameraManager.isFlyControlsEnabled()) {
 			this.keyboardControls.update(deltaTime);
 		}
 
-		// Debug logging every 2 seconds
+		// Check if we should render this frame based on target FPS
+		const elapsed = now - this.lastFrameTime;
+		const shouldRender = this.frameInterval === 0 || elapsed >= this.frameInterval;
+
+		// Schedule next frame based on mode
+		if (this.isIdle && this.frameInterval > 0) {
+			// In idle mode, use setTimeout for power saving
+			this.idleTimeoutId = setTimeout(() => this.animate(), this.frameInterval) as any;
+		} else {
+			// In active mode, use rAF for smooth controls
+			this.animationFrameId = requestAnimationFrame(() => this.animate());
+		}
+
+		if (!shouldRender) {
+			// Skip rendering this frame
+			this.throttledFrames++;
+			return;
+		}
+
+		// Update lastFrameTime for next throttle calculation
+		this.lastFrameTime = this.frameInterval === 0 ? now : now - (elapsed % this.frameInterval);
+
+		// Count only rendered frames for FPS calculation
 		this.frameCount++;
+
+		// Debug logging every 2 seconds
 		if (now - this.lastDebugTime > 2000) {
-			const actualFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
-			this.fps = actualFPS;
-			const renderFPS =
-				(this.frameCount - this.throttledFrames) / ((now - this.lastDebugTime) / 1000);
+			const renderedFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
+			this.fps = renderedFPS;
 			const mode = this.enableAdaptiveFPS ? (this.isIdle ? "idle" : "active") : "fixed";
 			const fpsTarget = currentTargetFPS === 0 ? "uncapped" : `${currentTargetFPS}`;
+			const controlsMode = this.cameraManager.isFlyControlsEnabled()
+				? "fly"
+				: this.cameraManager.activeControlKey || "none";
 
 			if (this.options.logFPS) {
 				console.log(
-					`[Renderer] FPS: ${actualFPS.toFixed(1)} (${renderFPS.toFixed(1)} rendered, ${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${activeControlKey || "none"}`
+					`[Renderer] FPS: ${renderedFPS.toFixed(1)} rendered (${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${controlsMode}`
 				);
 			}
 
 			this.frameCount = 0;
 			this.throttledFrames = 0;
 			this.lastDebugTime = now;
-		}
-
-		// Early exit if we're throttling this frame
-		// Controls are updated above, but we skip expensive operations and rendering
-		if (!shouldUpdate) {
-			this.throttledFrames++;
-			return;
 		}
 
 		// Rest of your existing updates (only when not throttled)
@@ -1197,24 +1142,28 @@ export class SchematicRenderer {
 	}
 
 	/**
-	 * Shows the performance dashboard UI
+	 * Shows the performance dashboard via the sidebar
 	 */
 	public showPerformanceDashboard(): void {
-		performanceDashboard.show();
+		this.sidebar?.show("performance");
 	}
 
 	/**
-	 * Hides the performance dashboard UI
+	 * Hides the sidebar (hides performance dashboard if active)
 	 */
 	public hidePerformanceDashboard(): void {
-		performanceDashboard.hide();
+		this.sidebar?.hide();
 	}
 
 	/**
-	 * Toggles the performance dashboard UI
+	 * Toggles the performance dashboard via the sidebar
 	 */
 	public togglePerformanceDashboard(): void {
-		performanceDashboard.toggle();
+		if (this.sidebar?.getActiveTab() === "performance" && !this.sidebar?.isCollapsed()) {
+			this.sidebar?.hide();
+		} else {
+			this.sidebar?.show("performance");
+		}
 	}
 
 	/**
@@ -1554,108 +1503,62 @@ export class SchematicRenderer {
 		return this.cameraManager.animateCameraAlongPath(options);
 	}
 
-	// ===== UI VISIBILITY API =====
+	// ===== SIDEBAR API =====
 
 	/**
-	 * Show the render settings UI panel
+	 * Show the sidebar with the specified tab (or current tab if none)
 	 */
-	public showRenderSettings(): void {
-		this.renderSettingsUI?.show();
+	public showSidebar(tab?: SidebarTabId): void {
+		this.sidebar?.show(tab);
 	}
 
 	/**
-	 * Hide the render settings UI panel
+	 * Hide/collapse the sidebar
 	 */
-	public hideRenderSettings(): void {
-		this.renderSettingsUI?.hide();
+	public hideSidebar(): void {
+		this.sidebar?.hide();
 	}
 
 	/**
-	 * Toggle the render settings UI panel
+	 * Toggle the sidebar visibility
 	 */
-	public toggleRenderSettings(): void {
-		this.renderSettingsUI?.toggle();
+	public toggleSidebar(): void {
+		this.sidebar?.toggle();
 	}
 
 	/**
-	 * Show the capture UI panel
+	 * Switch to a specific sidebar tab
 	 */
-	public showCaptureUI(): void {
-		this.captureUI?.show();
+	public showSidebarTab(tab: SidebarTabId): void {
+		this.sidebar?.showTab(tab);
 	}
 
 	/**
-	 * Hide the capture UI panel
+	 * Enable keyboard shortcuts
 	 */
-	public hideCaptureUI(): void {
-		this.captureUI?.hide();
+	public enableKeyboardShortcuts(): void {
+		this.sidebar?.enableShortcuts();
 	}
 
 	/**
-	 * Toggle the capture UI panel
+	 * Disable keyboard shortcuts
 	 */
-	public toggleCaptureUI(): void {
-		this.captureUI?.toggle();
+	public disableKeyboardShortcuts(): void {
+		this.sidebar?.disableShortcuts();
 	}
 
 	/**
-	 * Show the export UI panel
+	 * Get the current sidebar state
 	 */
-	public showExportUI(): void {
-		this.exportUI?.show();
-	}
-
-	/**
-	 * Hide the export UI panel
-	 */
-	public hideExportUI(): void {
-		this.exportUI?.hide();
-	}
-
-	/**
-	 * Toggle the export UI panel
-	 */
-	public toggleExportUI(): void {
-		this.exportUI?.toggle();
-	}
-
-	/**
-	 * Show the resource pack UI panel
-	 */
-	public showResourcePackUI(): void {
-		this.resourcePackUI?.show();
-	}
-
-	/**
-	 * Hide the resource pack UI panel
-	 */
-	public hideResourcePackUI(): void {
-		this.resourcePackUI?.hide();
-	}
-
-	/**
-	 * Toggle the resource pack UI panel
-	 */
-	public toggleResourcePackUI(): void {
-		this.resourcePackUI?.toggle();
-	}
-
-	/**
-	 * Get all available UI panels
-	 */
-	public getUIState(): {
-		renderSettings: boolean;
-		capture: boolean;
-		export: boolean;
-		resourcePack: boolean;
-		performanceDashboard: boolean;
+	public getSidebarState(): {
+		visible: boolean;
+		collapsed: boolean;
+		activeTab: SidebarTabId | null;
 	} {
 		return {
-			renderSettings: this.renderSettingsUI?.isShowing() ?? false,
-			capture: this.captureUI?.isShowing() ?? false,
-			export: this.exportUI?.isShowing() ?? false,
-			resourcePack: this.resourcePackUI?.isShowing() ?? false,
-			performanceDashboard: performanceDashboard.isShowing(),
+			visible: this.sidebar !== undefined,
+			collapsed: this.sidebar?.isCollapsed() ?? true,
+			activeTab: this.sidebar?.getActiveTab() ?? null,
 		};
 	}
 
@@ -1716,17 +1619,8 @@ export class SchematicRenderer {
 		this.uiManager.dispose();
 		this.cameraManager.dispose();
 
-		// Clean up resource pack UI
-		this.resourcePackUI?.dispose();
-
-		// Clean up export UI
-		this.exportUI?.dispose();
-
-		// Clean up render settings UI
-		this.renderSettingsUI?.dispose();
-
-		// Clean up capture UI
-		this.captureUI?.dispose();
+		// Clean up sidebar UI
+		this.sidebar?.dispose();
 
 		// Clean up resource pack manager
 		this.resourcePackManager.dispose();

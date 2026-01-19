@@ -8,13 +8,25 @@ export { OverlayManager } from "./managers/OverlayManager";
 export { InsignRegionHighlight } from "./managers/highlight/InsignRegionHighlight";
 export { InsignIoHoverHandler } from "./managers/highlight/InsignIoHoverHandler";
 export { KeyboardControls } from "./managers/KeyboardControls";
+export type { KeybindConfig } from "./managers/KeyboardControls";
+export { FlyControls } from "./managers/FlyControls";
+export type { FlyControlsOptions, FlyControlsKeybinds } from "./managers/FlyControls";
 export { InspectorManager } from "./managers/InspectorManager";
 export { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
-export { ResourcePackUI } from "./ui/ResourcePackUI";
-export { ExportUI } from "./ui/ExportUI";
-export { RenderSettingsUI } from "./ui/RenderSettingsUI";
-export { CaptureUI } from "./ui/CaptureUI";
-export { BaseUI, UIColors, UIStyles } from "./ui/UIComponents";
+// Sidebar UI exports
+export { SidebarManager } from "./ui/sidebar/SidebarManager";
+export { UnifiedSidebar } from "./ui/sidebar/UnifiedSidebar";
+export { KeyboardShortcutManager } from "./ui/sidebar/KeyboardShortcutManager";
+export { UIColors, UIStyles } from "./ui/UIComponents";
+
+// Panel exports
+export { BasePanel } from "./ui/panels/BasePanel";
+export { ControlsPanel } from "./ui/panels/ControlsPanel";
+export { RenderSettingsPanel } from "./ui/panels/RenderSettingsPanel";
+export { CapturePanel } from "./ui/panels/CapturePanel";
+export { ExportPanel } from "./ui/panels/ExportPanel";
+export { ResourcePackPanel } from "./ui/panels/ResourcePackPanel";
+export { PerformancePanel } from "./ui/panels/PerformancePanel";
 export { SchematicExporter } from "./export/SchematicExporter";
 export type { SimulationConfig, SimulationState, SyncMode } from "./managers/SimulationManager";
 export type {
@@ -62,19 +74,19 @@ export type {
 	QualityPreset,
 } from "./types/export";
 
-// Render settings types
-export type { RenderSettingsUIOptions, RenderSettings } from "./ui/RenderSettingsUI";
-
-// Capture types
+// Sidebar types
 export type {
-	CaptureUIOptions,
-	ScreenshotSettings,
-	RecordingSettings,
-	CameraPathSettings,
-} from "./ui/CaptureUI";
+	SidebarOptions,
+	SidebarTabId,
+	SidebarAction,
+	SidebarPosition,
+	SidebarTabConfig,
+	KeyboardShortcut,
+	KeyboardShortcutMap,
+} from "./ui/sidebar/types";
 
 // UI component types
-export type { UIPosition, BaseUIOptions } from "./ui/UIComponents";
+export type { UIPosition } from "./ui/UIComponents";
 
 // Resource pack types
 export type {

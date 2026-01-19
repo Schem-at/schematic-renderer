@@ -11,6 +11,7 @@ import { RecordingManager, RecordingOptions } from "./RecordingManager";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
+import { FlyControls, FlyControlsOptions } from "./FlyControls";
 export interface CameraManagerOptions {
 	position?: [number, number, number]; // Initial camera position
 	defaultCameraPreset?: "perspective" | "isometric" | "perspective_fpv"; // Default camera preset to use
@@ -65,7 +66,7 @@ export interface CameraAnimationWithRecordingOptions {
 }
 
 type CameraType = "perspective" | "orthographic";
-type ControlType = "orbit" | "creative" | "none";
+type ControlType = "orbit" | "creative" | "fly" | "none";
 
 // Define constants for minimums to avoid magic numbers and allow easier tuning
 const ABSOLUTE_MIN_ORTHO_VISIBLE_HEIGHT = 5; // Minimum world units for orthographic camera's visible height
@@ -84,6 +85,10 @@ export class CameraManager extends EventEmitter {
 	private animationStartPosition: THREE.Vector3 = new THREE.Vector3();
 	private animationStartRotation: THREE.Euler = new THREE.Euler();
 	public recordingManager: RecordingManager;
+
+	/** First-person fly controls instance */
+	public flyControls: FlyControls | null = null;
+	private flyControlsEnabled: boolean = false;
 
 	// Auto-orbit properties
 	private autoOrbitEnabled: boolean = false;
@@ -229,14 +234,6 @@ export class CameraManager extends EventEmitter {
 		this.controls.forEach((control, key) => {
 			control.enabled = key === this.activeControlKey;
 		});
-
-		// Set initial orbit controls for keyboard controls if using orbit control type
-		if (initialPreset.controlType === "orbit" && this.schematicRenderer.keyboardControls) {
-			const initialControls = this.controls.get(this.activeControlKey);
-			if (initialControls) {
-				this.schematicRenderer.keyboardControls.setOrbitControls(initialControls as any);
-			}
-		}
 
 		this.cameraPathManager = new CameraPathManager(this.schematicRenderer, {
 			showVisualization: options.showCameraPathVisualization || false,
@@ -474,16 +471,6 @@ export class CameraManager extends EventEmitter {
 			// Only call update on orbit controls
 			if (preset.controlType === "orbit" && activeControl.update) {
 				activeControl.update();
-
-				// Update keyboard controls with new orbit controls reference
-				if (this.schematicRenderer.keyboardControls) {
-					this.schematicRenderer.keyboardControls.setOrbitControls(activeControl as any);
-				}
-			} else {
-				// Clear orbit controls reference for non-orbit modes
-				if (this.schematicRenderer.keyboardControls) {
-					this.schematicRenderer.keyboardControls.setOrbitControls(null);
-				}
 			}
 		}
 
@@ -584,6 +571,12 @@ export class CameraManager extends EventEmitter {
 	}
 
 	public update(deltaTime: number = 0) {
+		// Update fly controls if active
+		if (this.flyControlsEnabled && this.flyControls) {
+			this.flyControls.update(deltaTime);
+			return; // Skip other controls when fly mode is active
+		}
+
 		const controls = this.controls.get(this.activeControlKey);
 		if (!controls) return;
 
@@ -594,6 +587,164 @@ export class CameraManager extends EventEmitter {
 			}
 		} else if (controls.update) {
 			controls.update(deltaTime);
+		}
+	}
+
+	// ===== FLY CONTROLS API =====
+
+	/**
+	 * Initialize fly controls for first-person navigation
+	 * @param options Optional fly controls configuration
+	 */
+	public initializeFlyControls(options?: FlyControlsOptions): FlyControls {
+		// Dispose existing fly controls if present
+		if (this.flyControls) {
+			this.flyControls.dispose();
+		}
+
+		// Create fly controls for the active camera
+		this.flyControls = new FlyControls(this.activeCamera.camera, this.rendererDomElement, options);
+
+		// Listen for lock/unlock events
+		this.flyControls.on("lock", () => {
+			// Hide any FPV overlay when entering fly mode
+			this.schematicRenderer.uiManager?.hideFPVOverlay();
+			this.emit("flyControlsLocked");
+		});
+
+		this.flyControls.on("unlock", () => {
+			// Keep FPV overlay hidden while fly controls are enabled
+			// This prevents the old Creative Mode overlay from appearing
+			if (this.flyControlsEnabled) {
+				this.schematicRenderer.uiManager?.hideFPVOverlay();
+			}
+			this.emit("flyControlsUnlocked");
+		});
+
+		this.flyControls.on("change", () => {
+			this.emit("cameraMove", {
+				position: (this.activeCamera.position as THREE.Vector3).clone(),
+				rotation: (this.activeCamera.rotation as THREE.Euler).clone(),
+			});
+		});
+
+		return this.flyControls;
+	}
+
+	/**
+	 * Enable fly controls mode (disables orbit controls)
+	 */
+	public enableFlyControls(): void {
+		if (!this.flyControls) {
+			this.initializeFlyControls();
+		}
+
+		// Disable all other controls
+		this.controls.forEach((control) => {
+			control.enabled = false;
+		});
+
+		// Enable fly controls
+		this.flyControlsEnabled = true;
+		if (this.flyControls) {
+			this.flyControls.enabled = true;
+			// Show the fly controls overlay (click to enter message)
+			this.flyControls.setOverlayVisible(true);
+		}
+
+		// Hide any existing FPV overlay from creative controls
+		this.schematicRenderer.uiManager?.hideFPVOverlay();
+
+		this.emit("controlModeChanged", { mode: "fly" });
+	}
+
+	/**
+	 * Disable fly controls mode (re-enables orbit controls)
+	 */
+	public disableFlyControls(): void {
+		// Unlock fly controls if locked
+		if (this.flyControls?.isLocked) {
+			this.flyControls.unlock();
+		}
+
+		// Disable fly controls and hide overlay
+		this.flyControlsEnabled = false;
+		if (this.flyControls) {
+			this.flyControls.enabled = false;
+			this.flyControls.setOverlayVisible(false);
+		}
+
+		// Re-enable the appropriate orbit controls
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls) {
+			controls.enabled = true;
+		}
+
+		this.emit("controlModeChanged", { mode: "orbit" });
+	}
+
+	/**
+	 * Toggle fly controls mode
+	 * @returns true if fly mode is now active, false if orbit mode
+	 */
+	public toggleFlyControls(): boolean {
+		if (this.flyControlsEnabled) {
+			this.disableFlyControls();
+			return false;
+		} else {
+			this.enableFlyControls();
+			return true;
+		}
+	}
+
+	/**
+	 * Check if fly controls are currently active
+	 */
+	public isFlyControlsEnabled(): boolean {
+		return this.flyControlsEnabled;
+	}
+
+	/**
+	 * Check if fly controls are locked (pointer locked)
+	 */
+	public isFlyControlsLocked(): boolean {
+		return this.flyControls?.isLocked ?? false;
+	}
+
+	/**
+	 * Get fly controls settings
+	 */
+	public getFlyControlsSettings(): {
+		moveSpeed: number;
+		sprintMultiplier: number;
+		keybinds: any;
+	} | null {
+		if (!this.flyControls) return null;
+		return {
+			moveSpeed: this.flyControls.getMoveSpeed(),
+			sprintMultiplier: this.flyControls.getSprintMultiplier(),
+			keybinds: this.flyControls.getKeybinds(),
+		};
+	}
+
+	/**
+	 * Update fly controls settings
+	 */
+	public setFlyControlsSettings(settings: {
+		moveSpeed?: number;
+		sprintMultiplier?: number;
+		keybinds?: any;
+	}): void {
+		if (!this.flyControls) return;
+
+		if (settings.moveSpeed !== undefined) {
+			this.flyControls.setMoveSpeed(settings.moveSpeed);
+		}
+		if (settings.sprintMultiplier !== undefined) {
+			this.flyControls.setSprintMultiplier(settings.sprintMultiplier);
+		}
+		if (settings.keybinds !== undefined) {
+			this.flyControls.setKeybinds(settings.keybinds);
 		}
 	}
 
@@ -1857,6 +2008,12 @@ export class CameraManager extends EventEmitter {
 		this.recordingManager.dispose();
 		this.stopAnimation();
 		this.stopAutoOrbit();
+
+		// Dispose fly controls
+		if (this.flyControls) {
+			this.flyControls.dispose();
+			this.flyControls = null;
+		}
 
 		// Dispose of all controls
 		this.controls.forEach((control) => {

@@ -1,26 +1,29 @@
 // managers/KeyboardControls.ts
 import * as THREE from "three";
 import { KeyboardControlsOptions } from "../SchematicRendererOptions";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+/**
+ * Keybind configuration for keyboard controls
+ */
+export interface KeybindConfig {
+	forward: string;
+	backward: string;
+	left: string;
+	right: string;
+	up: string;
+	down: string;
+	sprint: string;
+}
 
 export class KeyboardControls {
 	private enabled: boolean;
 	private flySpeed: number;
 	private sprintMultiplier: number;
-	private keybinds: {
-		forward: string;
-		backward: string;
-		left: string;
-		right: string;
-		up: string;
-		down: string;
-		sprint: string;
-	};
+	private keybinds: KeybindConfig;
 
 	private pressedKeys = new Set<string>();
 	private isRightMouseDown = false;
 	private camera: THREE.Camera;
-	private orbitControls: OrbitControls | null = null;
 	private canvas: HTMLCanvasElement;
 
 	// Movement vectors
@@ -34,7 +37,7 @@ export class KeyboardControls {
 	) {
 		this.camera = camera;
 		this.canvas = canvas;
-		this.enabled = options.enabled ?? true;
+		this.enabled = options.enabled ?? false;
 		this.flySpeed = options.flySpeed ?? 5.0;
 		this.sprintMultiplier = options.sprintMultiplier ?? 2.5;
 		this.keybinds = {
@@ -43,18 +46,11 @@ export class KeyboardControls {
 			left: options.keybinds?.left ?? "a",
 			right: options.keybinds?.right ?? "d",
 			up: options.keybinds?.up ?? " ",
-			down: options.keybinds?.down ?? "Shift",
+			down: options.keybinds?.down ?? "c", // Changed from Shift to avoid conflict with sprint
 			sprint: options.keybinds?.sprint ?? "Shift",
 		};
 
 		this.bindEvents();
-	}
-
-	/**
-	 * Set the orbit controls reference to enable/disable them during keyboard movement
-	 */
-	public setOrbitControls(controls: OrbitControls | null): void {
-		this.orbitControls = controls;
 	}
 
 	/**
@@ -76,6 +72,43 @@ export class KeyboardControls {
 	 */
 	public setSprintMultiplier(multiplier: number): void {
 		this.sprintMultiplier = multiplier;
+	}
+
+	/**
+	 * Get current sprint multiplier
+	 */
+	public getSprintMultiplier(): number {
+		return this.sprintMultiplier;
+	}
+
+	/**
+	 * Get current keybind configuration
+	 */
+	public getKeybinds(): KeybindConfig {
+		return { ...this.keybinds };
+	}
+
+	/**
+	 * Update keybinds at runtime
+	 * @param newKeybinds Partial keybind configuration to merge
+	 */
+	public setKeybinds(newKeybinds: Partial<KeybindConfig>): void {
+		this.keybinds = { ...this.keybinds, ...newKeybinds };
+	}
+
+	/**
+	 * Reset keybinds to defaults
+	 */
+	public resetKeybinds(): void {
+		this.keybinds = {
+			forward: "w",
+			backward: "s",
+			left: "a",
+			right: "d",
+			up: " ",
+			down: "c",
+			sprint: "Shift",
+		};
 	}
 
 	/**
@@ -223,12 +256,6 @@ export class KeyboardControls {
 
 		// Update camera position
 		this.camera.position.add(movement);
-
-		// Update orbit controls target if available
-		if (this.orbitControls) {
-			this.orbitControls.target.add(movement);
-			this.orbitControls.update();
-		}
 	}
 
 	/**

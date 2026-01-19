@@ -11,11 +11,13 @@ A powerful, high-performance 3D rendering library for Minecraft schematics (.sch
 - **Zero-Copy Data Transfer**: Utilizes SharedArrayBuffer (when available) for instant data passing between threads.
 - **Resource Pack Support**: Load standard Minecraft resource packs (.zip) with automatic texture atlas generation.
 - **Interactive Controls**: Orbit, fly, and creative camera modes with smooth transitions.
+- **First-Person Fly Mode**: WASD + mouse navigation with pointer lock for immersive exploration.
 - **Enhanced Isometric Mode**: True isometric projection with smart framing, customizable angles, and optimized SSAO.
 - **Schematic Slicing**: Real-time rendering bounds for inspecting schematic interiors.
 - **Simulation**: Optional redstone/mechanism simulation support (powered by Nucleation).
 - **Advanced Rendering**: Adaptive SSAO (automatically adjusts for camera mode), SMAA, and Gamma Correction.
-- **Customizable UI**: Built-in progress bars and debug tools.
+- **Unified Sidebar UI**: Tabbed settings panel with fully configurable keyboard shortcuts (modifier keys by default).
+- **Customizable Keyboard Shortcuts**: All shortcuts require modifier keys and can be configured, rebound, or disabled.
 
 ## Installation
 
@@ -379,6 +381,157 @@ canvas.schematicRenderer.setIsometricAngles(40, 60);
 ```
 
 **Improved Framing:** The isometric camera now calculates the projected bounding box based on the viewing angle, ensuring optimal framing regardless of object orientation. This prevents excessive whitespace and provides tighter, more professional-looking views.
+
+### Fly Controls (First-Person Navigation)
+
+The renderer includes first-person fly controls for immersive navigation:
+
+```javascript
+// Enable fly mode
+renderer.cameraManager.enableFlyControls();
+
+// Disable fly mode (returns to orbit controls)
+renderer.cameraManager.disableFlyControls();
+
+// Toggle fly mode
+renderer.cameraManager.toggleFlyControls();
+
+// Check if fly mode is active
+const isFlying = renderer.cameraManager.isFlyControlsEnabled();
+
+// Customize fly controls settings
+renderer.cameraManager.setFlyControlsSettings({
+	moveSpeed: 15, // Units per second
+	sprintMultiplier: 3.0, // Speed multiplier when holding Shift
+	keybinds: {
+		forward: "KeyW",
+		backward: "KeyS",
+		left: "KeyA",
+		right: "KeyD",
+		up: "Space",
+		down: "KeyC",
+		sprint: "ShiftLeft",
+	},
+});
+```
+
+**Fly Mode Controls:**
+
+- **Click canvas** - Enter fly mode (locks pointer)
+- **WASD** - Move forward/backward/left/right
+- **Space** - Ascend
+- **C** - Descend
+- **Shift** - Sprint (move faster)
+- **ESC** - Exit fly mode
+
+### Sidebar UI
+
+The renderer includes a unified sidebar UI with tabbed panels for all settings. The sidebar is hidden by default and can be toggled with keyboard shortcuts.
+
+#### Sidebar Configuration
+
+```javascript
+const renderer = new SchematicRenderer.SchematicRenderer(
+	canvas,
+	{},
+	{},
+	{
+		sidebarOptions: {
+			enabled: true, // Enable sidebar (default: true)
+			position: "right", // "left" or "right" (default: "right")
+			width: 320, // Panel width in pixels
+			hiddenByDefault: true, // Start with sidebar hidden (default: true)
+			collapsedByDefault: true, // Start collapsed (default: true)
+			defaultTab: "controls", // Initial tab when opened
+			enableKeyboardShortcuts: true, // Enable shortcuts (default: true)
+
+			// Disable specific tabs
+			disabledTabs: ["performance", "export"],
+
+			// Custom keyboard shortcuts (override defaults)
+			shortcuts: {
+				toggleSidebarVisibility: { key: "KeyM", ctrl: true, shift: true },
+				showControls: { key: "Digit1", ctrl: true, shift: true },
+			},
+
+			// Per-tab configuration
+			tabs: {
+				controls: {
+					label: "Camera",
+					shortcut: { key: "KeyK", ctrl: true },
+					onActivate: () => console.log("Controls tab opened"),
+					onDeactivate: () => console.log("Controls tab closed"),
+				},
+			},
+
+			// Callbacks
+			onVisibilityChange: (visible) => console.log("Sidebar visible:", visible),
+			onTabChange: (tabId) => console.log("Active tab:", tabId),
+		},
+	}
+);
+```
+
+#### Default Keyboard Shortcuts
+
+All keyboard shortcuts use modifier keys to prevent conflicts with normal typing:
+
+| Action              | Shortcut         | Description                   |
+| ------------------- | ---------------- | ----------------------------- |
+| Toggle Sidebar      | `Ctrl+U`         | Expand/collapse sidebar       |
+| Toggle Visibility   | `Ctrl+\`         | Show/hide entire sidebar      |
+| Controls Tab        | `Ctrl+Shift+1`   | Camera & fly mode settings    |
+| Render Settings Tab | `Ctrl+Shift+2`   | Rendering options             |
+| Capture Tab         | `Ctrl+Shift+3`   | Screenshot capture            |
+| Export Tab          | `Ctrl+Shift+4`   | Model export (OBJ, STL, GLTF) |
+| Resource Packs Tab  | `Ctrl+Shift+5`   | Resource pack management      |
+| Performance Tab     | `Ctrl+Shift+6`   | FPS and performance stats     |
+| Close Sidebar       | `Escape`         | Collapse sidebar              |
+| Next Tab            | `Ctrl+Tab`       | Cycle to next tab             |
+| Previous Tab        | `Ctrl+Shift+Tab` | Cycle to previous tab         |
+
+> **Note:** On macOS, use `Cmd` instead of `Ctrl`.
+
+#### Runtime Sidebar Control
+
+```javascript
+// Show/hide sidebar
+renderer.sidebar.showSidebar();
+renderer.sidebar.hideSidebar();
+renderer.sidebar.toggleVisibility();
+
+// Expand/collapse (keeps tab bar visible)
+renderer.sidebar.show("controls"); // Show and switch to tab
+renderer.sidebar.hide();
+renderer.sidebar.toggle();
+
+// Tab management
+renderer.sidebar.showTab("capture");
+renderer.sidebar.enableTab("performance");
+renderer.sidebar.disableTab("export");
+
+// Configure tabs at runtime
+renderer.sidebar.configureTab("controls", {
+	shortcut: { key: "KeyC", ctrl: true, shift: true },
+	onActivate: () => {
+		/* custom logic */
+	},
+});
+
+// Keyboard shortcut control
+renderer.sidebar.enableShortcuts();
+renderer.sidebar.disableShortcuts();
+renderer.sidebar.setShortcut("toggleSidebar", { key: "KeyU", ctrl: true });
+renderer.sidebar.setShortcut("showCapture", null); // Disable shortcut
+
+// Get current state
+const state = renderer.sidebar.getState();
+// { visible: true, activeTab: "controls", enabledTabs: [...] }
+
+// Access individual panels
+renderer.sidebar.panels.controls.setFlyModeEnabled(true);
+renderer.sidebar.panels.capture.takeScreenshot();
+```
 
 #### SSAO and Isometric Mode
 

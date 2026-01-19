@@ -7,6 +7,18 @@ import { CameraManagerOptions } from "./managers/CameraManager";
 import { SelectableObject } from "./managers/SelectableObject";
 import { SchematicRenderer } from "./SchematicRenderer";
 import { ResourcePackOptions } from "./types/resourcePack";
+import { SidebarOptions, DEFAULT_SIDEBAR_OPTIONS } from "./ui/sidebar/types";
+
+// Re-export sidebar types for consumers
+export type {
+	SidebarOptions,
+	SidebarTabId,
+	SidebarAction,
+	KeyboardShortcut,
+	KeyboardShortcutMap,
+	SidebarPosition,
+	SidebarTabConfig,
+} from "./ui/sidebar/types";
 
 export interface ProgressBarOptions {
 	showLabel?: boolean;
@@ -274,6 +286,12 @@ export interface SchematicRendererOptions {
 	definitionRegionOptions?: DefinitionRegionOptions;
 	// Resource pack management options
 	resourcePackOptions?: ResourcePackOptions;
+	/**
+	 * Unified sidebar UI configuration.
+	 * Consolidates all UI panels (Controls, Render Settings, Capture, Export,
+	 * Resource Packs, Performance) into a single tabbed sidebar.
+	 */
+	sidebarOptions?: SidebarOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here
@@ -331,7 +349,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		autoSync: true,
 	},
 	keyboardControlsOptions: {
-		enabled: true,
+		enabled: false, // Disabled by default - orbit controls are active instead
 		flySpeed: 5.0, // 5 units per second
 		sprintMultiplier: 2.5, // 2.5x speed when sprinting
 		keybinds: {
@@ -340,7 +358,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 			left: "a",
 			right: "d",
 			up: " ", // Space
-			down: "Shift", // Shift
+			down: "c", // C for crouch/descend (changed from Shift to avoid conflict with sprint)
 			sprint: "Shift", // Shift for sprint
 		},
 	},
@@ -374,15 +392,10 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		showLabels: true,
 	},
 	resourcePackOptions: {
-		enableUI: true, // Enable resource pack management UI
-		uiPosition: "top-right", // UI position
 		autoRebuild: true, // Auto-rebuild atlas when packs change
-		showIcons: true, // Show pack icons in UI
-		enableDragReorder: true, // Enable drag-and-drop reordering
-		enableKeyboardShortcuts: true, // Enable keyboard shortcuts
-		toggleUIShortcut: "KeyP", // Press P to toggle UI
 		maxPacks: 0, // 0 = unlimited
 	},
+	sidebarOptions: DEFAULT_SIDEBAR_OPTIONS,
 	resourcePackBlobs: [],
 };
 
@@ -434,4 +447,5 @@ export interface Callbacks {
 	onRenderSettingsChanged?: (settings: any) => void;
 	onScreenshotTaken?: (blob: Blob, filename: string) => void;
 	onRecordingComplete?: (blob: Blob, filename: string) => void;
+	onControlsChanged?: (settings: any) => void;
 }
