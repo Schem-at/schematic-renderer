@@ -585,6 +585,41 @@ export class SchematicManager {
 		return [min, max];
 	}
 
+	/**
+	 * Arrange all loaded schematics in a grid layout.
+	 * Uses uniform cell sizes based on the largest schematic dimensions.
+	 * Centers the grid around the origin.
+	 */
+	public arrangeInGrid(options?: { spacing?: number; columns?: number }): void {
+		const schematics = this.getAllSchematics();
+		const count = schematics.length;
+		if (count <= 1) return;
+
+		const spacing = options?.spacing ?? 2;
+		const cols = options?.columns ?? Math.ceil(Math.sqrt(count));
+		const rows = Math.ceil(count / cols);
+		const maxDims = this.getMaxSchematicTightDimensions();
+
+		const cellWidth = maxDims.x + spacing;
+		const cellDepth = maxDims.z + spacing;
+		const totalWidth = cols * cellWidth;
+		const totalDepth = rows * cellDepth;
+
+		schematics.forEach((schematic, i) => {
+			const col = i % cols;
+			const row = Math.floor(i / cols);
+			const tightDims = schematic.getTightDimensions();
+			const dims = tightDims[0] > 0 ? tightDims : schematic.getDimensions();
+
+			const x = col * cellWidth - totalWidth / 2 + cellWidth / 2 - dims[0] / 2 + 0.5;
+			const z = row * cellDepth - totalDepth / 2 + cellDepth / 2 - dims[2] / 2 + 0.5;
+
+			schematic.setPosition([x, 0.5, z]);
+		});
+
+		this.eventEmitter.emit("schematicAdded", { schematic: schematics[0] });
+	}
+
 	public getSelectableObjects(): THREE.Object3D[] {
 		return Array.from(this.schematics.values()).map((schematic) => schematic.group);
 	}

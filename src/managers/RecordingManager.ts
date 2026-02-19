@@ -36,6 +36,12 @@ interface FrameBuffer {
 	index: number;
 }
 
+// Raw frame data for deferred encoding
+interface RawFrame {
+	imageData: ImageData;
+	index: number;
+}
+
 export class RecordingManager {
 	public isRecording: boolean = false;
 	private schematicRenderer: SchematicRenderer;
@@ -56,6 +62,10 @@ export class RecordingManager {
 	private useJpegFrames: boolean = true;
 	private jpegQuality: number = 0.92;
 
+	// Raw frame storage for fast capture mode
+	private rawFrames: RawFrame[] = [];
+	private useFastCapture: boolean = true;
+
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
 		this.recordingCanvas = document.createElement("canvas");
@@ -74,6 +84,58 @@ export class RecordingManager {
 		}
 
 		this.ffmpeg = this.schematicRenderer.options.ffmpeg;
+	}
+
+	/**
+	 * Fast synchronous frame capture - stores raw ImageData for later encoding
+	 * This is much faster than toBlob() during real-time capture
+	 */
+	private captureFrameSync(): ImageData | null {
+		if (!this.ctx2d) return null;
+		const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
+		if (!mainCanvas) return null;
+
+		// Draw to recording canvas
+		this.ctx2d.drawImage(mainCanvas, 0, 0);
+
+		// Get raw pixel data (synchronous and fast)
+		return this.ctx2d.getImageData(0, 0, this.recordingCanvas.width, this.recordingCanvas.height);
+	}
+
+	/**
+	 * Convert ImageData to JPEG/PNG blob asynchronously
+	 */
+	private async imageDataToBlob(imageData: ImageData, quality: number = 0.92): Promise<Uint8Array> {
+		// Create a temporary canvas for encoding
+		const tempCanvas = document.createElement("canvas");
+		tempCanvas.width = imageData.width;
+		tempCanvas.height = imageData.height;
+		const tempCtx = tempCanvas.getContext("2d", { alpha: false });
+		if (!tempCtx) throw new Error("Failed to create temp context");
+
+		tempCtx.putImageData(imageData, 0, 0);
+
+		const mimeType = this.useJpegFrames ? "image/jpeg" : "image/png";
+		const frameQuality = this.useJpegFrames ? quality : 1.0;
+
+		return new Promise<Uint8Array>((resolve, reject) => {
+			tempCanvas.toBlob(
+				(blob) => {
+					if (!blob) {
+						reject(new Error("Failed to create blob from canvas"));
+						return;
+					}
+					blob
+						.arrayBuffer()
+						.then((buffer) => {
+							resolve(new Uint8Array(buffer));
+						})
+						.catch(reject);
+				},
+				mimeType,
+				frameQuality
+			);
+		});
 	}
 
 	/**
@@ -280,7 +342,7 @@ export class RecordingManager {
 			frameRate = 60,
 			useJpegFrames = true, // JPEG is 3-5x faster to encode
 			jpegQuality = 0.92,
-			batchSize = 10, // Write frames in batches
+			batchSize = 30, // Larger batches for better throughput
 			encodingPreset = "veryfast", // Good balance of speed and quality
 			crf = 20, // Good quality (lower = better, 18-28 typical)
 			onStart,
@@ -294,6 +356,8 @@ export class RecordingManager {
 		this.jpegQuality = jpegQuality;
 		this.frameBuffer = [];
 		this.pendingWrites = [];
+		this.rawFrames = [];
+		this.useFastCapture = true; // Use fast synchronous capture
 
 		try {
 			console.log("Setting up recording...");
@@ -301,6 +365,7 @@ export class RecordingManager {
 			console.log(`  Frame rate: ${frameRate} FPS`);
 			console.log(`  Frame format: ${useJpegFrames ? "JPEG" : "PNG"}`);
 			console.log(`  Encoding preset: ${encodingPreset}`);
+			console.log(`  Fast capture mode: ${this.useFastCapture ? "enabled" : "disabled"}`);
 
 			await this.setupRecording(width, height);
 			console.log("Recording setup complete");
@@ -322,20 +387,29 @@ export class RecordingManager {
 				onUpdate: async () => {
 					if (!this.isRecording) return;
 
-					// Capture frame
-					const frame = await this.captureFrame(jpegQuality);
+					if (this.useFastCapture) {
+						// Fast path: synchronous capture, store raw ImageData
+						const imageData = this.captureFrameSync();
+						if (imageData) {
+							this.rawFrames.push({
+								imageData,
+								index: this.frameCount,
+							});
+						}
+						this.frameCount++;
+					} else {
+						// Legacy path: async capture with immediate encoding
+						const frame = await this.captureFrame(jpegQuality);
+						this.frameBuffer.push({
+							data: frame,
+							index: this.frameCount,
+						});
+						this.frameCount++;
 
-					// Add to buffer
-					this.frameBuffer.push({
-						data: frame,
-						index: this.frameCount,
-					});
-					this.frameCount++;
-
-					// Flush buffer when it reaches batch size
-					if (this.frameBuffer.length >= batchSize) {
-						const writePromise = this.flushFrameBuffer();
-						this.pendingWrites.push(writePromise);
+						if (this.frameBuffer.length >= batchSize) {
+							const writePromise = this.flushFrameBuffer();
+							this.pendingWrites.push(writePromise);
+						}
 					}
 
 					if (onProgress) onProgress(this.frameCount / totalFrames);
@@ -345,16 +419,59 @@ export class RecordingManager {
 
 					const captureTime = performance.now() - startTime;
 					console.log(`Frame capture complete in ${(captureTime / 1000).toFixed(1)}s`);
+					console.log(`Captured ${this.rawFrames.length || this.frameCount} frames`);
 
-					// Flush any remaining frames
-					await this.flushFrameBuffer();
+					if (this.useFastCapture && this.rawFrames.length > 0) {
+						// Encode raw frames to JPEG/PNG and write to FFmpeg
+						console.log("Encoding frames to image format...");
+						const encodeFramesStart = performance.now();
 
-					// Wait for all pending writes to complete
-					await Promise.all(this.pendingWrites);
-					this.pendingWrites = [];
+						const totalRawFrames = this.rawFrames.length;
+						let encodedCount = 0;
 
-					console.log("Encoding video...");
-					const encodeStart = performance.now();
+						// Process frames in batches for better memory management
+						for (let i = 0; i < this.rawFrames.length; i += batchSize) {
+							const batch = this.rawFrames.slice(i, Math.min(i + batchSize, this.rawFrames.length));
+
+							// Encode batch in parallel
+							const encodedBatch = await Promise.all(
+								batch.map(async (rawFrame) => {
+									const data = await this.imageDataToBlob(rawFrame.imageData, jpegQuality);
+									return { data, index: rawFrame.index };
+								})
+							);
+
+							// Write batch to FFmpeg
+							await Promise.all(
+								encodedBatch.map(async (frame) => {
+									const filename = `frame${frame.index.toString().padStart(6, "0")}.${ext}`;
+									await this.ffmpeg!.writeFile(filename, frame.data);
+								})
+							);
+
+							encodedCount += batch.length;
+
+							// Report progress during frame encoding phase
+							if (onFfmpegProgress) {
+								const encodeProgress = (encodedCount / totalRawFrames) * 50; // 0-50% for encoding
+								onFfmpegProgress(encodeProgress, performance.now() - encodeFramesStart);
+							}
+						}
+
+						// Clear raw frames to free memory
+						this.rawFrames = [];
+
+						const encodeFramesTime = performance.now() - encodeFramesStart;
+						console.log(`Frame encoding complete in ${(encodeFramesTime / 1000).toFixed(1)}s`);
+					} else {
+						// Legacy path: flush remaining buffer
+						await this.flushFrameBuffer();
+						await Promise.all(this.pendingWrites);
+						this.pendingWrites = [];
+					}
+
+					console.log("Encoding video with FFmpeg...");
+					const ffmpegStart = performance.now();
 
 					try {
 						if (!this.ffmpeg) {
@@ -362,13 +479,11 @@ export class RecordingManager {
 							return;
 						}
 
-						// Set up progress tracking with time-based estimation
-						// FFmpeg WASM progress is unreliable, so we estimate based on elapsed time
-						const estimatedEncodingTimeMs = this.frameCount * 15; // ~15ms per frame estimate
+						// Set up progress tracking
 						let progressInterval: ReturnType<typeof setInterval> | null = null;
+						const estimatedFfmpegTimeMs = this.frameCount * 10; // ~10ms per frame for FFmpeg
 
 						if (onFfmpegProgress) {
-							// Also try the native progress callback
 							const progressCallback = ({
 								progress = 0,
 								time = 0,
@@ -376,22 +491,18 @@ export class RecordingManager {
 								progress?: number;
 								time?: number;
 							}) => {
-								// FFmpeg WASM uses 'progress' not 'ratio' in newer versions
-								const progressPercent = progress * 100;
-								if (progressPercent > 0) {
+								const progressPercent = 50 + progress * 50; // 50-100% for FFmpeg
+								if (progressPercent > 50) {
 									onFfmpegProgress(progressPercent, time);
 								}
 							};
-							// @ts-ignore - FFmpeg types might not be up to date
+							// @ts-ignore
 							this.ffmpeg.on("progress", progressCallback);
 
-							// Also set up time-based progress estimation as fallback
-							let lastReportedProgress = 0;
+							let lastReportedProgress = 50;
 							progressInterval = setInterval(() => {
-								const elapsed = performance.now() - encodeStart;
-								// Estimate progress based on time (capped at 95% to leave room for finalization)
-								const estimatedProgress = Math.min(95, (elapsed / estimatedEncodingTimeMs) * 100);
-								// Only report if increasing and native callback hasn't taken over
+								const elapsed = performance.now() - ffmpegStart;
+								const estimatedProgress = 50 + Math.min(45, (elapsed / estimatedFfmpegTimeMs) * 50);
 								if (estimatedProgress > lastReportedProgress) {
 									lastReportedProgress = estimatedProgress;
 									onFfmpegProgress(estimatedProgress, elapsed);
@@ -414,30 +525,28 @@ export class RecordingManager {
 							"-preset",
 							encodingPreset,
 							"-threads",
-							"0", // Use all available threads
+							"0",
 							"-crf",
 							crf.toString(),
 							"-pix_fmt",
 							"yuv420p",
 							"-movflags",
-							"+faststart", // Enable fast start for web playback
+							"+faststart",
 							"output.mp4",
 						];
 
 						await this.ffmpeg.exec(ffmpegArgs);
 
-						// Clear progress interval
 						if (progressInterval) {
 							clearInterval(progressInterval);
 						}
 
-						// Report 100% completion
 						if (onFfmpegProgress) {
-							onFfmpegProgress(100, performance.now() - encodeStart);
+							onFfmpegProgress(100, performance.now() - ffmpegStart);
 						}
 
-						const encodeTime = performance.now() - encodeStart;
-						console.log(`Encoding complete in ${(encodeTime / 1000).toFixed(1)}s`);
+						const ffmpegTime = performance.now() - ffmpegStart;
+						console.log(`FFmpeg encoding complete in ${(ffmpegTime / 1000).toFixed(1)}s`);
 
 						// Get the video data
 						const data = await this.ffmpeg.readFile("output.mp4");
@@ -446,7 +555,6 @@ export class RecordingManager {
 						if (data instanceof Uint8Array) {
 							blobData = data as any;
 						} else if (typeof data === "string") {
-							// Convert base64 string to Uint8Array if needed
 							const binaryString = atob(data);
 							const bytes = new Uint8Array(binaryString.length);
 							for (let i = 0; i < binaryString.length; i++) {
@@ -460,10 +568,9 @@ export class RecordingManager {
 						const blob = new Blob([blobData], { type: "video/mp4" });
 						console.log(`Video size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
 
-						// Cleanup frames in background (don't wait)
+						// Cleanup frames in background
 						this.cleanupFramesAsync(this.frameCount, ext);
 
-						// Delete output file
 						try {
 							await this.ffmpeg.deleteFile("output.mp4");
 						} catch (e) {

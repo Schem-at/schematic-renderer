@@ -422,6 +422,7 @@ export class SchematicRenderer {
 					"litematic",
 					"mcstructure",
 				],
+				gridLayout: this.options.dragAndDropOptions?.gridLayout,
 				callbacks: {
 					// Schematic callbacks
 					onSchematicLoaded: this.options.callbacks?.onSchematicLoaded,

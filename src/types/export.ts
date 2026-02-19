@@ -5,7 +5,7 @@ import * as THREE from "three";
 /**
  * Supported export formats
  */
-export type ExportFormat = "gltf" | "glb" | "obj" | "stl";
+export type ExportFormat = "gltf" | "glb" | "obj" | "stl" | "usdz";
 
 /**
  * Export quality presets

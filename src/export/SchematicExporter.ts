@@ -120,6 +120,9 @@ export class SchematicExporter {
 				case "stl":
 					result = await this.exportSTL(exportGroup, resolvedOptions, filename, startTime);
 					break;
+				case "usdz":
+					result = await this.exportUSDZ(exportGroup, resolvedOptions, filename, startTime);
+					break;
 				default:
 					throw this.createError("INVALID_FORMAT", `Unknown format: ${resolvedOptions.format}`);
 			}
@@ -702,6 +705,214 @@ export class SchematicExporter {
 	}
 
 	/**
+	 * Export to USDZ format (Apple AR)
+	 */
+	private async exportUSDZ(
+		group: THREE.Group,
+		_options: Required<ExportOptions>,
+		filename: string,
+		startTime: number
+	): Promise<ExportResult> {
+		// Dynamic import for USDZ exporter
+		const { USDZExporter } = await import("three/examples/jsm/exporters/USDZExporter.js");
+		const exporter = new USDZExporter();
+
+		// USDZ only supports MeshStandardMaterial - convert all materials
+		this.convertToStandardMaterials(group);
+
+		const result = await exporter.parseAsync(group);
+		const blob = new Blob([result], { type: "application/octet-stream" });
+
+		const actualFilename = filename.endsWith(".usdz")
+			? filename
+			: filename.replace(/\.[^/.]+$/, "") + ".usdz";
+
+		const duration = performance.now() - startTime;
+
+		return {
+			success: true,
+			filename: actualFilename,
+			format: "usdz",
+			size: blob.size,
+			duration,
+			data: blob,
+			downloadUrl: URL.createObjectURL(blob),
+		};
+	}
+
+	/**
+	 * Convert all materials to MeshStandardMaterial (required for USDZ export)
+	 * Also splits multi-material meshes into separate meshes for USDZ compatibility
+	 */
+	private convertToStandardMaterials(group: THREE.Group): void {
+		const meshesToProcess: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = [];
+
+		// First pass: collect meshes that need processing
+		group.traverse((child) => {
+			if (child instanceof THREE.Mesh && child.material && child.parent) {
+				meshesToProcess.push({ mesh: child, parent: child.parent });
+			}
+		});
+
+		const convertMaterial = (mat: THREE.Material): THREE.MeshStandardMaterial => {
+			// If already MeshStandardMaterial, clone it to avoid modifying original
+			if (mat instanceof THREE.MeshStandardMaterial) {
+				const cloned = mat.clone();
+				this.fixTextureFiltering(cloned);
+				this.fixTransparencyForUSDZ(cloned);
+				return cloned;
+			}
+
+			// Create a new MeshStandardMaterial with properties from the original
+			const standardMat = new THREE.MeshStandardMaterial();
+			standardMat.name = mat.name;
+			standardMat.side = mat.side;
+
+			// Copy color and map from common material types
+			if ("color" in mat && mat.color instanceof THREE.Color) {
+				standardMat.color.copy(mat.color);
+			}
+			if ("map" in mat && mat.map) {
+				// Upscale texture for USDZ (preserves pixel art look even with bilinear filtering)
+				const upscaledTexture = this.upscaleTextureForUSDZ(mat.map as THREE.Texture);
+				standardMat.map = upscaledTexture;
+			}
+
+			// Handle transparency - USDZ works better with alphaTest than transparency
+			if (mat.transparent && mat.opacity < 1) {
+				// For semi-transparent materials, use alpha test instead
+				standardMat.transparent = false;
+				standardMat.opacity = 1.0;
+				standardMat.alphaTest = 0.5;
+			} else {
+				standardMat.transparent = false;
+				standardMat.opacity = 1.0;
+				standardMat.alphaTest = mat.alphaTest > 0 ? mat.alphaTest : 0.5;
+			}
+
+			// Set reasonable defaults for PBR
+			standardMat.roughness = 1.0;
+			standardMat.metalness = 0.0;
+
+			return standardMat;
+		};
+
+		// Second pass: process each mesh
+		for (const { mesh, parent } of meshesToProcess) {
+			if (Array.isArray(mesh.material)) {
+				// Multi-material mesh - split into separate meshes for USDZ compatibility
+				const geometry = mesh.geometry;
+				const groups = geometry.groups;
+
+				if (groups.length > 0) {
+					// Create a separate mesh for each material group
+					for (let i = 0; i < groups.length; i++) {
+						const group = groups[i];
+						const materialIndex = group.materialIndex ?? i;
+						const originalMat = mesh.material[materialIndex];
+
+						if (!originalMat) continue;
+
+						// Create new geometry with only this group's faces
+						const newGeometry = new THREE.BufferGeometry();
+
+						// Copy attributes
+						for (const name of Object.keys(geometry.attributes)) {
+							newGeometry.setAttribute(name, geometry.getAttribute(name));
+						}
+
+						// Set draw range to only this group
+						if (geometry.index) {
+							// For indexed geometry, create a new index buffer for just this group
+							const indices = geometry.index.array;
+							const newIndices = indices.slice(group.start, group.start + group.count);
+							newGeometry.setIndex(new THREE.BufferAttribute(newIndices, 1));
+						} else {
+							newGeometry.setDrawRange(group.start, group.count);
+						}
+
+						const newMesh = new THREE.Mesh(newGeometry, convertMaterial(originalMat));
+						newMesh.name = `${mesh.name}_part${i}`;
+						newMesh.position.copy(mesh.position);
+						newMesh.rotation.copy(mesh.rotation);
+						newMesh.scale.copy(mesh.scale);
+						parent.add(newMesh);
+					}
+
+					// Remove original multi-material mesh
+					parent.remove(mesh);
+				} else {
+					// No groups defined, just use the first material
+					mesh.material = convertMaterial(mesh.material[0]);
+				}
+			} else {
+				// Single material - just convert it
+				mesh.material = convertMaterial(mesh.material);
+			}
+		}
+	}
+
+	/**
+	 * Fix texture filtering for pixel art (nearest neighbor)
+	 */
+	private fixTextureFiltering(material: THREE.MeshStandardMaterial): void {
+		if (material.map) {
+			// For USDZ, upscale the texture instead of just setting filter
+			material.map = this.upscaleTextureForUSDZ(material.map);
+		}
+	}
+
+	/**
+	 * Upscale texture using nearest-neighbor to preserve pixel art in USDZ
+	 * USDZ doesn't support nearest-neighbor filtering, so we upscale the texture
+	 * to make each pixel a larger block, preserving the crisp look
+	 */
+	private upscaleTextureForUSDZ(texture: THREE.Texture, scale: number = 8): THREE.Texture {
+		const image = texture.image;
+		if (!image) return texture;
+
+		// Create a canvas to upscale the texture
+		const canvas = document.createElement("canvas");
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return texture;
+
+		const srcWidth = image.width || image.naturalWidth || 256;
+		const srcHeight = image.height || image.naturalHeight || 256;
+
+		// Upscale dimensions
+		canvas.width = srcWidth * scale;
+		canvas.height = srcHeight * scale;
+
+		// Disable image smoothing for nearest-neighbor upscale
+		ctx.imageSmoothingEnabled = false;
+
+		// Draw the original image scaled up
+		ctx.drawImage(image, 0, 0, srcWidth, srcHeight, 0, 0, canvas.width, canvas.height);
+
+		// Create new texture from upscaled canvas
+		const newTexture = new THREE.CanvasTexture(canvas);
+		newTexture.wrapS = texture.wrapS;
+		newTexture.wrapT = texture.wrapT;
+		newTexture.flipY = texture.flipY;
+		newTexture.colorSpace = texture.colorSpace;
+		newTexture.needsUpdate = true;
+
+		return newTexture;
+	}
+
+	/**
+	 * Fix transparency settings for USDZ compatibility
+	 */
+	private fixTransparencyForUSDZ(material: THREE.MeshStandardMaterial): void {
+		// USDZ handles alpha test better than transparency
+		material.transparent = false;
+		material.opacity = 1.0;
+		if (material.alphaTest === 0) {
+			material.alphaTest = 0.5;
+		}
+	}
+
+	/**
 	 * Clean up cloned export group
 	 */
 	private disposeExportGroup(group: THREE.Group): void {
@@ -761,7 +972,7 @@ export class SchematicExporter {
 	 * Get available export formats
 	 */
 	public static getAvailableFormats(): ExportFormat[] {
-		return ["gltf", "glb", "obj", "stl"];
+		return ["gltf", "glb", "obj", "stl", "usdz"];
 	}
 
 	/**
@@ -773,6 +984,7 @@ export class SchematicExporter {
 			glb: "GL Transmission Format (Binary) - Compact single file",
 			obj: "Wavefront OBJ - Universal but no materials",
 			stl: "Stereolithography - 3D printing ready",
+			usdz: "Universal Scene Description (Apple AR) - iOS/macOS AR viewing",
 		};
 		return descriptions[format];
 	}

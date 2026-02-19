@@ -15,6 +15,8 @@ export interface UnifiedSidebarOptions {
 	collapsed: boolean;
 	/** Ordered list of tab configurations */
 	tabs: SidebarTabConfig[];
+	/** Background color of the sidebar */
+	backgroundColor?: string;
 	/** Callback when a tab is clicked */
 	onTabClick?: (tabId: SidebarTabId) => void;
 	/** Callback when collapse/expand button is clicked */
@@ -38,6 +40,7 @@ export class UnifiedSidebar {
 	private panels: Map<SidebarTabId, BasePanel> = new Map();
 	private onTabClick?: (tabId: SidebarTabId) => void;
 	private onToggle?: () => void;
+	private backgroundColor: string;
 
 	// Tab bar width (vertical icons)
 	private readonly TAB_BAR_WIDTH = 48;
@@ -49,6 +52,7 @@ export class UnifiedSidebar {
 		this.width = options.width;
 		this.collapsed = options.collapsed;
 		this.tabs = options.tabs;
+		this.backgroundColor = options.backgroundColor || UIColors.panelBackground;
 		this.onTabClick = options.onTabClick;
 		this.onToggle = options.onToggle;
 
@@ -92,7 +96,7 @@ export class UnifiedSidebar {
 			[this.position]: "0",
 			display: "flex",
 			flexDirection: this.position === "right" ? "row" : "row-reverse",
-			backgroundColor: UIColors.panelBackground,
+			backgroundColor: this.backgroundColor,
 			borderLeft: this.position === "right" ? `1px solid ${UIColors.border}` : "none",
 			borderRight: this.position === "left" ? `1px solid ${UIColors.border}` : "none",
 			boxShadow: UIColors.shadow,

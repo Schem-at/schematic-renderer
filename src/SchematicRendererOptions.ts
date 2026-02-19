@@ -332,6 +332,10 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	},
 	dragAndDropOptions: {
 		acceptedFileTypes: ["schematic", "nbt", "schem", "litematic", "mcstructure"],
+		gridLayout: {
+			enabled: false,
+			spacing: 2,
+		},
 	},
 	gizmoOptions: {
 		enableRotation: false,

@@ -14,6 +14,7 @@ import {
 import * as THREE from "three";
 
 export interface RenderSettings {
+	backgroundEnabled: boolean;
 	hdriEnabled: boolean;
 	backgroundColor: string;
 	cameraMode: "perspective" | "isometric" | "perspective_fpv";
@@ -34,6 +35,7 @@ export interface RenderSettings {
 }
 
 const DEFAULT_RENDER_SETTINGS: RenderSettings = {
+	backgroundEnabled: true,
 	hdriEnabled: true,
 	backgroundColor: "#87ceeb",
 	cameraMode: "perspective",
@@ -60,6 +62,7 @@ export class RenderSettingsPanel extends BasePanel {
 	private settings: RenderSettings = { ...DEFAULT_RENDER_SETTINGS };
 	private cameraModeSelect!: HTMLSelectElement;
 	private isometricControls!: HTMLDivElement;
+	private backgroundControls!: HTMLDivElement;
 
 	constructor(options: BasePanelOptions) {
 		super(options);
@@ -128,12 +131,29 @@ export class RenderSettingsPanel extends BasePanel {
 	private createBackgroundSection(): HTMLDivElement {
 		const section = this.createSection("Background");
 
+		// Background enabled toggle (for transparent background)
+		const backgroundToggle = createToggle(this.settings.backgroundEnabled, (enabled) => {
+			this.settings.backgroundEnabled = enabled;
+			this.applyBackgroundEnabled(enabled);
+			this.updateBackgroundControlsVisibility();
+			this.emitChange(this.settings);
+		});
+		section.appendChild(
+			createSettingRow("Background", backgroundToggle, {
+				tooltip: "Enable background rendering. Disable for transparent background.",
+			})
+		);
+
+		// Container for background options (hidden when background is disabled)
+		this.backgroundControls = document.createElement("div");
+		this.backgroundControls.id = "background-controls";
+
 		const hdriToggle = createToggle(this.settings.hdriEnabled, (enabled) => {
 			this.settings.hdriEnabled = enabled;
 			this.applyHDRISetting(enabled);
 			this.emitChange(this.settings);
 		});
-		section.appendChild(
+		this.backgroundControls.appendChild(
 			createSettingRow("HDRI Environment", hdriToggle, {
 				tooltip: "Use HDRI for realistic lighting and reflections",
 			})
@@ -144,11 +164,14 @@ export class RenderSettingsPanel extends BasePanel {
 			this.applyBackgroundColor(color);
 			this.emitChange(this.settings);
 		});
-		section.appendChild(
+		this.backgroundControls.appendChild(
 			createSettingRow("Background Color", colorPicker, {
 				tooltip: "Solid background color (visible when HDRI is disabled)",
 			})
 		);
+
+		section.appendChild(this.backgroundControls);
+		this.updateBackgroundControlsVisibility();
 
 		return section;
 	}
@@ -413,7 +436,29 @@ export class RenderSettingsPanel extends BasePanel {
 		}
 	}
 
+	private updateBackgroundControlsVisibility(): void {
+		if (this.backgroundControls) {
+			this.backgroundControls.style.display = this.settings.backgroundEnabled ? "block" : "none";
+		}
+	}
+
+	private applyBackgroundEnabled(enabled: boolean): void {
+		if (!enabled) {
+			// Set background to null for transparency
+			this.renderer.sceneManager.scene.background = null;
+		} else {
+			// Re-apply the current background setting
+			this.applyHDRISetting(this.settings.hdriEnabled);
+		}
+	}
+
 	private applyHDRISetting(enabled: boolean): void {
+		// Don't apply if background is disabled (transparent)
+		if (!this.settings.backgroundEnabled) {
+			this.renderer.sceneManager.scene.background = null;
+			return;
+		}
+
 		if (!enabled) {
 			this.renderer.sceneManager.scene.background = new THREE.Color(this.settings.backgroundColor);
 		} else if (this.renderer.options.hdri) {
@@ -423,6 +468,10 @@ export class RenderSettingsPanel extends BasePanel {
 
 	private applyBackgroundColor(color: string): void {
 		this.renderer.renderManager?.setIsometricBackgroundColor(color);
+		// Don't apply if background is disabled (transparent)
+		if (!this.settings.backgroundEnabled) {
+			return;
+		}
 		if (!this.settings.hdriEnabled) {
 			this.renderer.sceneManager.scene.background = new THREE.Color(color);
 		}
@@ -458,8 +507,11 @@ export class RenderSettingsPanel extends BasePanel {
 	}
 
 	private applyAllSettings(): void {
-		this.applyHDRISetting(this.settings.hdriEnabled);
-		this.applyBackgroundColor(this.settings.backgroundColor);
+		this.applyBackgroundEnabled(this.settings.backgroundEnabled);
+		if (this.settings.backgroundEnabled) {
+			this.applyHDRISetting(this.settings.hdriEnabled);
+			this.applyBackgroundColor(this.settings.backgroundColor);
+		}
 		this.applyCameraMode(this.settings.cameraMode);
 		if (this.settings.cameraMode === "isometric") {
 			this.applyIsometricAngles();
@@ -542,6 +594,13 @@ export class RenderSettingsPanel extends BasePanel {
 	public setHDRIEnabled(enabled: boolean): void {
 		this.settings.hdriEnabled = enabled;
 		this.applyHDRISetting(enabled);
+		this.emitChange(this.settings);
+	}
+
+	public setBackgroundEnabled(enabled: boolean): void {
+		this.settings.backgroundEnabled = enabled;
+		this.applyBackgroundEnabled(enabled);
+		this.updateBackgroundControlsVisibility();
 		this.emitChange(this.settings);
 	}
 }

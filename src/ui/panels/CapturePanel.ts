@@ -24,6 +24,8 @@ export interface RecordingSettings {
 	height: number;
 	frameRate: number;
 	duration: number;
+	encodingPreset: "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium";
+	quality: "low" | "medium" | "high";
 }
 
 const DEFAULT_SCREENSHOT_PRESETS = [
@@ -50,6 +52,8 @@ export class CapturePanel extends BasePanel {
 		height: 1080,
 		frameRate: 60,
 		duration: 10,
+		encodingPreset: "veryfast",
+		quality: "medium",
 	};
 
 	private pathVisible: boolean = false;
@@ -304,6 +308,44 @@ export class CapturePanel extends BasePanel {
 		});
 		section.appendChild(createSettingRow("Duration", durationSlider));
 
+		// Encoding preset (speed vs quality tradeoff)
+		const presetSelect = createSelect(
+			[
+				{ value: "ultrafast", label: "Ultrafast (Fastest)" },
+				{ value: "veryfast", label: "Very Fast (Recommended)" },
+				{ value: "fast", label: "Fast (Better quality)" },
+				{ value: "medium", label: "Medium (Best quality)" },
+			],
+			this.recordingSettings.encodingPreset,
+			(value) => {
+				this.recordingSettings.encodingPreset = value as RecordingSettings["encodingPreset"];
+			}
+		);
+		section.appendChild(
+			createSettingRow("Encoding Speed", presetSelect, {
+				tooltip:
+					"Faster = quicker encoding but larger file. Slower = smaller file, better quality.",
+			})
+		);
+
+		// Quality preset
+		const qualitySelect = createSelect(
+			[
+				{ value: "low", label: "Low (Smaller file)" },
+				{ value: "medium", label: "Medium (Balanced)" },
+				{ value: "high", label: "High (Best quality)" },
+			],
+			this.recordingSettings.quality,
+			(value) => {
+				this.recordingSettings.quality = value as RecordingSettings["quality"];
+			}
+		);
+		section.appendChild(
+			createSettingRow("Quality", qualitySelect, {
+				tooltip: "Higher quality = larger file size",
+			})
+		);
+
 		// Recording status
 		this.recordingStatus = document.createElement("div");
 		this.recordingStatus.style.display = "none";
@@ -419,7 +461,13 @@ export class CapturePanel extends BasePanel {
 
 		this.isRecording = true;
 		this.recordingStatus.style.display = "block";
-		this.progressText.textContent = "Recording...";
+		this.progressText.textContent = "Preparing...";
+
+		const progressFill = this.progressBar.firstChild as HTMLDivElement;
+
+		// Map quality preset to CRF value (lower = better quality, larger file)
+		const crfMap = { low: 28, medium: 23, high: 18 };
+		const crf = crfMap[this.recordingSettings.quality];
 
 		try {
 			// Start recording
@@ -429,20 +477,48 @@ export class CapturePanel extends BasePanel {
 					width: this.recordingSettings.width,
 					height: this.recordingSettings.height,
 					frameRate: this.recordingSettings.frameRate,
+					encodingPreset: this.recordingSettings.encodingPreset,
+					crf,
 					onProgress: (progress: number) => {
-						const progressFill = this.progressBar.firstChild as HTMLDivElement;
 						if (progressFill) {
-							progressFill.style.width = `${progress * 100}%`;
+							// Recording phase is 0-50% of total progress
+							progressFill.style.width = `${progress * 50}%`;
 						}
-						this.progressText.textContent = `Recording... ${Math.round(progress * 100)}%`;
+						this.progressText.textContent = `Capturing frames... ${Math.round(progress * 100)}%`;
+					},
+					onFfmpegProgress: (progress: number, _time: number) => {
+						if (progressFill) {
+							// FFmpeg phase is 50-100% of total progress
+							progressFill.style.width = `${progress}%`;
+						}
+						if (progress < 50) {
+							this.progressText.textContent = `Encoding frames... ${Math.round(progress * 2)}%`;
+						} else {
+							this.progressText.textContent = `Creating video... ${Math.round((progress - 50) * 2)}%`;
+						}
+					},
+					onComplete: (blob: Blob) => {
+						// Auto-download the video
+						const url = URL.createObjectURL(blob);
+						const a = document.createElement("a");
+						a.href = url;
+						a.download = `recording_${Date.now()}.mp4`;
+						a.click();
+						URL.revokeObjectURL(url);
 					},
 				}
 			);
 
-			// Recording completed - handled by RecordingManager
-			this.progressText.textContent = "Recording complete!";
+			// Recording completed
+			this.progressText.textContent = "Recording complete! Downloading...";
+			if (progressFill) {
+				progressFill.style.width = "100%";
+			}
 			setTimeout(() => {
 				this.recordingStatus.style.display = "none";
+				if (progressFill) {
+					progressFill.style.width = "0%";
+				}
 			}, 2000);
 		} catch (error) {
 			console.error("Recording error:", error);

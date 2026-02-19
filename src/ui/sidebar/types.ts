@@ -86,6 +86,9 @@ export interface SidebarOptions {
 	/** Width of the sidebar content in pixels (default: 320) */
 	width?: number;
 
+	/** Background color of the sidebar (default: "rgba(20, 20, 25, 0.95)") */
+	backgroundColor?: string;
+
 	/** Enable keyboard shortcuts globally (default: true) */
 	enableKeyboardShortcuts?: boolean;
 
@@ -186,6 +189,7 @@ export const DEFAULT_SIDEBAR_OPTIONS: Required<SidebarOptions> = {
 	enabled: true,
 	position: "right",
 	width: 320,
+	backgroundColor: "rgba(20, 20, 25, 0.95)",
 	enableKeyboardShortcuts: true,
 	shortcuts: DEFAULT_SHORTCUTS,
 	tabs: DEFAULT_TAB_CONFIG,

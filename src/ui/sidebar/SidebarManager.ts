@@ -102,6 +102,7 @@ export class SidebarManager {
 			enabled: options.enabled ?? DEFAULT_SIDEBAR_OPTIONS.enabled,
 			position: options.position ?? DEFAULT_SIDEBAR_OPTIONS.position,
 			width: options.width ?? DEFAULT_SIDEBAR_OPTIONS.width,
+			backgroundColor: options.backgroundColor ?? DEFAULT_SIDEBAR_OPTIONS.backgroundColor,
 			enableKeyboardShortcuts:
 				options.enableKeyboardShortcuts ?? DEFAULT_SIDEBAR_OPTIONS.enableKeyboardShortcuts,
 			shortcuts,
@@ -131,6 +132,7 @@ export class SidebarManager {
 			width: this.options.width,
 			collapsed: this.options.collapsedByDefault,
 			tabs: Array.from(this.tabConfigs.values()),
+			backgroundColor: this.options.backgroundColor,
 			onTabClick: (tabId) => this.handleTabClick(tabId),
 			onToggle: () => this.toggle(),
 		});

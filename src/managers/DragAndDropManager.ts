@@ -2,8 +2,15 @@ import { SchematicRenderer } from "../SchematicRenderer";
 import { UIManager } from "./UIManager";
 import { FileType, FileTypeUtility } from "../utils/FileTypeUtil";
 
+export interface GridLayoutOptions {
+	enabled?: boolean;
+	spacing?: number;
+	columns?: number;
+}
+
 export interface DragAndDropManagerOptions {
 	acceptedFileTypes?: string[];
+	gridLayout?: GridLayoutOptions;
 	callbacks?: {
 		// Schematic callbacks
 		onSchematicLoaded?: (schematicName: string) => void;
@@ -85,6 +92,7 @@ export class DragAndDropManager {
 		const files = event.dataTransfer?.files;
 		console.log("Files dropped:", files);
 		if (files && files.length > 0) {
+			let schematicDropCount = 0;
 			for (const file of files) {
 				// Determine file type using our utility
 				const startTime = performance.now();
@@ -95,6 +103,7 @@ export class DragAndDropManager {
 				if (fileType === FileType.SCHEMATIC && this.isAcceptedFileType(file)) {
 					const startTime = performance.now();
 					await this.handleSchematicDrop(file);
+					schematicDropCount++;
 					console.log("Schematic drop handled in", performance.now() - startTime, "ms");
 				} else if (fileType === FileType.RESOURCE_PACK) {
 					await this.handleResourcePackDrop(file);
@@ -110,6 +119,18 @@ export class DragAndDropManager {
 					// Call invalid file type callback
 					await this.options.callbacks?.onInvalidFileType?.(file);
 				}
+			}
+
+			// Arrange schematics in grid if enabled and multiple were dropped
+			if (
+				schematicDropCount > 1 &&
+				this.options.gridLayout?.enabled &&
+				this.renderer.schematicManager
+			) {
+				this.renderer.schematicManager.arrangeInGrid({
+					spacing: this.options.gridLayout.spacing,
+					columns: this.options.gridLayout.columns,
+				});
 			}
 		}
 	};

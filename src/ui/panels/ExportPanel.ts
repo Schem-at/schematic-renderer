@@ -107,6 +107,7 @@ export class ExportPanel extends BasePanel {
 				{ value: "gltf", label: "GLTF (JSON + Bin)" },
 				{ value: "obj", label: "OBJ (Wavefront)" },
 				{ value: "stl", label: "STL (3D Printing)" },
+				{ value: "usdz", label: "USDZ (Apple AR)" },
 			],
 			this.settings.format,
 			(value) => {
