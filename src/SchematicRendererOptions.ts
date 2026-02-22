@@ -143,65 +143,6 @@ export interface DefinitionRegionOptions {
 	showLabels?: boolean;
 }
 
-export interface GPUComputeOptions {
-	/**
-	 * Enable WebGPU compute for mesh building
-	 *
-	 * ⚠️ WARNING: GPU compute is currently SLOWER than workers due to GPU→CPU
-	 * readback overhead (~6x slower, ~10x more memory). Additionally, textures
-	 * don't render correctly (wireframe only).
-	 *
-	 * The Web Worker path with WASM is the recommended and default approach.
-	 * Keep this disabled unless you're developing/testing the GPU path.
-	 *
-	 * @default false
-	 * @deprecated Use default worker path instead
-	 */
-	enabled?: boolean;
-	/** @deprecated GPU compute is not recommended */
-	preferGPU?: boolean;
-}
-
-export interface WasmMeshBuilderOptions {
-	/**
-	 * Use WASM-based mesh builder for high-performance geometry merging.
-	 *
-	 * The WASM mesh builder is written in Rust and provides significantly
-	 * better performance than the pure JavaScript implementation for the
-	 * geometry merging and face culling operations.
-	 *
-	 * @default true (recommended)
-	 */
-	enabled?: boolean;
-
-	/**
-	 * Enable greedy meshing optimization.
-	 *
-	 * Greedy meshing merges adjacent coplanar faces with the same material
-	 * into larger quads, dramatically reducing vertex count (5-10x reduction)
-	 * for large flat surfaces like walls and floors.
-	 *
-	 * This improves both mesh building time and runtime rendering performance.
-	 *
-	 * Note: Only works when WASM mesh builder is enabled.
-	 *
-	 * @default false (until fully tested)
-	 */
-	greedyMeshingEnabled?: boolean;
-
-	/**
-	 * Maximum number of worker threads to use for mesh building.
-	 *
-	 * For small schematics, fewer workers (2-4) can actually be faster due to
-	 * reduced initialization overhead. For large schematics, more workers help.
-	 *
-	 * Set to 0 to use automatic detection (capped at 8).
-	 *
-	 * @default 0 (automatic - uses min(hardwareConcurrency, 8))
-	 */
-	maxWorkers?: number;
-}
-
 export interface WebGPURendererOptions {
 	/**
 	 * Prefer WebGPU renderer when available.
@@ -238,7 +179,6 @@ export interface SchematicRendererOptions {
 	ffmpeg?: any;
 	gamma?: number;
 	chunkSideLength?: number; // Length of each chunk side in blocks
-	meshBuildingMode?: "immediate" | "incremental" | "instanced" | "batched"; // How meshes are built
 	// Global toggles for enabling/disabling functionalities
 	enableInteraction?: boolean;
 	enableDragAndDrop?: boolean;
@@ -276,10 +216,6 @@ export interface SchematicRendererOptions {
 	debugOptions?: DebugOptions;
 	// Post-processing options
 	postProcessingOptions?: PostProcessingOptions;
-	// GPU compute options (experimental)
-	gpuComputeOptions?: GPUComputeOptions;
-	// WASM mesh builder options (recommended for best performance)
-	wasmMeshBuilderOptions?: WasmMeshBuilderOptions;
 	// WebGPU renderer options (enables Three.js Inspector when available)
 	webgpuOptions?: WebGPURendererOptions;
 	// Definition region display options (for regions stored in schematic metadata)
@@ -301,7 +237,6 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	hdri: "",
 	gamma: 0.5,
 	chunkSideLength: 16, // Default chunk side length in blocks
-	meshBuildingMode: "batched", // Default mesh building mode
 	showCameraPathVisualization: false,
 	enableAutoOrbit: false,
 	autoOrbitDuration: 10,
@@ -375,14 +310,6 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 		enableSSAO: true,
 		enableSMAA: true,
 		enableGamma: true,
-	},
-	gpuComputeOptions: {
-		enabled: false, // Disabled by default - experimental and slower
-		preferGPU: true,
-	},
-	wasmMeshBuilderOptions: {
-		enabled: true, // Enabled by default - recommended for best performance
-		greedyMeshingEnabled: false, // Disabled by default until fully tested
 	},
 	webgpuOptions: {
 		preferWebGPU: false, // Disabled by default - WebGL is more widely supported

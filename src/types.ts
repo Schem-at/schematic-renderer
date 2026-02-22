@@ -195,3 +195,23 @@ export interface ChunkGeometryData {
 	indices: Uint16Array | Uint32Array;
 	groups: { start: number; count: number; materialIndex: number }[];
 }
+
+// Nucleation meshing types
+
+export interface MeshConfigOptions {
+	cullHiddenFaces?: boolean;
+	ambientOcclusion?: boolean;
+	aoIntensity?: number;
+	biome?: string;
+	atlasMaxSize?: number;
+	cullOccludedBlocks?: boolean;
+	greedyMeshing?: boolean;
+}
+
+export interface MeshProgress {
+	phase: "BuildingAtlas" | "MeshingChunks" | "Complete";
+	chunksDone: number;
+	chunksTotal: number;
+	verticesSoFar: number;
+	trianglesSoFar: number;
+}

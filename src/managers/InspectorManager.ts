@@ -174,11 +174,6 @@ export class InspectorManager {
 			targetFPS: this.renderer.options.targetFPS ?? 60,
 			idleFPS: this.renderer.options.idleFPS ?? 1,
 			adaptiveFPS: this.renderer.options.enableAdaptiveFPS ?? true,
-
-			// GPU
-			gpuCompute: this.renderer.options.gpuComputeOptions?.enabled ?? false,
-			meshBuildingMode: this.renderer.options.meshBuildingMode ?? "incremental",
-			greedyMeshing: this.renderer.options.wasmMeshBuilderOptions?.greedyMeshingEnabled ?? false,
 		};
 	}
 
@@ -411,37 +406,6 @@ export class InspectorManager {
 		if (!this.gui) return;
 
 		const folder = this.gui.addFolder("GPU / Mesh Building");
-
-		folder
-			.add(this.state, "gpuCompute")
-			.name("GPU Compute (Experimental)")
-			.onChange((value: boolean) => {
-				console.log(`[Inspector] GPU Compute: ${value ? "enabled" : "disabled"}`);
-				// Note: This requires rebuilding schematics to take effect
-				if (this.renderer.options.gpuComputeOptions) {
-					this.renderer.options.gpuComputeOptions.enabled = value;
-				}
-			});
-
-		folder
-			.add(this.state, "meshBuildingMode", ["immediate", "incremental", "instanced", "batched"])
-			.name("Build Mode")
-			.onChange((value: string) => {
-				console.log(`[Inspector] Mesh building mode: ${value}`);
-			});
-
-		folder
-			.add(this.state, "greedyMeshing")
-			.name("Greedy Meshing")
-			.onChange((value: boolean) => {
-				console.log(`[Inspector] Greedy meshing: ${value ? "enabled" : "disabled"}`);
-				if (this.renderer.worldMeshBuilder) {
-					this.renderer.worldMeshBuilder.setGreedyMeshing(value);
-				}
-				if (this.renderer.options.wasmMeshBuilderOptions) {
-					this.renderer.options.wasmMeshBuilderOptions.greedyMeshingEnabled = value;
-				}
-			});
 
 		// GPU info
 		const infoFolder = folder.addFolder("GPU Info");

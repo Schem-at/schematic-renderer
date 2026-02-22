@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { SchematicObject } from "./SchematicObject";
 import { SchematicWrapper } from "nucleation"; // Adjust the import path
-import { WorldMeshBuilder } from "../WorldMeshBuilder"; // Adjust the import path
+import { NucleationMeshBuilder } from "../NucleationMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager"; // Adjust the import path
 import { SchematicRenderer } from "../SchematicRenderer";
@@ -31,7 +31,7 @@ export class SchematicManager {
 	public schematicRenderer: SchematicRenderer;
 	public eventEmitter: EventEmitter;
 	//@ts-ignore
-	private worldMeshBuilder: WorldMeshBuilder;
+	private meshBuilder: NucleationMeshBuilder;
 	private options: SchematicManagerOptions;
 	private sceneManager: SceneManager;
 	private singleSchematicMode: boolean;
@@ -42,10 +42,10 @@ export class SchematicManager {
 		if (!this.schematicRenderer) {
 			throw new Error("SchematicRenderer is required.");
 		}
-		if (!this.schematicRenderer.worldMeshBuilder) {
-			throw new Error("WorldMeshBuilder is required.");
+		if (!this.schematicRenderer.meshBuilder) {
+			throw new Error("NucleationMeshBuilder is required.");
 		}
-		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.meshBuilder = schematicRenderer.meshBuilder as NucleationMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 		this.singleSchematicMode = options.singleSchematicMode || false;
@@ -188,15 +188,14 @@ export class SchematicManager {
 	/**
 	 * Performs comprehensive memory cleanup after schematic operations
 	 * This should be called between test runs to prevent memory leaks
-	 * NOTE: Does NOT dispose WorldMeshBuilder as it's shared and needed for future builds
+	 * NOTE: Does NOT dispose NucleationMeshBuilder as it's shared and needed for future builds
 	 */
 	public performDeepCleanup(): void {
 		// Clear all caches and registries
 		clearAllCaches();
 
-		// DON'T dispose WorldMeshBuilder here - it's shared and needed for future schematic builds
-		// Only invalidate its cache so new textures are used
-		this.worldMeshBuilder.invalidateCache();
+		// NucleationMeshBuilder is stateless per-build (atlas is rebuilt each time)
+		// No cache invalidation needed
 
 		// Clear buffer pool
 		GeometryBufferPool.clear();

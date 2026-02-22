@@ -12,8 +12,7 @@ import { DragAndDropManager, DragAndDropManagerOptions } from "./managers/DragAn
 import { InteractionManager, InteractionManagerOptions } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
 import { SchematicManager, SchematicManagerOptions } from "./managers/SchematicManager";
-import { WorldMeshBuilder } from "./WorldMeshBuilder";
-import { MaterialRegistry } from "./MaterialRegistry";
+import { NucleationMeshBuilder } from "./NucleationMeshBuilder";
 import { EventEmitter } from "events";
 import { ResourcePackManager, DefaultPackCallback } from "./managers/ResourcePackManager";
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
@@ -42,7 +41,6 @@ import { OverlayManager } from "./managers/OverlayManager";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
-import { Cubane } from "cubane";
 import { KeyboardControls } from "./managers/KeyboardControls";
 import { InspectorManager } from "./managers/InspectorManager";
 import { RegionManager } from "./managers/RegionManager";
@@ -61,7 +59,7 @@ export class SchematicRenderer {
 	public dragAndDropManager?: DragAndDropManager;
 	public highlightManager: HighlightManager | undefined;
 	public schematicManager: SchematicManager | undefined;
-	public worldMeshBuilder: WorldMeshBuilder | undefined;
+	public meshBuilder: NucleationMeshBuilder | undefined;
 	public gizmoManager: GizmoManager | undefined;
 	public simulationManager: SimulationManager | undefined;
 	public blockInteractionHandler: BlockInteractionHandler | undefined;
@@ -79,7 +77,6 @@ export class SchematicRenderer {
 	public packs!: ResourcePackManagerProxy;
 	/** Unified sidebar UI manager */
 	public sidebar: SidebarManager | undefined;
-	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
 	};
@@ -150,8 +147,6 @@ export class SchematicRenderer {
 			this.uiManager.showProgressBar("Initializing renderer...");
 			this.uiManager.updateProgress(0.1);
 		}
-
-		this.cubane = new Cubane();
 
 		// Bind pointer events for immediate wake-up from idle mode
 		this.bindPointerEvents();
@@ -262,12 +257,11 @@ export class SchematicRenderer {
 
 			// Step 4: Initialize builders and managers
 			showProgress("Setting up renderer components...", 0.6);
-			this.worldMeshBuilder = new WorldMeshBuilder(this, this.cubane);
+			this.meshBuilder = new NucleationMeshBuilder(this);
+			await this.meshBuilder.initialize();
 
-			// Enable greedy meshing if configured
-			if (this.options.wasmMeshBuilderOptions?.greedyMeshingEnabled) {
-				this.worldMeshBuilder.setGreedyMeshing(true);
-			}
+			// Load resource packs into mesh builder
+			await this.reloadResourcePacksIntoMeshBuilder();
 
 			const schematicManagerOptions: SchematicManagerOptions = {
 				singleSchematicMode: this.options.singleSchematicMode,
@@ -504,77 +498,41 @@ export class SchematicRenderer {
 		// This is called when packs are toggled/changed, so always force reload
 		this.resourcePackManager.setAtlasRebuildCallback(async () => {
 			console.log("[SchematicRenderer] Atlas rebuild callback invoked - forcing reload");
-			await this.reloadResourcePacksIntoCubane(true); // Force reload when packs change
+			await this.reloadResourcePacksIntoMeshBuilder(true); // Force reload when packs change
 		});
 	}
 
 	/**
-	 * Reload all enabled resource packs into Cubane
-	 * @param force - Force reload even if Cubane already has packs loaded
+	 * Reload all enabled resource packs into the mesh builder
+	 * @param force - Force reload even if packs haven't changed
 	 */
-	private async reloadResourcePacksIntoCubane(force: boolean = false): Promise<void> {
-		if (!this.cubane) return;
+	private async reloadResourcePacksIntoMeshBuilder(force: boolean = false): Promise<void> {
+		if (!this.meshBuilder) return;
 
 		try {
-			const enabledPacks = this.resourcePackManager.getEnabledPacksWithBlobs();
+			const blobs = this.resourcePackManager.getEnabledPackBlobs();
 
-			// Only skip on initial load (not forced) if Cubane already has the same number of packs
-			if (!force) {
-				const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
-				if (cubanePackCount > 0 && cubanePackCount >= enabledPacks.length) {
-					console.log(
-						`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) loaded, skipping reload`
-					);
-					return;
-				}
+			if (blobs.length === 0) {
+				console.log("[SchematicRenderer] No resource packs to load");
+				return;
 			}
-
-			// IMPORTANT: In Cubane/Minecraft, packs loaded LAST override earlier packs.
-			// Our priority system: lower number = higher priority = should override others.
-			// So we need to REVERSE the order: load low-priority packs first, high-priority last.
-			const packsToLoad = [...enabledPacks].reverse();
 
 			console.log(
-				`[SchematicRenderer] Reloading ${packsToLoad.length} resource pack(s) into Cubane...`
+				`[SchematicRenderer] Loading ${blobs.length} resource pack(s) into mesh builder...`
 			);
 
-			// Use batch mode to clear and reload all packs at once (single atlas rebuild at end)
-			this.cubane.beginPackBatchUpdate();
+			await this.meshBuilder.setResourcePacks(blobs);
 
-			try {
-				// Clear existing packs first (important when packs are disabled)
-				await this.cubane.removeAllPacks();
-
-				// Load enabled packs
-				for (const pack of packsToLoad) {
-					try {
-						await this.cubane.loadResourcePack(pack.blob);
-						console.log(`  ✓ Loaded: ${pack.name}`);
-					} catch (error) {
-						console.error(`  ✗ Failed to load pack ${pack.name}:`, error);
-					}
-				}
-			} finally {
-				// End batch mode - this triggers a single atlas rebuild with all packs
-				await this.cubane.endPackBatchUpdate();
+			if (force) {
+				// Rebuild all loaded schematics with new textures
+				await this.rebuildAllSchematics();
 			}
-
-			// Clear MaterialRegistry cache so new textures are used
-			MaterialRegistry.clear();
-
-			// Invalidate WorldMeshBuilder cache so new textures are used
-			if (this.worldMeshBuilder) {
-				this.worldMeshBuilder.invalidateCache();
-			}
-
-			// Rebuild all loaded schematics with new textures
-			await this.rebuildAllSchematics();
 
 			// Trigger event for external listeners
 			this.eventEmitter.emit("resourcePacksReloaded");
 			console.log("Resource pack reload complete");
 		} catch (error) {
-			console.error("Failed to reload resource packs into Cubane:", error);
+			console.error("Failed to reload resource packs:", error);
 		}
 	}
 
@@ -595,22 +553,6 @@ export class SchematicRenderer {
 			}
 		}
 
-		// Mark scene as needing update
-		if (this.sceneManager?.scene) {
-			this.sceneManager.scene.traverse((obj) => {
-				if ((obj as any).material) {
-					const mat = (obj as any).material;
-					if (Array.isArray(mat)) {
-						mat.forEach((m: any) => {
-							if (m) m.needsUpdate = true;
-						});
-					} else {
-						mat.needsUpdate = true;
-					}
-				}
-			});
-		}
-
 		console.log("Schematic rebuild complete");
 	}
 
@@ -618,15 +560,6 @@ export class SchematicRenderer {
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	): Promise<void> {
 		await this.resourcePackManager.initPromise;
-
-		// Check if Cubane already has packs loaded (from auto-restore)
-		const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
-		if (cubanePackCount > 0) {
-			console.log(
-				`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) from auto-restore, skipping initial pack loading`
-			);
-			return;
-		}
 
 		// Get resource pack blobs from your existing system
 		const resourcePackBlobs = await this.resourcePackManager.getResourcePackBlobs(
@@ -639,23 +572,6 @@ export class SchematicRenderer {
 		}
 
 		console.log(`[SchematicRenderer] Loading ${resourcePackBlobs.length} resource pack(s)...`);
-
-		// Use batch mode to load all packs at once (single atlas rebuild at the end)
-		this.cubane.beginPackBatchUpdate();
-
-		try {
-			for (let i = 0; i < resourcePackBlobs.length; i++) {
-				const blob = resourcePackBlobs[i];
-				try {
-					await this.cubane.loadResourcePack(blob as Blob);
-				} catch (error) {
-					console.error(`Failed to load resource pack ${i + 1}:`, error);
-				}
-			}
-		} finally {
-			// End batch mode - triggers single atlas rebuild with all packs
-			await this.cubane.endPackBatchUpdate();
-		}
 
 		// Store the blobs for backward compatibility if needed
 		this.options.resourcePackBlobs = resourcePackBlobs;
@@ -855,7 +771,6 @@ export class SchematicRenderer {
 		this.renderManager.render();
 
 		this.interactionManager?.update();
-		this.cubane.updateAnimations();
 	}
 
 	// Schematic rendering bounds management
@@ -1047,31 +962,15 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.1, "Processing pack file...");
 		}
 
-		// Add to your existing system
+		// Add to the resource pack manager
 		await this.resourcePackManager.uploadPack(file);
 
 		if (this.options.enableProgressBar && this.uiManager) {
-			this.uiManager.updateProgress(0.3, "Loading into Cubane...");
+			this.uiManager.updateProgress(0.3, "Loading resource packs...");
 		}
 
-		// Also load directly into Cubane for immediate use
-		try {
-			await this.cubane.loadResourcePack(file);
-			await (this.cubane.getAssetLoader() as any).buildTextureAtlas?.();
-		} catch (error) {
-			console.error("Failed to load new resource pack into Cubane:", error);
-		}
-
-		if (this.options.enableProgressBar && this.uiManager) {
-			this.uiManager.updateProgress(0.6, "Rebuilding meshes...");
-		}
-
-		// Rebuild world meshes if needed
-		if (this.worldMeshBuilder && this.schematicManager) {
-			// for (const schematic of this.schematicManager.getAllSchematics()) {
-			// 	await this.worldMeshBuilder.rebuildSchematic(schematic.id);
-			// }
-		}
+		// Reload all packs into mesh builder and rebuild
+		await this.reloadResourcePacksIntoMeshBuilder(true);
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(1.0, "Resource pack added");
@@ -1109,26 +1008,15 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.2, "Processing resource packs...");
 		}
 
-		// Clear Cubane's existing resources
-		this.cubane.dispose();
-		this.cubane = new Cubane(); // Recreate fresh instance
-
-		// Reinitialize resource packs in Cubane
+		// Reinitialize resource packs
 		await this.initializeResourcePacks();
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(0.5, "Loading textures and models...");
 		}
 
-		// Rebuild world meshes with new resources
-		if (this.worldMeshBuilder && this.schematicManager) {
-			this.uiManager?.updateProgress(0.7, "Rebuilding schematic meshes...");
-
-			// Trigger rebuild of all schematic meshes
-			// for (const schematic of this.schematicManager.getAllSchematics()) {
-			// 	await this.worldMeshBuilder.rebuildSchematic(schematic.id);
-			// }
-		}
+		// Reload packs into mesh builder and rebuild schematics
+		await this.reloadResourcePacksIntoMeshBuilder(true);
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(1.0, "Resources loaded");
@@ -1626,8 +1514,8 @@ export class SchematicRenderer {
 		// Clean up resource pack manager
 		this.resourcePackManager.dispose();
 
-		// Clean up Cubane resources
-		this.cubane.dispose();
+		// Clean up mesh builder
+		this.meshBuilder?.dispose();
 
 		// Cleanup event listeners
 		this.eventEmitter.removeAllListeners();

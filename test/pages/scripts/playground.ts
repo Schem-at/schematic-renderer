@@ -98,6 +98,11 @@ const renderer = new SchematicRenderer(
 		showCameraPathVisualization: false,
 		enableInteraction: false,
 		enableDragAndDrop: true,
+		dragAndDropOptions: {
+			gridLayout: {
+				enabled: true,
+			},
+		},
 		enableGizmos: true,
 		interactionOptions: {
 			enableSelection: true,
@@ -111,7 +116,7 @@ const renderer = new SchematicRenderer(
 			enableRotation: true,
 			enableScaling: true,
 		},
-		singleSchematicMode: true,
+		singleSchematicMode: false,
 		callbacks: {
 			onSchematicDropSuccess: async (file) => {
 				console.log("Schematic dropped successfully:", file);

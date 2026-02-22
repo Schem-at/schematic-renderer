@@ -29,12 +29,12 @@ export { ResourcePackPanel } from "./ui/panels/ResourcePackPanel";
 export { PerformancePanel } from "./ui/panels/PerformancePanel";
 export { SchematicExporter } from "./export/SchematicExporter";
 export type { SimulationConfig, SimulationState, SyncMode } from "./managers/SimulationManager";
+export { NucleationMeshBuilder } from "./NucleationMeshBuilder";
+export type { MeshConfigOptions, MeshProgress } from "./types";
 export type {
 	SchematicRendererOptions,
 	KeyboardControlsOptions,
 	DebugOptions,
-	GPUComputeOptions,
-	WasmMeshBuilderOptions,
 } from "./SchematicRendererOptions";
 export type {
 	InsignRegionStyle,

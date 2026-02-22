@@ -192,7 +192,7 @@ export class PerformanceMonitor {
 
 	public startSession(
 		schematicId: string,
-		renderMode: "immediate" | "incremental" | "instanced" | "batched"
+		renderMode: "immediate" | "incremental" | "instanced" | "batched" | "nucleation"
 	): string {
 		const sessionId = `${schematicId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 

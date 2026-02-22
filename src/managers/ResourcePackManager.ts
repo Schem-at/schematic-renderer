@@ -729,6 +729,15 @@ export class ResourcePackManager {
 	}
 
 	/**
+	 * Get enabled pack blobs sorted by priority (lower priority first, higher priority last to override)
+	 */
+	public getEnabledPackBlobs(): Blob[] {
+		return this.getSortedPacks()
+			.filter((p) => p.enabled)
+			.map((p) => p.data);
+	}
+
+	/**
 	 * Get pack count
 	 */
 	public getPackCount(): number {

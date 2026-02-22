@@ -10,7 +10,7 @@ import {
 	CircuitBuilderWrapper,
 	SortStrategyWrapper,
 } from "../nucleationExports";
-import { WorldMeshBuilder } from "../WorldMeshBuilder";
+import { NucleationMeshBuilder } from "../NucleationMeshBuilder";
 import { EventEmitter } from "events";
 import { SceneManager } from "./SceneManager";
 // Removed unused imports since we're no longer using reactive proxy
@@ -32,10 +32,11 @@ export class SchematicObject extends EventEmitter {
 	private schematicRenderer: SchematicRenderer;
 	private meshes: THREE.Mesh[] = [];
 
-	private worldMeshBuilder: WorldMeshBuilder;
+	private meshBuilder: NucleationMeshBuilder;
 	private eventEmitter: EventEmitter;
 	private sceneManager: SceneManager;
 	private chunkMeshes: Map<string, THREE.Object3D[]> = new Map();
+	private atlasTexture: THREE.DataTexture | null = null;
 	private chunkDimensions: any = {
 		chunkWidth: 16,
 		chunkHeight: 16,
@@ -103,10 +104,10 @@ export class SchematicObject extends EventEmitter {
 		if (!this.schematicRenderer) {
 			throw new Error("SchematicRenderer is required.");
 		}
-		if (!this.schematicRenderer.worldMeshBuilder) {
-			throw new Error("WorldMeshBuilder is required.");
+		if (!this.schematicRenderer.meshBuilder) {
+			throw new Error("NucleationMeshBuilder is required.");
 		}
-		this.worldMeshBuilder = schematicRenderer.worldMeshBuilder as WorldMeshBuilder;
+		this.meshBuilder = schematicRenderer.meshBuilder as NucleationMeshBuilder;
 		this.eventEmitter = schematicRenderer.eventEmitter;
 		this.sceneManager = schematicRenderer.sceneManager;
 
@@ -705,23 +706,21 @@ export class SchematicObject extends EventEmitter {
 			chunkWidth: 16,
 			chunkHeight: 16,
 			chunkLength: 16,
-		},
-		buildMode: "immediate" | "incremental" | "instanced" | "batched" = this.schematicRenderer
-			.options.meshBuildingMode || "incremental"
+		}
 	) {
 		// Start performance monitoring session
-		const sessionId = performanceMonitor.startSession(this.id, buildMode);
+		const sessionId = performanceMonitor.startSession(this.id, "nucleation");
 		if (this.schematicRenderer.renderManager?.renderer) {
 			performanceMonitor.setRenderer(this.schematicRenderer.renderManager.renderer);
 		}
 
-		performanceMonitor.startOperation(`schematic-build-${buildMode}`, {
+		performanceMonitor.startOperation(`schematic-build-nucleation`, {
 			schematicId: this.id,
 			schematicName: this.name,
-			buildMode: buildMode,
+			buildMode: "nucleation",
 			chunkDimensions: chunkDimensions,
 		});
-		performanceMonitor.takeMemorySnapshot(`schematic-build-${buildMode}-start`);
+		performanceMonitor.takeMemorySnapshot(`schematic-build-nucleation-start`);
 
 		// Track initial memory state
 		const initialMemory = (performance as any).memory
@@ -729,26 +728,7 @@ export class SchematicObject extends EventEmitter {
 			: 0;
 
 		try {
-			let result;
-			switch (buildMode) {
-				case "immediate":
-					result = await this.buildSchematicMeshesImmediate(schematicObject, chunkDimensions);
-					break;
-				case "incremental":
-					result = await this.buildSchematicMeshesIncremental(schematicObject, chunkDimensions);
-					break;
-				case "instanced":
-					result = await this.buildSchematicMeshesInstanced(schematicObject);
-					break;
-				case "batched":
-					// New high-performance batch mode - merges all chunks into a few meshes
-					result = await this.buildSchematicMeshesBatched(schematicObject, chunkDimensions);
-					break;
-				default:
-					throw new Error(
-						`Invalid build mode: ${buildMode}. Use 'immediate', 'incremental', 'instanced', or 'batched'.`
-					);
-			}
+			const result = await this.buildSchematicMeshesNucleation(schematicObject, chunkDimensions);
 
 			// Track final memory state and record detailed metrics
 			const finalMemory = (performance as any).memory
@@ -786,10 +766,10 @@ export class SchematicObject extends EventEmitter {
 				},
 			});
 
-			performanceMonitor.takeMemorySnapshot(`schematic-build-${buildMode}-end`);
+			performanceMonitor.takeMemorySnapshot(`schematic-build-nucleation-end`);
 
 			// Ensure main operation is closed BEFORE ending session
-			performanceMonitor.endOperation(`schematic-build-${buildMode}`);
+			performanceMonitor.endOperation(`schematic-build-nucleation`);
 
 			// End performance monitoring session and display results
 			const sessionData = performanceMonitor.endSession(sessionId);
@@ -808,14 +788,14 @@ export class SchematicObject extends EventEmitter {
 
 			return result;
 		} catch (error) {
-			performanceMonitor.endOperation(`schematic-build-${buildMode}`); // Ensure closed on error too
+			performanceMonitor.endOperation(`schematic-build-nucleation`);
 			throw error;
 		}
 	}
 
-	// TRUE lazy loading - minimal memory footprint
+	// Nucleation meshing pipeline - builds all chunks using WASM meshing with shared atlas
 
-	public async buildSchematicMeshesImmediate(
+	private async buildSchematicMeshesNucleation(
 		schematicObject: SchematicObject,
 		chunkDimensions: any = {
 			chunkWidth: 16,
@@ -827,159 +807,56 @@ export class SchematicObject extends EventEmitter {
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
 		const overallStartTime = performance.now();
-		const schematic = schematicObject.schematicWrapper;
+		// Use a single massive chunk to avoid multi-chunk overhead
+		const [w, h, l] = this.getDimensions();
+		const chunkSize = Math.max(w, h, l, chunkDimensions.chunkWidth || 16);
 
-		// STEP 1: Initialize pipeline
-		this.reportBuildProgress("Initializing pipeline...", 0.05);
+		this.reportBuildProgress("Starting nucleation meshing...", 0.05);
 
-		const palettes = this.getPalettes(schematic);
-		performanceMonitor.startOperation("Palette Precomputation");
-		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
-		performanceMonitor.endOperation("Palette Precomputation");
-
-		this.reportBuildProgress("Creating chunk iterator...", 0.1);
-
-		performanceMonitor.startOperation("Chunk Iterator Creation");
-		const iterator = schematic.create_lazy_chunk_iterator(
-			chunkDimensions.chunkWidth,
-			chunkDimensions.chunkHeight,
-			chunkDimensions.chunkLength,
-			"bottom_up",
-			0,
-			0,
-			0
-		);
-		performanceMonitor.endOperation("Chunk Iterator Creation");
-
-		const totalChunks = iterator.total_chunks();
-
-		if (totalChunks === 0) {
-			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
-			return { meshes: [], chunkMap: new Map() };
-		}
-
-		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
-		const renderingBounds = schematicObject.renderingBounds?.enabled
-			? schematicObject.renderingBounds
-			: undefined;
-
-		let processedChunkCount = 0;
-		let totalMeshCount = 0;
-		const progressUpdateInterval = Math.max(1, Math.floor(totalChunks / 20));
-
-		this.reportBuildProgress("Processing chunks with minimal memory...", 0.15, totalChunks, 0);
-
-		performanceMonitor.startOperation("Process All Chunks");
-
-		// Parallel Processing Logic
-		const CONCURRENCY_LIMIT = navigator.hardwareConcurrency || 4;
-		const activePromises: Promise<void>[] = [];
-
-		// Helper to dispatch a chunk task
-		const processChunk = async (chunkData: any) => {
-			const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
-
-			// Bounds culling
-			if (renderingBounds?.enabled) {
-				const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
-				const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
-				const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
-				const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
-				const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
-				const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
-
-				if (
-					chunkMaxX < renderingBounds.min.x ||
-					chunkMinX > renderingBounds.max.x ||
-					chunkMaxY < renderingBounds.min.y ||
-					chunkMinY > renderingBounds.max.y ||
-					chunkMaxZ < renderingBounds.min.z ||
-					chunkMinZ > renderingBounds.max.z
-				) {
-					processedChunkCount++;
-					if (processedChunkCount % progressUpdateInterval === 0) {
-						this.reportBuildProgress(
-							"Processing chunks (bounds culled)...",
-							0.15 + (processedChunkCount / totalChunks) * 0.8,
-							totalChunks,
-							processedChunkCount
-						);
-					}
-					return;
-				}
-			}
-
-			// Process chunk
-			const chunkMeshes = await this.worldMeshBuilder.getChunkMesh(
-				{
-					blocks: blocks,
-					chunk_x,
-					chunk_y,
-					chunk_z,
-				},
-				schematicObject,
-				renderingBounds
-			);
-
-			processedChunkCount++;
-
-			if (chunkMeshes && chunkMeshes.length > 0) {
-				// Store chunk reference for management
-				const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
-				chunkMap.set(chunkKey, chunkMeshes);
-
-				// Apply properties and add to scene
-				this.applyPropertiesToObjects(chunkMeshes);
-				chunkMeshes.forEach((mesh) => {
-					this.group.add(mesh);
-				});
-
-				totalMeshCount += chunkMeshes.length;
-			}
-
-			// Update progress occasionally
-			if (processedChunkCount % progressUpdateInterval === 0) {
-				this.reportBuildProgress(
-					"Processing chunks...",
-					0.15 + (processedChunkCount / totalChunks) * 0.8,
-					totalChunks,
-					processedChunkCount
-				);
-			}
+		// Build mesh config from renderer options
+		const meshConfig: import("../types").MeshConfigOptions = {
+			cullHiddenFaces: true,
+			ambientOcclusion: true,
+			aoIntensity: 0.4,
+			cullOccludedBlocks: true,
+			greedyMeshing: false,
 		};
 
-		// Iterate and dispatch tasks
-		while (iterator.has_next()) {
-			const chunkData = iterator.next();
-			if (!chunkData) break;
+		const allMeshes: THREE.Object3D[] = [];
+		const chunkMap = new Map<string, THREE.Object3D[]>();
 
-			// Wait if concurrency limit reached
-			if (activePromises.length >= CONCURRENCY_LIMIT) {
-				await Promise.race(activePromises);
+		const { chunkMap: resultChunkMap, atlasTexture } = await this.meshBuilder.meshSchematic(
+			schematicObject.schematicWrapper,
+			meshConfig,
+			chunkSize,
+			(progress) => {
+				// Map nucleation progress to our progress bar
+				const pct = progress.chunksTotal > 0 ? progress.chunksDone / progress.chunksTotal : 0;
+				const progressValue = 0.1 + pct * 0.85;
+				this.reportBuildProgress(
+					`${progress.phase}: ${progress.chunksDone}/${progress.chunksTotal} chunks`,
+					progressValue,
+					progress.chunksTotal,
+					progress.chunksDone
+				);
+			},
+			(_coord, meshes) => {
+				// Progressive: add chunks to scene as they arrive
+				this.applyPropertiesToObjects(meshes);
+				meshes.forEach((mesh) => this.group.add(mesh));
 			}
+		);
 
-			// Start new task
-			const promise = processChunk(chunkData).then(() => {
-				// Remove self from active promises
-				const idx = activePromises.indexOf(promise);
-				if (idx > -1) activePromises.splice(idx, 1);
-			});
-			activePromises.push(promise);
+		// Store atlas texture for later disposal
+		this.atlasTexture = atlasTexture;
+
+		// Collect results
+		for (const [coord, meshes] of resultChunkMap) {
+			chunkMap.set(coord, meshes);
+			allMeshes.push(...meshes);
 		}
 
-		// Wait for remaining tasks
-		await Promise.all(activePromises);
-
-		performanceMonitor.endOperation("Process All Chunks");
-
-		this.reportBuildProgress("Finalizing scene...", 0.95, totalChunks, processedChunkCount);
-
-		this.group.updateMatrixWorld(true);
-
 		const totalTime = performance.now() - overallStartTime;
-
-		// Return meshes from scene graph (not from accumulator!)
-		const finalMeshes = Array.from(this.group.children);
 
 		// Dispatch completion event
 		if (typeof window !== "undefined") {
@@ -988,39 +865,16 @@ export class SchematicObject extends EventEmitter {
 					detail: {
 						schematicId: this.id,
 						schematicName: this.name,
-						totalChunks: totalChunks,
-						processedChunks: processedChunkCount,
+						totalChunks: chunkMap.size,
 						buildTimeMs: totalTime,
-						meshCount: totalMeshCount,
-						optimized: true,
-						immediate: true,
-						trueLazy: true, // Flag for true lazy loading
+						meshCount: allMeshes.length,
+						nucleation: true,
 					},
 				})
 			);
 		}
 
-		// Log final stats
-		const renderer = this.schematicRenderer.renderManager?.renderer;
-		if (renderer && renderer.info) {
-			console.log(
-				`FINAL TRUE LAZY STATS - Draw Calls: ${renderer.info.render.calls}, Tris: ${renderer.info.render.triangles}`
-			);
-			console.log(
-				`Memory - Geometries: ${renderer.info.memory.geometries}, Textures: ${renderer.info.memory.textures}`
-			);
-		}
-
-		const paletteStats = this.worldMeshBuilder.getPaletteStats();
-		console.log(
-			`Palette Cache - ${paletteStats.paletteSize} block types, ${(
-				paletteStats.memoryEstimate /
-				1024 /
-				1024
-			).toFixed(1)}MB`
-		);
-
-		this.reportBuildProgress("TRUE lazy build complete", 1.0, totalChunks, processedChunkCount);
+		this.reportBuildProgress("Nucleation build complete", 1.0, chunkMap.size, chunkMap.size);
 
 		setTimeout(() => {
 			if (this.schematicRenderer.uiManager) {
@@ -1028,407 +882,59 @@ export class SchematicObject extends EventEmitter {
 			}
 		}, 500);
 
-		return { meshes: finalMeshes, chunkMap };
+		return { meshes: allMeshes, chunkMap };
 	}
 
-	// Also fix the incremental version
+	// NOTE: The 4 old build modes (immediate, incremental, instanced, batched) have been
+	// removed. All meshing now goes through buildSchematicMeshesNucleation above.
+
+	/** @deprecated Replaced by nucleation meshing pipeline */
+	public async buildSchematicMeshesImmediate(
+		_schematicObject: SchematicObject,
+		_chunkDimensions: any = {}
+	): Promise<{
+		meshes: THREE.Object3D[];
+		chunkMap: Map<string, THREE.Object3D[]>;
+	}> {
+		throw new Error(
+			"buildSchematicMeshesImmediate has been removed. Use nucleation meshing pipeline."
+		);
+	}
+
+	/** @deprecated Replaced by nucleation meshing pipeline */
 	public async buildSchematicMeshesIncremental(
-		schematicObject: SchematicObject,
-		chunkDimensions: any = {
-			chunkWidth: 16,
-			chunkHeight: 16,
-			chunkLength: 16,
-		}
+		_schematicObject: SchematicObject,
+		_chunkDimensions: any = {}
 	): Promise<{
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		const overallStartTime = performance.now();
-		const renderer = this.schematicRenderer.renderManager?.renderer;
-		const schematic = schematicObject.schematicWrapper;
-
-		// Initialize pipeline
-		const palettes = this.getPalettes(schematic);
-		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
-
-		// CRITICAL: Wait for JSZip's async postMessage queue to drain
-		// JSZip uses setImmediate (via postMessage) which continues after await returns
-		await new Promise((resolve) => setTimeout(resolve, 100));
-
-		const iterator = schematic.create_lazy_chunk_iterator(
-			chunkDimensions.chunkWidth,
-			chunkDimensions.chunkHeight,
-			chunkDimensions.chunkLength,
-			"bottom_up",
-			0,
-			0,
-			0
+		throw new Error(
+			"buildSchematicMeshesIncremental has been removed. Use nucleation meshing pipeline."
 		);
-
-		const totalChunks = iterator.total_chunks();
-
-		if (totalChunks === 0) {
-			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
-			return { meshes: [], chunkMap: new Map() };
-		}
-
-		const chunkMap: Map<string, THREE.Object3D[]> = new Map();
-		let totalMeshCount = 0;
-
-		this.reportBuildProgress("Processing optimized chunks...", 0, totalChunks, 0);
-
-		const renderingBounds = schematicObject.renderingBounds?.enabled
-			? schematicObject.renderingBounds
-			: undefined;
-
-		let processedChunkCount = 0;
-
-		performanceMonitor.startOperation("schematic-build-incremental");
-		performanceMonitor.startOperation("Process All Chunks");
-
-		return new Promise(async (resolvePromise, rejectPromise) => {
-			try {
-				// PERFORMANCE FIX: Batch all worker calls to avoid per-await event loop overhead
-				// Collect all chunk data first
-				const allChunks: Array<{ chunk_x: number; chunk_y: number; chunk_z: number; blocks: any }> =
-					[];
-
-				while (iterator.has_next()) {
-					const chunkData = iterator.next();
-					if (!chunkData) break;
-
-					const { chunk_x, chunk_y, chunk_z, blocks } = chunkData;
-
-					// Bounds culling
-					if (renderingBounds?.enabled) {
-						const chunkMinX = chunk_x * chunkDimensions.chunkWidth;
-						const chunkMinY = chunk_y * chunkDimensions.chunkHeight;
-						const chunkMinZ = chunk_z * chunkDimensions.chunkLength;
-						const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
-						const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
-						const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
-
-						if (
-							chunkMaxX < renderingBounds.min.x ||
-							chunkMinX > renderingBounds.max.x ||
-							chunkMaxY < renderingBounds.min.y ||
-							chunkMinY > renderingBounds.max.y ||
-							chunkMaxZ < renderingBounds.min.z ||
-							chunkMinZ > renderingBounds.max.z
-						) {
-							continue; // Skip culled chunks
-						}
-					}
-
-					allChunks.push({ chunk_x, chunk_y, chunk_z, blocks });
-				}
-
-				// Process in batches to avoid overwhelming the worker pool
-				const BATCH_SIZE = 8; // Match worker count
-				const totalChunksToProcess = allChunks.length;
-
-				for (let batchStart = 0; batchStart < totalChunksToProcess; batchStart += BATCH_SIZE) {
-					const batchEnd = Math.min(batchStart + BATCH_SIZE, totalChunksToProcess);
-					const batch = allChunks.slice(batchStart, batchEnd);
-
-					// Send all chunks in this batch to workers simultaneously
-					const batchPromises = batch.map(({ chunk_x, chunk_y, chunk_z, blocks }) =>
-						this.worldMeshBuilder
-							.getChunkMesh({ blocks, chunk_x, chunk_y, chunk_z }, schematicObject, renderingBounds)
-							.then((meshes) => ({ chunk_x, chunk_y, chunk_z, meshes }))
-					);
-
-					// Await entire batch at once - single yield point!
-					const batchResults = await Promise.all(batchPromises);
-
-					// Add all batch results to scene
-					for (const { chunk_x, chunk_y, chunk_z, meshes } of batchResults) {
-						processedChunkCount++;
-
-						if (meshes && meshes.length > 0) {
-							const chunkKey = `${chunk_x},${chunk_y},${chunk_z}`;
-							chunkMap.set(chunkKey, meshes);
-
-							this.applyPropertiesToObjects(meshes);
-							meshes.forEach((mesh) => this.group.add(mesh));
-							totalMeshCount += meshes.length;
-						}
-					}
-
-					// Log progress every batch
-					console.log(
-						`[SceneAdd] batch=${Math.floor(batchStart / BATCH_SIZE) + 1} processed=${processedChunkCount}/${totalChunksToProcess} children=${this.group.children.length}`
-					);
-
-					this.reportBuildProgress(
-						"Processing chunks...",
-						processedChunkCount / totalChunksToProcess,
-						totalChunksToProcess,
-						processedChunkCount
-					);
-				}
-
-				// Final render
-				if (this.schematicRenderer.renderManager && renderer) {
-					const renderStartTime = performance.now();
-					this.schematicRenderer.renderManager.render();
-					const renderTime = performance.now() - renderStartTime;
-					console.log(
-						`[RenderTiming] FINAL meshes=${this.group.children.length} renderMs=${renderTime.toFixed(0)}`
-					);
-				}
-
-				// Complete
-				performanceMonitor.endOperation("Process All Chunks");
-				this.group.updateMatrixWorld(true);
-
-				const finalMeshes = Array.from(this.group.children);
-
-				if (typeof window !== "undefined") {
-					window.dispatchEvent(
-						new CustomEvent("schematicRenderComplete", {
-							detail: {
-								schematicId: this.id,
-								schematicName: this.name,
-								totalChunks: totalChunks,
-								processedChunks: processedChunkCount,
-								buildTimeMs: performance.now() - overallStartTime,
-								meshCount: totalMeshCount,
-								optimized: true,
-								incremental: true,
-								batchedWorkers: true,
-							},
-						})
-					);
-				}
-
-				this.reportBuildProgress("Build complete", 1.0, totalChunks, processedChunkCount);
-				performanceMonitor.endOperation("schematic-build-incremental");
-
-				setTimeout(() => {
-					if (this.schematicRenderer.uiManager) {
-						this.schematicRenderer.uiManager.hideProgressBar();
-					}
-				}, 800);
-
-				resolvePromise({ meshes: finalMeshes, chunkMap });
-			} catch (error) {
-				performanceMonitor.endOperation("Process All Chunks");
-				performanceMonitor.endOperation("schematic-build-incremental");
-				console.error(`[SchematicObject] Error during batched processing:`, error);
-				rejectPromise(error);
-			}
-		});
 	}
 
-	/**
-	 * High-performance batched build mode
-	 *
-	 * Processes all chunks through a single worker that accumulates geometry,
-	 * then returns just a few merged meshes (one per category: solid, transparent, etc.)
-	 *
-	 * Benefits:
-	 * - Creates only 2-3 THREE.Mesh objects instead of hundreds
-	 * - Drastically reduces main thread work
-	 * - Best for large schematics where mesh count is the bottleneck
-	 */
+	/** @deprecated Replaced by nucleation meshing pipeline */
 	public async buildSchematicMeshesBatched(
-		schematicObject: SchematicObject,
-		chunkDimensions: any = {
-			chunkWidth: 16,
-			chunkHeight: 16,
-			chunkLength: 16,
-		}
+		_schematicObject: SchematicObject,
+		_chunkDimensions: any = {}
 	): Promise<{
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		const overallStartTime = performance.now();
-		const schematic = schematicObject.schematicWrapper;
-
-		// STEP 1: Initialize pipeline
-		this.reportBuildProgress("Initializing batched pipeline...", 0.05);
-
-		const palettes = this.getPalettes(schematic);
-		performanceMonitor.startOperation("Palette Precomputation");
-		await this.worldMeshBuilder.precomputePaletteGeometries(palettes.default);
-		performanceMonitor.endOperation("Palette Precomputation");
-
-		// STEP 2: Create chunk iterator
-		this.reportBuildProgress("Creating chunk iterator...", 0.1);
-
-		performanceMonitor.startOperation("Chunk Iterator Creation");
-		const iterator = schematic.create_lazy_chunk_iterator(
-			chunkDimensions.chunkWidth,
-			chunkDimensions.chunkHeight,
-			chunkDimensions.chunkLength,
-			"bottom_up",
-			0,
-			0,
-			0
+		throw new Error(
+			"buildSchematicMeshesBatched has been removed. Use nucleation meshing pipeline."
 		);
-		performanceMonitor.endOperation("Chunk Iterator Creation");
-
-		const totalChunks = iterator.total_chunks();
-
-		if (totalChunks === 0) {
-			this.reportBuildProgress("Schematic build complete (no chunks)", 1.0, 0, 0);
-			return { meshes: [], chunkMap: new Map() };
-		}
-
-		// STEP 3: Collect all chunk data
-		this.reportBuildProgress("Collecting chunk data...", 0.15, totalChunks, 0);
-
-		const allChunks: Array<{
-			blocks: Int32Array;
-			chunk_x: number;
-			chunk_y: number;
-			chunk_z: number;
-		}> = [];
-
-		while (iterator.has_next()) {
-			const chunkData = iterator.next();
-			if (!chunkData || chunkData.blocks.length === 0) continue;
-
-			// Convert blocks to Int32Array
-			const blocks = chunkData.blocks;
-			let blocksArray: Int32Array;
-
-			if (blocks instanceof Int32Array) {
-				blocksArray = blocks;
-			} else {
-				blocksArray = new Int32Array(blocks.length * 4);
-				for (let i = 0; i < blocks.length; i++) {
-					const block = blocks[i];
-					blocksArray[i * 4] = block[0];
-					blocksArray[i * 4 + 1] = block[1];
-					blocksArray[i * 4 + 2] = block[2];
-					blocksArray[i * 4 + 3] = block[3];
-				}
-			}
-
-			allChunks.push({
-				blocks: blocksArray,
-				chunk_x: chunkData.chunk_x,
-				chunk_y: chunkData.chunk_y,
-				chunk_z: chunkData.chunk_z,
-			});
-		}
-
-		// STEP 4: Process all chunks in batch mode
-		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);
-		performanceMonitor.startOperation("Process All Chunks");
-
-		let processedCount = 0;
-		const batchedMeshes = await this.worldMeshBuilder.processChunksBatched(
-			allChunks,
-			(processed, total) => {
-				processedCount = processed;
-				const progress = 0.2 + (processed / total) * 0.7;
-				this.reportBuildProgress(`Batch processing chunks...`, progress, total, processed);
-			}
-		);
-
-		performanceMonitor.endOperation("Process All Chunks");
-
-		// STEP 5: Add meshes to scene
-		this.reportBuildProgress(
-			"Adding batched meshes to scene...",
-			0.95,
-			totalChunks,
-			processedCount
-		);
-
-		// Add meshes progressively to avoid GPU upload freeze
-		// Each mesh addition triggers GPU buffer upload, so we spread them out
-		const MESHES_PER_FRAME = 2; // Add 2 meshes per frame
-		for (let i = 0; i < batchedMeshes.length; i += MESHES_PER_FRAME) {
-			const batch = batchedMeshes.slice(i, i + MESHES_PER_FRAME);
-			for (const mesh of batch) {
-				this.group.add(mesh);
-			}
-
-			// Force GPU upload by rendering, then yield
-			if (this.schematicRenderer.renderManager) {
-				this.schematicRenderer.renderManager.render();
-			}
-
-			// Let browser breathe - use RAF for real frame timing
-			if (i + MESHES_PER_FRAME < batchedMeshes.length) {
-				await new Promise<void>((r) => requestAnimationFrame(() => r()));
-			}
-		}
-
-		this.group.updateMatrixWorld(true);
-
-		const totalTime = performance.now() - overallStartTime;
-
-		this.reportBuildProgress("Build complete!", 1.0, totalChunks, processedCount);
-
-		// Dispatch completion event
-		if (typeof window !== "undefined") {
-			setTimeout(() => {
-				window.dispatchEvent(
-					new CustomEvent("schematicRenderComplete", {
-						detail: {
-							schematicId: this.id,
-							schematicName: this.name,
-							totalChunks,
-							processedChunks: processedCount,
-							buildTimeMs: totalTime,
-							meshCount: batchedMeshes.length,
-							optimized: true,
-							batched: true,
-						},
-					})
-				);
-			}, 100);
-		}
-
-		return {
-			meshes: batchedMeshes,
-			chunkMap: new Map([["batched", batchedMeshes]]),
-		};
 	}
 
-	public async buildSchematicMeshesInstanced(schematicObject: SchematicObject): Promise<{
+	/** @deprecated Replaced by nucleation meshing pipeline */
+	public async buildSchematicMeshesInstanced(_schematicObject: SchematicObject): Promise<{
 		meshes: THREE.Object3D[];
 		chunkMap: Map<string, THREE.Object3D[]>;
 	}> {
-		const overallStartTime = performance.now();
-
-		// Initialize instanced rendering
-		await this.worldMeshBuilder.precomputePaletteGeometries(
-			this.getPalettes(this.schematicWrapper).default
+		throw new Error(
+			"buildSchematicMeshesInstanced has been removed. Use nucleation meshing pipeline."
 		);
-
-		this.worldMeshBuilder.enableInstancedRendering(this.group, true);
-
-		// Render entire schematic using instanced rendering
-		await this.worldMeshBuilder.renderSchematicInstanced(schematicObject);
-
-		const totalTime = performance.now() - overallStartTime;
-
-		// Return instanced meshes from scene graph
-		const instancedMeshes = Array.from(this.group.children);
-
-		// Dispatch completion event
-		if (typeof window !== "undefined") {
-			window.dispatchEvent(
-				new CustomEvent("schematicRenderComplete", {
-					detail: {
-						schematicId: this.id,
-						schematicName: this.name,
-						buildTimeMs: totalTime,
-						meshCount: instancedMeshes.length,
-						optimized: true,
-						instanced: true, // Flag for instanced rendering
-					},
-				})
-			);
-		}
-
-		return { meshes: instancedMeshes, chunkMap: new Map() };
 	}
 
 	/**
@@ -1641,9 +1147,15 @@ export class SchematicObject extends EventEmitter {
 			}
 		}
 
-		// Clear chunk meshes and update progress
+		// Clear chunk meshes, atlas texture, and update progress
 		this.chunkMeshes.clear();
 		this.meshes = [];
+
+		// Dispose shared atlas texture
+		if (this.atlasTexture) {
+			this.atlasTexture.dispose();
+			this.atlasTexture = null;
+		}
 
 		if (renderer?.options.enableProgressBar && renderer.uiManager) {
 			renderer.uiManager.updateProgress(0.2, "Building new meshes...");
@@ -2037,23 +1549,6 @@ export class SchematicObject extends EventEmitter {
 		};
 	}
 
-	private getPalettes(schematic: SchematicWrapper): any {
-		// Safety check for get_all_palettes
-		if (typeof schematic.get_all_palettes === "function") {
-			return schematic.get_all_palettes();
-		}
-
-		console.warn("[SchematicObject] get_all_palettes missing, falling back to get_palette");
-
-		// Fallback to get_palette
-		if (typeof schematic.get_palette === "function") {
-			return { default: schematic.get_palette() };
-		}
-
-		console.error("[SchematicObject] Both get_all_palettes and get_palette are missing!");
-		return { default: [] };
-	}
-
 	public getBlockEntitiesMap(): Map<string, any> {
 		if (this.blockEntitiesMap === null) {
 			this.blockEntitiesMap = new Map();
@@ -2321,109 +1816,10 @@ export class SchematicObject extends EventEmitter {
 		};
 	}
 
-	public async rebuildChunk(chunkX: number, chunkY: number, chunkZ: number) {
-		const chunkOffset = {
-			x: chunkX * this.chunkDimensions.chunkWidth,
-			y: chunkY * this.chunkDimensions.chunkHeight,
-			z: chunkZ * this.chunkDimensions.chunkLength,
-		};
-
-		// Check if chunk is outside rendering bounds - if so, just remove it
-		if (this.renderingBounds) {
-			const chunkMaxX = chunkOffset.x + this.chunkDimensions.chunkWidth;
-			const chunkMaxY = chunkOffset.y + this.chunkDimensions.chunkHeight;
-			const chunkMaxZ = chunkOffset.z + this.chunkDimensions.chunkLength;
-
-			// If the chunk is completely outside rendering bounds, just remove it
-			if (
-				chunkMaxX <= this.renderingBounds.min.x ||
-				chunkOffset.x >= this.renderingBounds.max.x ||
-				chunkMaxY <= this.renderingBounds.min.y ||
-				chunkOffset.y >= this.renderingBounds.max.y ||
-				chunkMaxZ <= this.renderingBounds.min.z ||
-				chunkOffset.z >= this.renderingBounds.max.z
-			) {
-				this.removeChunkObjects(chunkX, chunkY, chunkZ);
-				return;
-			}
-		}
-
-		// Use WASM optimization to get both blocks and pre-filtered entities
-		// Cast to any as TS definitions might not be up to date immediately
-		let chunkData: any;
-		let blocks: any[];
-		let entities: any[] | undefined;
-
-		// Check if the new method exists (it should with nucleation 0.1.116)
-		if ((this.schematicWrapper as any).getChunkData) {
-			chunkData = (this.schematicWrapper as any).getChunkData(
-				chunkX,
-				chunkY,
-				chunkZ,
-				this.chunkDimensions.chunkWidth,
-				this.chunkDimensions.chunkHeight,
-				this.chunkDimensions.chunkLength
-			);
-			blocks = chunkData.blocks;
-			entities = chunkData.entities;
-		} else {
-			// Fallback for older versions
-			blocks = this.schematicWrapper.get_chunk_blocks_indices(
-				chunkOffset.x,
-				chunkOffset.y,
-				chunkOffset.z,
-				this.chunkDimensions.chunkWidth,
-				this.chunkDimensions.chunkHeight,
-				this.chunkDimensions.chunkLength
-			);
-		}
-
-		// Remove old chunk objects from the scene
-		this.removeChunkObjects(chunkX, chunkY, chunkZ);
-
-		// Build new chunk objects using the optimized format
-		const newChunkObjects = await this.worldMeshBuilder.getChunkMesh(
-			{
-				blocks: blocks, // This is already in format: [[x,y,z,paletteIndex],...]
-				chunk_x: chunkX,
-				chunk_y: chunkY,
-				chunk_z: chunkZ,
-			},
-			this,
-			this.renderingBounds,
-			entities // Pass pre-filtered entities if available
-		);
-
-		// Apply properties to the new objects
-		this.applyPropertiesToObjects(newChunkObjects);
-
-		newChunkObjects.forEach((obj) => {
-			this.group.add(obj);
-		});
-
-		// Update the chunk object reference in chunkMeshes map
-		this.setChunkObjectsAt(chunkX, chunkY, chunkZ, newChunkObjects);
-	}
-
-	private removeChunkObjects(chunkX: number, chunkY: number, chunkZ: number) {
-		const oldChunkObjects = this.getChunkObjectsAt(chunkX, chunkY, chunkZ);
-		if (oldChunkObjects) {
-			oldChunkObjects.forEach((obj) => {
-				this.group.remove(obj);
-				// Dispose of geometries and materials within the object
-				obj.traverse((child) => {
-					if (child instanceof THREE.Mesh) {
-						child.geometry?.dispose();
-						if (Array.isArray(child.material)) {
-							child.material.forEach((material) => material.dispose());
-						} else {
-							child.material?.dispose();
-						}
-					}
-				});
-			});
-			this.chunkMeshes.delete(`${chunkX},${chunkY},${chunkZ}`);
-		}
+	public async rebuildChunk(_chunkX: number, _chunkY: number, _chunkZ: number) {
+		// Nucleation re-meshes all chunks at once with a shared atlas.
+		// For now, a chunk rebuild triggers a full re-mesh.
+		await this.rebuildMesh();
 	}
 
 	public containsPosition(position: THREE.Vector3): boolean {

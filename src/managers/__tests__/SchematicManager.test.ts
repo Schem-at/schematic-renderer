@@ -88,9 +88,7 @@ describe("SchematicManager", () => {
 				scene: new THREE.Scene(),
 				schematicRenderer: {},
 			},
-			worldMeshBuilder: {
-				invalidateCache: vi.fn(),
-			},
+			meshBuilder: {},
 			options: {
 				enableProgressBar: false,
 			},
@@ -123,13 +121,13 @@ describe("SchematicManager", () => {
 			expect(() => new SchematicManager(null as any)).toThrow("SchematicRenderer is required");
 		});
 
-		it("should throw if WorldMeshBuilder is not available", () => {
+		it("should throw if NucleationMeshBuilder is not available", () => {
 			const rendererWithoutBuilder = {
 				...mockRenderer,
-				worldMeshBuilder: null,
+				meshBuilder: null,
 			};
 			expect(() => new SchematicManager(rendererWithoutBuilder as any)).toThrow(
-				"WorldMeshBuilder is required"
+				"NucleationMeshBuilder is required"
 			);
 		});
 	});
@@ -325,9 +323,8 @@ describe("SchematicManager", () => {
 	});
 
 	describe("performDeepCleanup", () => {
-		it("should invalidate mesh builder cache", () => {
-			manager.performDeepCleanup();
-			expect(mockRenderer.worldMeshBuilder.invalidateCache).toHaveBeenCalled();
+		it("should run without errors", () => {
+			expect(() => manager.performDeepCleanup()).not.toThrow();
 		});
 	});
 });

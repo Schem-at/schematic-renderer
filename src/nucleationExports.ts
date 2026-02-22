@@ -21,6 +21,13 @@ export {
 	CircuitBuilderWrapper,
 	StateModeConstants,
 	SortStrategyWrapper,
+	// Meshing API
+	ResourcePackWrapper,
+	MeshConfigWrapper,
+	MeshOutputWrapper,
+	ChunkMeshResultWrapper,
+	TextureAtlasWrapper,
+	ChunkMeshIteratorWrapper,
 } from "nucleation";
 
 // @ts-ignore - WASM initializer
