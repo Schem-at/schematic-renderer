@@ -73,52 +73,45 @@ new SchematicRenderer(
 
 ```html
 <!DOCTYPE html>
-<html>
-	<head>
-		<title>Schematic Renderer</title>
-		<style>
-			body {
-				margin: 0;
-				overflow: hidden;
-			}
-			#canvas {
-				width: 100vw;
-				height: 100vh;
-				display: block;
-			}
-		</style>
-	</head>
-	<body>
-		<canvas id="canvas"></canvas>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schematic Renderer</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #canvas { width: 100vw; height: 100vh; display: block; }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.181.2/build/three.module.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
 
-		<!-- Dependencies -->
-		<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-		<script src="dist/schematic-renderer.umd.js"></script>
+    <script type="module">
+        import { SchematicRenderer } from "https://unpkg.com/schematic-renderer@1.1.23/dist/schematic-renderer.es.js";
 
-		<script>
-			const canvas = document.getElementById("canvas");
+        const canvas = document.getElementById("canvas");
 
-			// Initialize the renderer
-			// Note: Pass empty objects {} for schematicData and defaultResourcePacks
-			// if you're not preloading any, so options is in the correct position
-			const renderer = new SchematicRenderer.SchematicRenderer(
-				canvas,
-				{}, // schematicData - empty, we'll load via drag & drop
-				{}, // defaultResourcePacks - empty
-				{
-					// Options (4th parameter)
-					enableDragAndDrop: true,
-					showGrid: true,
-					cameraOptions: {
-						position: [20, 20, 20],
-					},
-				}
-			);
-
-			// The renderer handles the animation loop automatically.
-			// You can now drag and drop .schem files onto the canvas!
-		</script>
-	</body>
+        const renderer = new SchematicRenderer(
+            canvas,
+            {},
+            {},
+            {
+                enableDragAndDrop: true,
+                showGrid: true,
+                cameraOptions: {
+                    position: [20, 20, 20],
+                },
+            }
+        );
+    </script>
+</body>
 </html>
 ```
 
