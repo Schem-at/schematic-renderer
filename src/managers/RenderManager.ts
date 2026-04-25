@@ -143,6 +143,16 @@ export class RenderManager {
 	private originalBackground: THREE.Texture | THREE.Color | null = null;
 	private isometricBackground: THREE.Color;
 
+	// Alpha mode state
+	private _alphaMode: boolean = false;
+	private _opaqueComposer: any | null = null;
+	private _alphaComposer: any | null = null;
+
+	// Background mode
+	private _backgroundMode: "hdri" | "solid" | "transparent" | "image" = "hdri";
+	private _forceBackground: boolean = false;
+	private _imageBackground: THREE.Texture | null = null;
+
 	// SSAO presets for different camera modes
 	private ssaoPresets = {
 		perspective: {
@@ -365,9 +375,8 @@ export class RenderManager {
 		WebGPURenderer = webgpuModule.WebGPURenderer;
 		_PostProcessing = webgpuModule.PostProcessing;
 
-		// Try to import Inspector (no types available yet)
+		// Try to import Inspector
 		try {
-			// @ts-expect-error Inspector module doesn't have type definitions yet
 			const inspectorModule = await import("three/examples/jsm/inspector/Inspector.js");
 			Inspector = inspectorModule.Inspector;
 		} catch (e) {
@@ -487,8 +496,10 @@ export class RenderManager {
 			if (scene.background && scene.background instanceof THREE.Texture) {
 				this.originalBackground = scene.background;
 			}
-			// Switch to solid color background for isometric view
-			scene.background = this.isometricBackground;
+			// Switch to solid color background for isometric view (unless forced)
+			if (!this._forceBackground) {
+				scene.background = this.isometricBackground;
+			}
 
 			// Adjust SSAO for isometric view (orthographic cameras have different depth)
 			this.setSSAOParameters(this.ssaoPresets.isometric);
@@ -1113,5 +1124,148 @@ export class RenderManager {
 		}
 
 		this.renderer.dispose();
+	}
+
+	// ===== ALPHA MODE API =====
+
+	/**
+	 * Enable or disable alpha-aware rendering for transparent backgrounds.
+	 * When enabled, creates an EffectComposer with { alpha: true } that preserves
+	 * the alpha channel through the post-processing pipeline (gamma, SMAA, etc.).
+	 */
+	public async setAlphaMode(enabled: boolean): Promise<void> {
+		if (this._alphaMode === enabled) return;
+		this._alphaMode = enabled;
+
+		if (enabled) {
+			// Save the opaque composer
+			if (this.composer && !this._opaqueComposer) {
+				this._opaqueComposer = this.composer;
+			}
+
+			// Build fresh alpha composer
+			await loadPostProcessing();
+			const glRenderer = this.renderer as THREE.WebGLRenderer;
+			const cam = this.schematicRenderer.cameraManager.activeCamera.camera;
+			const scene = this.schematicRenderer.sceneManager.scene;
+			const gamma = this.schematicRenderer.options.gamma ?? 0.5;
+
+			const alphaComposer = new EffectComposer(glRenderer, { alpha: true });
+			const renderPass = new RenderPass(scene, cam);
+			alphaComposer.addPass(renderPass);
+
+			const effects: any[] = [];
+			effects.push(new GammaCorrectionEffect(gamma));
+			try {
+				effects.push(new SMAAEffect());
+			} catch (_) {}
+
+			if (effects.length > 0) {
+				const effectPass = new EffectPass(cam, ...effects);
+				effectPass.renderToScreen = true;
+				alphaComposer.addPass(effectPass);
+			}
+
+			// Dispose previous alpha composer if exists
+			if (this._alphaComposer) {
+				try {
+					this._alphaComposer.dispose();
+				} catch (_) {}
+			}
+			this._alphaComposer = alphaComposer;
+			this.composer = alphaComposer;
+
+			glRenderer.setClearColor(0x000000, 0);
+		} else {
+			// Restore opaque composer
+			if (this._alphaComposer && this.composer === this._alphaComposer) {
+				try {
+					this._alphaComposer.dispose();
+				} catch (_) {}
+				this._alphaComposer = null;
+			}
+			if (this._opaqueComposer) {
+				this.composer = this._opaqueComposer;
+			}
+
+			const glRenderer = this.renderer as THREE.WebGLRenderer;
+			glRenderer.setClearColor(0x000000, 1);
+		}
+	}
+
+	/** Returns whether alpha mode is currently active */
+	public isAlphaMode(): boolean {
+		return this._alphaMode;
+	}
+
+	// ===== BACKGROUND MODE API =====
+
+	/**
+	 * Set the background rendering mode.
+	 * @param mode - The background mode
+	 * @param options - Mode-specific options
+	 */
+	public async setBackgroundMode(
+		mode: "hdri" | "solid" | "transparent" | "image",
+		options: {
+			/** HDRI file path (for "hdri" mode) */
+			hdriPath?: string;
+			/** Whether HDRI is background-only vs environment+background (default true) */
+			hdriBackgroundOnly?: boolean;
+			/** Solid color (for "solid" mode) */
+			color?: THREE.ColorRepresentation;
+			/** Image texture (for "image" mode) */
+			imageTexture?: THREE.Texture;
+			/** Force this background even in isometric mode (default false) */
+			force?: boolean;
+		} = {}
+	): Promise<void> {
+		this._backgroundMode = mode;
+		this._forceBackground = options.force ?? false;
+		const scene = this.schematicRenderer.sceneManager.scene;
+
+		switch (mode) {
+			case "hdri":
+				await this.setAlphaMode(false);
+				if (options.hdriPath) {
+					this.setupHDRIBackground(options.hdriPath, options.hdriBackgroundOnly ?? true);
+				}
+				// Force HDRI even in isometric if requested
+				if (this._forceBackground && this.isOrthographicCamera() && this.originalBackground) {
+					scene.background = this.originalBackground;
+				}
+				break;
+
+			case "solid": {
+				await this.setAlphaMode(false);
+				const color = new THREE.Color(options.color ?? 0x222222);
+				scene.background = color;
+				(this.renderer as THREE.WebGLRenderer).setClearColor(color, 1);
+				break;
+			}
+
+			case "transparent":
+				await this.setAlphaMode(true);
+				scene.background = null;
+				scene.environment = null;
+				break;
+
+			case "image":
+				await this.setAlphaMode(false);
+				if (options.imageTexture) {
+					if (this._imageBackground) this._imageBackground.dispose();
+					this._imageBackground = options.imageTexture;
+				}
+				if (this._imageBackground) {
+					scene.background = this._imageBackground;
+				}
+				(this.renderer as THREE.WebGLRenderer).setClearColor(0x000000, 1);
+				break;
+		}
+	}
+
+	/** Get current background mode */
+	public getBackgroundMode(): string {
+		return this._backgroundMode;
 	}
 }

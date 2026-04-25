@@ -72,9 +72,10 @@ export class MaterialRegistry {
 			if ("map" in material && material.map) {
 				// Use texture UUID or image source as part of the key
 				if (material.map.image) {
-					if (material.map.image.src) {
+					const image = material.map.image as HTMLImageElement;
+					if (image.src) {
 						// For textures loaded from URLs
-						keyParts.push(`map:${material.map.image.src}`);
+						keyParts.push(`map:${image.src}`);
 					} else if (material.map.uuid) {
 						// For generated textures
 						keyParts.push(`map:${material.map.uuid}`);

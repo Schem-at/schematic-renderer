@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Media Capture Studio</title>
+
+		<script type="module" src="./scripts/media-capture.ts"></script>
+
+		<!-- Alpine.js -->
+		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+		<!-- Material Icons -->
+		<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+		<style>
+			*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+			:root {
+				--bg-primary: #0a0a0f;
+				--bg-secondary: #12121a;
+				--bg-tertiary: #1a1a26;
+				--bg-elevated: #22222e;
+				--bg-hover: #2a2a38;
+				--border: #2a2a3a;
+				--border-subtle: #1e1e2e;
+				--text-primary: #e8e8f0;
+				--text-secondary: #9898aa;
+				--text-muted: #5a5a70;
+				--accent-blue: #4a7dff;
+				--accent-blue-dim: #3a5fbf;
+				--accent-red: #ff4a5e;
+				--accent-green: #4aff8b;
+				--accent-amber: #ffb84a;
+				--accent-purple: #9a6aff;
+				--accent-cyan: #4ae8ff;
+			}
+			html, body { height: 100%; overflow: hidden; }
+			body {
+				font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+				background: var(--bg-primary);
+				color: var(--text-primary);
+				display: flex;
+				flex-direction: column;
+			}
+
+			/* Top Bar */
+			.topbar {
+				height: 40px;
+				background: var(--bg-secondary);
+				border-bottom: 1px solid var(--border);
+				display: flex;
+				align-items: center;
+				padding: 0 12px;
+				gap: 12px;
+				flex-shrink: 0;
+			}
+			.topbar-brand {
+				font-weight: 600;
+				font-size: 13px;
+				letter-spacing: 0.02em;
+				color: var(--text-primary);
+			}
+			.topbar-sep {
+				width: 1px;
+				height: 16px;
+				background: var(--border);
+			}
+			.topbar-back {
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				color: var(--text-secondary);
+				text-decoration: none;
+				font-size: 12px;
+				transition: color 0.15s;
+			}
+			.topbar-back:hover { color: var(--accent-blue); }
+			.topbar-back .material-icons-outlined { font-size: 16px; }
+			.topbar-spacer { flex: 1; }
+			.status-badge {
+				font-size: 10px;
+				font-weight: 600;
+				letter-spacing: 0.05em;
+				text-transform: uppercase;
+				padding: 2px 8px;
+				border-radius: 3px;
+				background: rgba(74,255,139,0.1);
+				color: var(--accent-green);
+				border: 1px solid rgba(74,255,139,0.2);
+			}
+			.status-badge.pending {
+				background: rgba(255,184,74,0.1);
+				color: var(--accent-amber);
+				border-color: rgba(255,184,74,0.2);
+			}
+
+			/* Main Layout */
+			.main-layout {
+				flex: 1;
+				display: flex;
+				overflow: hidden;
+			}
+
+			/* Side Panel */
+			.side-panel {
+				width: 280px;
+				background: var(--bg-secondary);
+				border-right: 1px solid var(--border);
+				display: flex;
+				flex-direction: column;
+				flex-shrink: 0;
+				overflow: hidden;
+			}
+
+			/* Mode Tabs */
+			.mode-tabs {
+				display: flex;
+				border-bottom: 1px solid var(--border);
+				flex-shrink: 0;
+			}
+			.mode-tab {
+				flex: 1;
+				padding: 10px 0;
+				text-align: center;
+				font-size: 11px;
+				font-weight: 500;
+				letter-spacing: 0.03em;
+				color: var(--text-muted);
+				cursor: pointer;
+				border: none;
+				background: none;
+				transition: all 0.15s;
+				border-bottom: 2px solid transparent;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 3px;
+			}
+			.mode-tab:hover { color: var(--text-secondary); background: var(--bg-tertiary); }
+			.mode-tab.active {
+				color: var(--accent-blue);
+				border-bottom-color: var(--accent-blue);
+				background: var(--bg-tertiary);
+			}
+			.mode-tab .material-icons-outlined { font-size: 18px; }
+
+			/* Panel Content */
+			.panel-scroll {
+				flex: 1;
+				overflow-y: auto;
+				scrollbar-width: thin;
+				scrollbar-color: var(--bg-hover) transparent;
+			}
+			.panel-scroll::-webkit-scrollbar { width: 4px; }
+			.panel-scroll::-webkit-scrollbar-track { background: transparent; }
+			.panel-scroll::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 2px; }
+
+			.panel-section {
+				padding: 14px;
+				border-bottom: 1px solid var(--border-subtle);
+			}
+			.panel-section-title {
+				font-size: 10px;
+				font-weight: 600;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				color: var(--text-muted);
+				margin-bottom: 10px;
+			}
+
+			/* Form Controls */
+			.ctrl-group { margin-bottom: 10px; }
+			.ctrl-label {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				font-size: 11px;
+				color: var(--text-secondary);
+				margin-bottom: 4px;
+			}
+			.ctrl-value {
+				font-family: 'JetBrains Mono', monospace;
+				font-size: 10px;
+				color: var(--text-muted);
+			}
+			.ctrl-select, .ctrl-input {
+				width: 100%;
+				padding: 6px 8px;
+				font-size: 12px;
+				font-family: 'Inter', sans-serif;
+				background: var(--bg-primary);
+				border: 1px solid var(--border);
+				border-radius: 4px;
+				color: var(--text-primary);
+				outline: none;
+				transition: border-color 0.15s;
+			}
+			.ctrl-select:focus, .ctrl-input:focus { border-color: var(--accent-blue); }
+			.ctrl-select option { background: var(--bg-secondary); }
+
+			.ctrl-range {
+				width: 100%;
+				height: 4px;
+				-webkit-appearance: none;
+				appearance: none;
+				background: var(--bg-hover);
+				border-radius: 2px;
+				outline: none;
+			}
+			.ctrl-range::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				width: 12px;
+				height: 12px;
+				border-radius: 50%;
+				background: var(--accent-blue);
+				cursor: pointer;
+				border: 2px solid var(--bg-primary);
+			}
+
+			.ctrl-toggle-group {
+				display: flex;
+				border: 1px solid var(--border);
+				border-radius: 4px;
+				overflow: hidden;
+			}
+			.ctrl-toggle {
+				flex: 1;
+				padding: 5px 0;
+				font-size: 11px;
+				font-family: 'Inter', sans-serif;
+				text-align: center;
+				background: var(--bg-primary);
+				color: var(--text-secondary);
+				border: none;
+				cursor: pointer;
+				transition: all 0.15s;
+			}
+			.ctrl-toggle + .ctrl-toggle { border-left: 1px solid var(--border); }
+			.ctrl-toggle.active { background: var(--accent-blue-dim); color: #fff; }
+
+			.ctrl-color-input {
+				width: 100%;
+				height: 28px;
+				border: 1px solid var(--border);
+				border-radius: 4px;
+				cursor: pointer;
+				background: none;
+				padding: 2px;
+			}
+			.color-presets {
+				display: grid;
+				grid-template-columns: repeat(8, 1fr);
+				gap: 3px;
+				margin-top: 6px;
+			}
+			.color-swatch {
+				aspect-ratio: 1;
+				border-radius: 3px;
+				border: 1px solid var(--border);
+				cursor: pointer;
+				transition: transform 0.1s;
+			}
+			.color-swatch:hover { transform: scale(1.15); }
+
+			/* Buttons */
+			.btn-action {
+				width: 100%;
+				padding: 8px 12px;
+				font-size: 12px;
+				font-weight: 500;
+				font-family: 'Inter', sans-serif;
+				border: none;
+				border-radius: 5px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 6px;
+				transition: all 0.15s;
+			}
+			.btn-action:disabled { opacity: 0.35; cursor: not-allowed; }
+			.btn-action .material-icons-outlined { font-size: 16px; }
+
+			.btn-primary { background: var(--accent-blue); color: #fff; }
+			.btn-primary:hover:not(:disabled) { background: #5a8aff; }
+
+			.btn-danger { background: var(--accent-red); color: #fff; }
+			.btn-danger:hover:not(:disabled) { background: #ff5a6e; }
+
+			.btn-outline {
+				background: transparent;
+				color: var(--text-secondary);
+				border: 1px solid var(--border);
+			}
+			.btn-outline:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+
+			.btn-ghost {
+				background: transparent;
+				color: var(--text-secondary);
+				border: none;
+				padding: 4px;
+				border-radius: 4px;
+			}
+			.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+			.btn-sm {
+				padding: 5px 10px;
+				font-size: 11px;
+			}
+
+			/* Progress */
+			.progress-bar {
+				width: 100%;
+				height: 3px;
+				background: var(--bg-hover);
+				border-radius: 2px;
+				overflow: hidden;
+				margin-top: 8px;
+			}
+			.progress-fill {
+				height: 100%;
+				background: var(--accent-red);
+				border-radius: 2px;
+				transition: width 0.3s;
+			}
+
+			/* Center Area */
+			.center-area {
+				flex: 1;
+				min-width: 0;
+				display: flex;
+				flex-direction: column;
+				background: var(--bg-primary);
+				overflow: hidden;
+			}
+
+			/* Viewport */
+			.viewport-wrapper {
+				flex: 1;
+				min-height: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				padding: 12px;
+				position: relative;
+				overflow: hidden;
+				background: repeating-conic-gradient(#15151f 0% 25%, #111118 0% 50%) 50% / 20px 20px;
+			}
+			.viewport {
+				position: relative;
+				aspect-ratio: 16/9;
+				width: 100%;
+				max-height: 100%;
+				border-radius: 4px;
+				overflow: hidden;
+				box-shadow: 0 0 0 1px var(--border), 0 8px 32px rgba(0,0,0,0.4);
+			}
+			.viewport canvas {
+				display: block;
+				width: 100% !important;
+				height: 100% !important;
+			}
+			.viewport-overlay {
+				position: absolute;
+				top: 8px;
+				right: 8px;
+				background: rgba(0,0,0,0.6);
+				backdrop-filter: blur(8px);
+				border-radius: 4px;
+				padding: 5px 8px;
+				font-size: 10px;
+				font-family: 'JetBrains Mono', monospace;
+				line-height: 1.5;
+			}
+			.viewport-overlay span { color: var(--text-muted); }
+
+			/* Timeline */
+			.timeline-panel {
+				background: var(--bg-secondary);
+				border-top: 1px solid var(--border);
+				flex-shrink: 0;
+			}
+			.timeline-toolbar {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 6px 12px;
+				border-bottom: 1px solid var(--border-subtle);
+			}
+			.timeline-toolbar-left {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			}
+			.timeline-title {
+				font-size: 11px;
+				font-weight: 600;
+				color: var(--text-primary);
+			}
+			.timeline-badge {
+				font-size: 9px;
+				font-family: 'JetBrains Mono', monospace;
+				color: var(--text-muted);
+				background: var(--bg-primary);
+				padding: 1px 6px;
+				border-radius: 3px;
+			}
+			.timeline-toolbar-right {
+				display: flex;
+				align-items: center;
+				gap: 2px;
+			}
+			.timeline-toolbar-right .sep {
+				width: 1px;
+				height: 14px;
+				background: var(--border);
+				margin: 0 4px;
+			}
+			.timeline-body { padding: 8px 12px 22px; }
+
+			.timeline-track {
+				position: relative;
+				height: 40px;
+				background: var(--bg-primary);
+				border: 1px solid var(--border-subtle);
+				border-radius: 4px;
+				cursor: crosshair;
+				overflow: visible;
+				user-select: none;
+				-webkit-user-select: none;
+			}
+			.timeline-ruler {
+				position: absolute;
+				bottom: -14px;
+				left: 0;
+				right: 0;
+				display: flex;
+				justify-content: space-between;
+				padding: 0 2px;
+				font-size: 9px;
+				font-family: 'JetBrains Mono', monospace;
+				color: var(--text-muted);
+			}
+			.timeline-gridlines {
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				display: flex;
+			}
+			.timeline-gridline {
+				flex: 1;
+				border-right: 1px solid var(--border-subtle);
+			}
+			.timeline-gridline:last-child { border-right: none; }
+
+			.playhead {
+				position: absolute;
+				width: 2px;
+				height: calc(100% + 6px);
+				background: var(--accent-red);
+				top: -3px;
+				z-index: 20;
+				pointer-events: none;
+				border-radius: 1px;
+			}
+			.playhead::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: -3px;
+				width: 8px;
+				height: 8px;
+				background: var(--accent-red);
+				border-radius: 2px;
+				transform: rotate(45deg);
+			}
+
+			.keyframe-dot {
+				position: absolute;
+				width: 10px;
+				height: 10px;
+				border-radius: 2px;
+				background: var(--accent-amber);
+				top: 50%;
+				transform: translate(-50%, -50%) rotate(45deg);
+				cursor: grab;
+				z-index: 10;
+				transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+				border: 1.5px solid rgba(255,255,255,0.3);
+			}
+			.keyframe-dot:hover { transform: translate(-50%, -50%) rotate(45deg) scale(1.3); }
+			.keyframe-dot:active { cursor: grabbing; }
+			.keyframe-dot.selected {
+				background: var(--accent-blue);
+				border-color: #fff;
+				box-shadow: 0 0 8px rgba(74,125,255,0.4);
+			}
+			.keyframe-dot.locked {
+				background: var(--accent-cyan);
+				cursor: default;
+			}
+			.keyframe-dot.locked:hover { transform: translate(-50%, -50%) rotate(45deg); }
+			.timeline-track.scrubbing { cursor: col-resize; }
+			body.scrubbing, body.scrubbing * { cursor: col-resize !important; user-select: none !important; }
+
+			.kf-detail {
+				margin-top: 18px;
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr;
+				gap: 8px;
+				background: var(--bg-primary);
+				border-radius: 4px;
+				padding: 6px 8px;
+				font-size: 10px;
+				font-family: 'JetBrains Mono', monospace;
+			}
+			.kf-detail-label { color: var(--text-muted); font-family: 'Inter', sans-serif; font-size: 9px; }
+
+			/* Log Panel */
+			.log-panel {
+				width: 240px;
+				background: var(--bg-secondary);
+				border-left: 1px solid var(--border);
+				display: flex;
+				flex-direction: column;
+				flex-shrink: 0;
+			}
+			.log-header {
+				padding: 8px 10px;
+				border-bottom: 1px solid var(--border);
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				flex-shrink: 0;
+			}
+			.log-header-title {
+				font-size: 11px;
+				font-weight: 600;
+				display: flex;
+				align-items: center;
+				gap: 5px;
+			}
+			.log-header-title .material-icons-outlined { font-size: 14px; color: var(--accent-amber); }
+			.log-body {
+				flex: 1;
+				overflow-y: auto;
+				padding: 4px;
+				font-family: 'JetBrains Mono', monospace;
+				font-size: 10px;
+				line-height: 1.5;
+				scrollbar-width: thin;
+				scrollbar-color: var(--bg-hover) transparent;
+			}
+			.log-body::-webkit-scrollbar { width: 4px; }
+			.log-body::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 2px; }
+			.log-entry {
+				padding: 2px 4px;
+				border-radius: 2px;
+			}
+			.log-entry:hover { background: var(--bg-tertiary); }
+			.log-ts { color: var(--text-muted); margin-right: 4px; }
+			.log-event { color: var(--accent-blue); }
+			.log-data { color: var(--accent-purple); }
+			.log-error { color: var(--accent-red); }
+			.log-success { color: var(--accent-green); }
+			.log-empty { color: var(--text-muted); text-align: center; padding: 20px 8px; font-family: 'Inter', sans-serif; font-size: 11px; }
+
+			/* Framing buttons grid */
+			.framing-grid {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 4px;
+			}
+		</style>
+	</head>
+	<body x-data="mediaCaptureUI()" x-init="init()">
+		<!-- Top Bar -->
+		<div class="topbar">
+			<a href="index.html" class="topbar-back">
+				<span class="material-icons-outlined">arrow_back</span> Tests
+			</a>
+			<div class="topbar-sep"></div>
+			<span class="topbar-brand">Media Capture Studio</span>
+			<div class="topbar-spacer"></div>
+			<button class="btn-action btn-outline btn-sm" @click="addSchematic" style="width:auto;">
+				<span class="material-icons-outlined" style="font-size:14px;">add</span> Load Schematic
+			</button>
+			<div class="status-badge" :class="rendererReady ? '' : 'pending'"
+				x-text="rendererReady ? 'Ready' : 'Init...'"></div>
+		</div>
+
+		<!-- Main Layout -->
+		<div class="main-layout">
+			<!-- Left Side Panel -->
+			<div class="side-panel">
+				<!-- Mode Tabs -->
+				<div class="mode-tabs">
+					<button class="mode-tab" :class="activeMode === 'screenshot' ? 'active' : ''" @click="setMode('screenshot')">
+						<span class="material-icons-outlined">photo_camera</span> Screenshot
+					</button>
+					<button class="mode-tab" :class="activeMode === 'video' ? 'active' : ''" @click="setMode('video')">
+						<span class="material-icons-outlined">videocam</span> Video
+					</button>
+					<button class="mode-tab" :class="activeMode === 'export' ? 'active' : ''" @click="setMode('export')">
+						<span class="material-icons-outlined">view_in_ar</span> Export
+					</button>
+				</div>
+
+				<div class="panel-scroll">
+					<!-- ========== SCREENSHOT MODE ========== -->
+					<template x-if="activeMode === 'screenshot'">
+						<div>
+							<div class="panel-section">
+								<div class="panel-section-title">Presets</div>
+								<!-- Built-in presets -->
+								<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px;">
+									<template x-for="bp in builtinPresets" :key="bp.name">
+										<button class="btn-action btn-outline btn-sm" style="width:auto;padding:3px 8px;font-size:10px;"
+											@click="applyPreset(bp.config)" x-text="bp.name"></button>
+									</template>
+								</div>
+								<!-- User presets -->
+								<template x-if="presets.length > 0">
+									<div style="margin-bottom:8px;">
+										<template x-for="(p, i) in presets" :key="p.name">
+											<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
+												<button class="btn-action btn-outline btn-sm" style="flex:1;font-size:10px;padding:3px 8px;"
+													@click="applyPreset(p.config)" x-text="p.name"></button>
+												<button class="btn-ghost" @click="deletePreset(i)" title="Delete" style="flex-shrink:0;">
+													<span class="material-icons-outlined" style="font-size:12px;">close</span>
+												</button>
+											</div>
+										</template>
+									</div>
+								</template>
+								<!-- Save current as preset -->
+								<div style="display:flex;gap:4px;">
+									<input class="ctrl-input" type="text" x-model="presetName" placeholder="Preset name..."
+										style="flex:1;font-size:10px;" @keydown.enter="savePreset()" />
+									<button class="btn-action btn-outline btn-sm" style="width:auto;white-space:nowrap;"
+										@click="savePreset()" :disabled="!presetName.trim()">
+										<span class="material-icons-outlined" style="font-size:12px;">save</span> Save
+									</button>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Auto Thumbnail</div>
+								<div class="ctrl-group" style="display:flex;align-items:center;justify-content:space-between;">
+									<span style="font-size:11px;color:var(--text-secondary);">Generate on load</span>
+									<input type="checkbox" x-model="autoThumbnail.enabled"
+										style="accent-color:var(--accent-blue);width:14px;height:14px;" />
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Preset</div>
+									<select class="ctrl-select" x-model="autoThumbnail.presetName" style="font-size:10px;">
+										<template x-for="bp in builtinPresets" :key="bp.name">
+											<option :value="bp.name" x-text="bp.name"></option>
+										</template>
+										<template x-for="p in presets" :key="'u_'+p.name">
+											<option :value="p.name" x-text="p.name + ' (custom)'"></option>
+										</template>
+									</select>
+								</div>
+								<button class="btn-action btn-outline btn-sm" @click="generateAutoThumbnail()"
+									:disabled="!rendererReady" style="margin-bottom:6px;">
+									<span class="material-icons-outlined" style="font-size:14px;">auto_awesome</span> Generate Now
+								</button>
+								<div x-show="lastThumbnailUrl" style="margin-top:4px;">
+									<img :src="lastThumbnailUrl" style="width:100%;border-radius:4px;border:1px solid var(--border);background:repeating-conic-gradient(#1a1a26 0% 25%, #15151f 0% 50%) 50% / 8px 8px;" />
+									<button class="btn-action btn-outline btn-sm" style="margin-top:4px;"
+										@click="() => { const a = document.createElement('a'); a.href = lastThumbnailUrl; a.download = 'thumbnail.webp'; a.click(); }">
+										<span class="material-icons-outlined" style="font-size:14px;">download</span> Download
+									</button>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Output</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Format</div>
+									<select class="ctrl-select" x-model="screenshot.format">
+										<option value="image/png">PNG (lossless, transparency)</option>
+										<option value="image/jpeg">JPEG (smaller, no alpha)</option>
+										<option value="image/webp">WebP (small, alpha support)</option>
+									</select>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Resolution</div>
+									<select class="ctrl-select" x-model="screenshot.preset" @change="applyScreenshotPreset()">
+										<option value="1080p">1080p (1920 x 1080)</option>
+										<option value="1440p">1440p (2560 x 1440)</option>
+										<option value="4k">4K (3840 x 2160)</option>
+										<option value="square_1k">Square 1K</option>
+										<option value="square_2k">Square 2K</option>
+										<option value="custom">Custom</option>
+									</select>
+								</div>
+								<div class="ctrl-group" x-show="screenshot.preset === 'custom'" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+									<div>
+										<div class="ctrl-label">Width</div>
+										<input class="ctrl-input" type="number" x-model.number="screenshot.width" min="1" />
+									</div>
+									<div>
+										<div class="ctrl-label">Height</div>
+										<input class="ctrl-input" type="number" x-model.number="screenshot.height" min="1" />
+									</div>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Quality <span class="ctrl-value" x-text="Math.round(screenshot.quality*100)+'%'"></span></div>
+									<input class="ctrl-range" type="range" min="0.1" max="1" step="0.05" x-model.number="screenshot.quality" />
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Background</div>
+								<div class="ctrl-group">
+									<select class="ctrl-select" x-model="background.mode" @change="applyBackground()">
+										<option value="hdri">HDRI Environment</option>
+										<option value="solid">Solid Color</option>
+										<option value="image">Image</option>
+										<option value="transparent">Transparent</option>
+									</select>
+								</div>
+								<div class="ctrl-group" x-show="background.mode === 'hdri'">
+									<div class="ctrl-label">HDRI Path</div>
+									<input class="ctrl-input" type="text" x-model="background.hdriPath" />
+									<button class="btn-action btn-outline btn-sm" style="margin-top:4px;" @click="applyBackground()">
+										<span class="material-icons-outlined" style="font-size:14px;">refresh</span> Reload
+									</button>
+								</div>
+								<div x-show="background.mode === 'solid'">
+									<input class="ctrl-color-input" type="color" x-model="background.color" @input="applyBackground()" />
+									<div class="color-presets">
+										<template x-for="c in background.presetColors" :key="c.value">
+											<div class="color-swatch" :style="'background:'+c.value" :title="c.name"
+												@click="background.color = c.value; applyBackground()"></div>
+										</template>
+									</div>
+								</div>
+								<div x-show="background.mode === 'image'">
+									<button class="btn-action btn-outline btn-sm" @click="uploadBackgroundImage()">
+										<span class="material-icons-outlined" style="font-size:14px;">image</span> Upload Image
+									</button>
+									<div x-show="background.imagePath" style="font-size:10px;color:var(--text-muted);margin-top:4px;" x-text="background.imagePath"></div>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Camera</div>
+								<!-- Mode toggle -->
+								<div class="ctrl-group">
+									<div class="ctrl-label">Mode</div>
+									<div class="ctrl-toggle-group">
+										<button class="ctrl-toggle" :class="cameraInfo !== 'isometric' ? 'active' : ''"
+											@click="switchToPerspective()">Perspective</button>
+										<button class="ctrl-toggle" :class="cameraInfo === 'isometric' ? 'active' : ''"
+											@click="switchToIsometric()">Isometric</button>
+									</div>
+								</div>
+								<!-- FOV (perspective only) -->
+								<div class="ctrl-group" x-show="cameraInfo !== 'isometric'">
+									<div class="ctrl-label">Field of View <span class="ctrl-value" x-text="camera.fov + '°'"></span></div>
+									<input class="ctrl-range" type="range" min="20" max="120" step="1"
+										x-model.number="camera.fov" @input="setFov(camera.fov)" />
+								</div>
+								<!-- Angle snaps -->
+								<div class="ctrl-group">
+									<div class="ctrl-label">Snap Angle</div>
+									<!-- Perspective angles -->
+									<div x-show="cameraInfo !== 'isometric'" style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;">
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('front')">Front</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('back')">Back</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('left')">Left</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('right')">Right</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('top')">Top</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('bottom')">Bottom</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;grid-column:span 2;"
+											@click="snapCameraAngle('3/4')">3/4 View</button>
+									</div>
+									<!-- Isometric angles -->
+									<div x-show="cameraInfo === 'isometric'" style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;">
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-ne')" title="Northeast">NE</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-nw')" title="Northwest">NW</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-se')" title="Southeast">SE</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-sw')" title="Southwest">SW</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-front')">Front</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-right')">Right</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-back')">Back</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;"
+											@click="snapCameraAngle('iso-left')">Left</button>
+										<button class="btn-action btn-outline btn-sm" style="font-size:9px;padding:3px 0;grid-column:span 4;"
+											@click="snapCameraAngle('iso-top')">Top Down</button>
+									</div>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Framing</div>
+								<div class="framing-grid">
+									<button class="btn-action btn-outline btn-sm" @click="frameFit()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">fit_screen</span> Fit
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameFitInstant()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">center_focus_strong</span> Snap
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameZoomOrbit()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">zoom_in</span> Orbit
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameLookAtCenter()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">gps_fixed</span> Center
+									</button>
+								</div>
+							</div>
+							<div class="panel-section" style="border-bottom:none;">
+								<button class="btn-action btn-primary" @click="takeScreenshot()" :disabled="!rendererReady">
+									<span class="material-icons-outlined">photo_camera</span> Capture Screenshot
+								</button>
+							</div>
+						</div>
+					</template>
+
+					<!-- ========== VIDEO MODE ========== -->
+					<template x-if="activeMode === 'video'">
+						<div>
+							<div class="panel-section">
+								<div class="panel-section-title">Recording</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Duration <span class="ctrl-value" x-text="recording.duration+'s'"></span></div>
+									<input class="ctrl-range" type="range" min="1" max="30" step="1" x-model.number="recording.duration"
+										style="accent-color:var(--accent-red);" />
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Resolution</div>
+									<select class="ctrl-select" x-model="recording.preset" @change="applyRecordingPreset()">
+										<option value="1080p">1080p (1920 x 1080)</option>
+										<option value="1440p">1440p (2560 x 1440)</option>
+										<option value="4k">4K (3840 x 2160)</option>
+									</select>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Frame Rate</div>
+									<div class="ctrl-toggle-group">
+										<button class="ctrl-toggle" :class="recording.fps===30?'active':''" @click="recording.fps=30">30 fps</button>
+										<button class="ctrl-toggle" :class="recording.fps===60?'active':''" @click="recording.fps=60">60 fps</button>
+									</div>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Encoding</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Frame Format</div>
+									<div class="ctrl-toggle-group">
+										<button class="ctrl-toggle" :class="recording.useJpeg?'active':''" @click="recording.useJpeg=true">JPEG</button>
+										<button class="ctrl-toggle" :class="!recording.useJpeg?'active':''" @click="recording.useJpeg=false">PNG</button>
+									</div>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Preset</div>
+									<select class="ctrl-select" x-model="recording.encodingPreset">
+										<option value="ultrafast">Ultra Fast</option>
+										<option value="superfast">Super Fast</option>
+										<option value="veryfast">Very Fast</option>
+										<option value="faster">Faster</option>
+										<option value="fast">Fast</option>
+										<option value="medium">Medium</option>
+									</select>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">CRF <span class="ctrl-value" x-text="recording.crf"></span></div>
+									<input class="ctrl-range" type="range" min="18" max="28" step="1" x-model.number="recording.crf" />
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Background</div>
+								<div class="ctrl-group">
+									<select class="ctrl-select" x-model="background.mode" @change="applyBackground()">
+										<option value="hdri">HDRI Environment</option>
+										<option value="solid">Solid Color</option>
+										<option value="image">Image</option>
+										<option value="transparent">Transparent</option>
+									</select>
+								</div>
+								<div x-show="background.mode === 'solid'">
+									<input class="ctrl-color-input" type="color" x-model="background.color" @input="applyBackground()" />
+									<div class="color-presets">
+										<template x-for="c in background.presetColors" :key="c.value">
+											<div class="color-swatch" :style="'background:'+c.value" :title="c.name"
+												@click="background.color = c.value; applyBackground()"></div>
+										</template>
+									</div>
+								</div>
+								<div x-show="background.mode === 'image'">
+									<button class="btn-action btn-outline btn-sm" @click="uploadBackgroundImage()">
+										<span class="material-icons-outlined" style="font-size:14px;">image</span> Upload Image
+									</button>
+									<div x-show="background.imagePath" style="font-size:10px;color:var(--text-muted);margin-top:4px;" x-text="background.imagePath"></div>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Framing</div>
+								<div class="framing-grid">
+									<button class="btn-action btn-outline btn-sm" @click="frameFit()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">fit_screen</span> Fit
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameFitInstant()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">center_focus_strong</span> Snap
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameZoomOrbit()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">zoom_in</span> Orbit
+									</button>
+									<button class="btn-action btn-outline btn-sm" @click="frameLookAtCenter()" :disabled="!rendererReady">
+										<span class="material-icons-outlined" style="font-size:14px;">gps_fixed</span> Center
+									</button>
+								</div>
+							</div>
+							<div class="panel-section">
+								<div class="panel-section-title">Orbit Generator</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Keyframes <span class="ctrl-value" x-text="orbit.keyframeCount"></span></div>
+									<input class="ctrl-range" type="range" min="4" max="36" step="1" x-model.number="orbit.keyframeCount" />
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Padding <span class="ctrl-value" x-text="(orbit.padding * 100).toFixed(0) + '%'"></span></div>
+									<input class="ctrl-range" type="range" min="0" max="0.5" step="0.02" x-model.number="orbit.padding" />
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Height <span class="ctrl-value" x-text="orbit.heightFactor.toFixed(2)"></span></div>
+									<input class="ctrl-range" type="range" min="0.1" max="2" step="0.05" x-model.number="orbit.heightFactor" />
+								</div>
+								<div class="ctrl-group" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+									<div>
+										<div class="ctrl-label">Start</div>
+										<input class="ctrl-input" type="number" x-model.number="orbit.startAngle" min="0" max="360" step="15" />
+									</div>
+									<div>
+										<div class="ctrl-label">End</div>
+										<input class="ctrl-input" type="number" x-model.number="orbit.endAngle" min="0" max="720" step="15" />
+									</div>
+								</div>
+								<button class="btn-action btn-outline btn-sm" @click="useCircularPath()" :disabled="!rendererReady" style="margin-top:4px;">
+									<span class="material-icons-outlined" style="font-size:14px;">360</span> Generate Orbit Keyframes
+								</button>
+							</div>
+							<div class="panel-section" style="border-bottom:none;">
+								<button class="btn-action" :class="isRecording ? 'btn-danger' : 'btn-primary'"
+									@click="toggleRecording()" :disabled="!rendererReady || !ffmpegReady">
+									<span class="material-icons-outlined" x-text="isRecording ? 'stop' : 'fiber_manual_record'"></span>
+									<span x-text="isRecording ? 'Stop' : 'Record'"></span>
+								</button>
+								<div x-show="isRecording || recordingProgress > 0">
+									<div class="progress-bar">
+										<div class="progress-fill" :style="'width:'+recordingProgress+'%'"></div>
+									</div>
+									<div style="font-size:10px;color:var(--text-muted);margin-top:4px;" x-text="recordingStatus"></div>
+								</div>
+							</div>
+						</div>
+					</template>
+
+					<!-- ========== EXPORT MODE ========== -->
+					<template x-if="activeMode === 'export'">
+						<div>
+							<div class="panel-section">
+								<div class="panel-section-title">3D Format</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Format</div>
+									<select class="ctrl-select" x-model="exportOpts.format">
+										<option value="glb">GLB (Binary GLTF)</option>
+										<option value="gltf">GLTF (JSON)</option>
+										<option value="obj">OBJ (Wavefront)</option>
+										<option value="stl">STL (3D Print)</option>
+										<option value="usdz">USDZ (Apple AR)</option>
+									</select>
+								</div>
+								<div class="ctrl-group">
+									<div class="ctrl-label">Quality</div>
+									<select class="ctrl-select" x-model="exportOpts.quality">
+										<option value="low">Low (512px)</option>
+										<option value="medium">Medium (1024px)</option>
+										<option value="high">High (2048px)</option>
+										<option value="ultra">Ultra (4096px)</option>
+									</select>
+								</div>
+								<div class="ctrl-group" style="display:flex;align-items:center;justify-content:space-between;">
+									<span style="font-size:11px;color:var(--text-secondary);">Center at Origin</span>
+									<input type="checkbox" x-model="exportOpts.centerAtOrigin"
+										style="accent-color:var(--accent-blue);width:14px;height:14px;" />
+								</div>
+							</div>
+							<div class="panel-section" style="border-bottom:none;">
+								<button class="btn-action btn-primary" @click="export3D()" :disabled="!rendererReady">
+									<span class="material-icons-outlined">download</span> Export Model
+								</button>
+							</div>
+						</div>
+					</template>
+				</div>
+			</div>
+
+			<!-- Center Area -->
+			<div class="center-area">
+				<!-- Viewport -->
+				<div class="viewport-wrapper">
+					<div class="viewport" :style="'aspect-ratio:' + viewportAspect">
+						<canvas id="canvas"></canvas>
+						<div class="viewport-overlay" x-show="rendererReady">
+							<div><span>cam</span> <span :style="'color:var(--accent-blue)'" x-text="cameraInfo"></span></div>
+							<div><span>pos</span> <span :style="'color:var(--accent-green)'" x-text="cameraPosition"></span></div>
+							<div><span>res</span> <span :style="'color:var(--accent-amber)'" x-text="activeMode==='video' ? recording.width+'x'+recording.height : screenshot.width+'x'+screenshot.height"></span></div>
+							<div x-show="cameraInfo !== 'isometric'"><span>fov</span> <span :style="'color:var(--accent-purple)'" x-text="camera.fov + '°'"></span></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Timeline (video mode only) -->
+				<div class="timeline-panel" x-show="activeMode === 'video'" x-transition>
+					<div class="timeline-toolbar">
+						<div class="timeline-toolbar-left">
+							<span class="timeline-title">Timeline</span>
+							<span class="timeline-badge" x-text="keyframes.length + ' kf'"></span>
+							<select class="ctrl-select" style="width:auto;padding:2px 4px;font-size:10px;" x-model="interpolation" :title="'Interpolation: ' + interpolation">
+								<option value="catmull-rom">Catmull-Rom</option>
+								<option value="smoothstep">Smoothstep</option>
+								<option value="linear">Linear</option>
+								<option value="ease-in">Ease In</option>
+								<option value="ease-out">Ease Out</option>
+								<option value="ease-in-out">Ease In-Out</option>
+							</select>
+						</div>
+						<div class="timeline-toolbar-right">
+							<button class="btn-ghost" @click="addKeyframeAtPlayhead()" :disabled="!rendererReady" title="Add keyframe at playhead">
+								<span class="material-icons-outlined" style="font-size:16px;">add_circle_outline</span>
+							</button>
+							<button class="btn-ghost" @click="removeSelectedKeyframe()" :disabled="selectedKeyframe===null" title="Remove selected">
+								<span class="material-icons-outlined" style="font-size:16px;">remove_circle_outline</span>
+							</button>
+							<div class="sep"></div>
+							<button class="btn-ghost" @click="previewTimeline()" :disabled="keyframes.length < 2" title="Preview">
+								<span class="material-icons-outlined" style="font-size:16px;">play_arrow</span>
+							</button>
+							<button class="btn-ghost" @click="stopPreview()" :disabled="!isPreviewPlaying" title="Stop">
+								<span class="material-icons-outlined" style="font-size:16px;">stop</span>
+							</button>
+							<div class="sep"></div>
+							<button class="btn-ghost" @click="useCircularPath()" :disabled="!rendererReady" title="Auto orbit"
+								style="display:flex;align-items:center;gap:2px;font-size:11px;color:var(--accent-blue);">
+								<span class="material-icons-outlined" style="font-size:16px;">360</span> Orbit
+							</button>
+							<button class="btn-ghost" @click="togglePathVisualization()" :disabled="!rendererReady" title="Toggle path visualization"
+								:style="showPathViz ? 'color:var(--accent-green)' : ''">
+								<span class="material-icons-outlined" style="font-size:16px;">visibility</span>
+							</button>
+							<div class="sep"></div>
+							<button class="btn-ghost" @click="clearKeyframes()" :disabled="keyframes.length===0" title="Clear all">
+								<span class="material-icons-outlined" style="font-size:16px;">delete_outline</span>
+							</button>
+						</div>
+					</div>
+					<div class="timeline-body">
+						<div class="timeline-track"
+							@mousedown="onTimelineMouseDown($event)"
+							@dblclick="addKeyframeAtClick($event)">
+							<div class="timeline-gridlines">
+								<div class="timeline-gridline"></div>
+								<div class="timeline-gridline"></div>
+								<div class="timeline-gridline"></div>
+								<div class="timeline-gridline"></div>
+							</div>
+							<div class="playhead" :style="'left:'+playheadPosition+'%'"></div>
+							<template x-for="(kf, i) in keyframes" :key="i">
+								<div class="keyframe-dot"
+									:class="(selectedKeyframe===i?'selected ':'') + (isLockedKeyframe(i)?'locked':'')"
+									:style="'left:'+kf.position+'%'"
+									@mousedown.stop="!isLockedKeyframe(i) && startKeyframeDrag(i, $event)"
+									@click.stop="selectKeyframe(i)"
+									:title="kf.label + (isLockedKeyframe(i) ? ' (locked)' : '')"></div>
+							</template>
+							<div class="timeline-ruler">
+								<span>0s</span>
+								<span x-text="(recording.duration*0.25).toFixed(1)+'s'"></span>
+								<span x-text="(recording.duration*0.5).toFixed(1)+'s'"></span>
+								<span x-text="(recording.duration*0.75).toFixed(1)+'s'"></span>
+								<span x-text="recording.duration+'s'"></span>
+							</div>
+						</div>
+						<div class="kf-detail" x-show="selectedKeyframe !== null" x-transition style="grid-template-columns: 1fr 1fr 1fr auto;">
+							<div>
+								<div class="kf-detail-label">Position</div>
+								<div style="color:var(--accent-blue)" x-text="selectedKeyframeData?.posText || '-'"></div>
+							</div>
+							<div>
+								<div class="kf-detail-label">Target</div>
+								<div style="color:var(--accent-green)" x-text="selectedKeyframeData?.targetText || '-'"></div>
+							</div>
+							<div>
+								<div class="kf-detail-label">Time</div>
+								<div style="color:var(--accent-amber)" x-text="selectedKeyframeData?.timeText || '-'"></div>
+							</div>
+							<div style="display:flex;align-items:center;">
+								<button class="btn-ghost" @click="updateSelectedKeyframe()" title="Update to current camera position"
+									style="font-size:10px;display:flex;align-items:center;gap:2px;color:var(--accent-cyan);white-space:nowrap;">
+									<span class="material-icons-outlined" style="font-size:14px;">refresh</span> Set
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Right Panel (Log / Resources) -->
+			<div class="log-panel">
+				<!-- Right panel tabs -->
+				<div class="mode-tabs" style="border-bottom:1px solid var(--border);">
+					<button class="mode-tab" :class="rightTab === 'log' ? 'active' : ''" @click="rightTab = 'log'" style="padding:6px 0;">
+						<span class="material-icons-outlined" style="font-size:14px;">terminal</span> Log
+					</button>
+					<button class="mode-tab" :class="rightTab === 'resources' ? 'active' : ''" @click="rightTab = 'resources'; refreshPacks()" style="padding:6px 0;">
+						<span class="material-icons-outlined" style="font-size:14px;">inventory_2</span> Resources
+					</button>
+				</div>
+
+				<!-- Log tab -->
+				<div class="log-body" id="callbackLog" x-show="rightTab === 'log'" style="flex:1;">
+					<template x-for="(entry, i) in callbackLog" :key="i">
+						<div class="log-entry">
+							<span class="log-ts" x-text="entry.time"></span>
+							<span :class="'log-'+entry.type" x-text="entry.message"></span>
+						</div>
+					</template>
+					<div x-show="callbackLog.length === 0" class="log-empty">
+						Events will appear here
+					</div>
+					<div style="padding:4px;border-top:1px solid var(--border);flex-shrink:0;text-align:right;">
+						<button class="btn-ghost" @click="clearLog()" title="Clear log" style="font-size:10px;display:inline-flex;align-items:center;gap:2px;">
+							<span class="material-icons-outlined" style="font-size:12px;">delete_outline</span> Clear
+						</button>
+					</div>
+				</div>
+
+				<!-- Resources tab -->
+				<div x-show="rightTab === 'resources'" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+					<!-- HDRI section -->
+					<div class="panel-section" style="padding:10px;">
+						<div class="panel-section-title">HDRI Background</div>
+						<button class="btn-action btn-outline btn-sm" @click="uploadHdri()" style="margin-bottom:4px;">
+							<span class="material-icons-outlined" style="font-size:14px;">upload_file</span> Upload .hdr
+						</button>
+						<div style="font-size:10px;color:var(--text-muted);word-break:break-all;" x-text="background.hdriPath"></div>
+					</div>
+
+					<!-- Resource packs section -->
+					<div class="panel-section" style="padding:10px;flex:1;">
+						<div class="panel-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+							Resource Packs
+							<button class="btn-ghost" @click="uploadResourcePack()" title="Add pack" style="padding:2px;">
+								<span class="material-icons-outlined" style="font-size:14px;">add</span>
+							</button>
+						</div>
+
+						<!-- Pack list -->
+						<div style="display:flex;flex-direction:column;gap:4px;">
+							<template x-for="pack in resourcePacks" :key="pack.id">
+								<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg-primary);border-radius:4px;border:1px solid var(--border-subtle);">
+									<!-- Icon -->
+									<div style="width:24px;height:24px;border-radius:2px;overflow:hidden;flex-shrink:0;background:var(--bg-tertiary);">
+										<img x-show="pack.icon" :src="pack.icon" style="width:100%;height:100%;image-rendering:pixelated;" />
+										<span x-show="!pack.icon" class="material-icons-outlined" style="font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;width:100%;height:100%;">inventory_2</span>
+									</div>
+									<!-- Info -->
+									<div style="flex:1;min-width:0;">
+										<div style="font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" x-text="pack.name"></div>
+										<div style="font-size:9px;color:var(--text-muted);" x-text="(pack.size / 1024).toFixed(0) + ' KB'"></div>
+									</div>
+									<!-- Toggle -->
+									<input type="checkbox" :checked="pack.enabled" @change="toggleResourcePack(pack.id)"
+										style="accent-color:var(--accent-blue);width:12px;height:12px;flex-shrink:0;" />
+									<!-- Remove -->
+									<button class="btn-ghost" @click="removeResourcePack(pack.id)" title="Remove" style="padding:1px;flex-shrink:0;">
+										<span class="material-icons-outlined" style="font-size:12px;">close</span>
+									</button>
+								</div>
+							</template>
+						</div>
+
+						<div x-show="resourcePacks.length === 0" class="log-empty" style="padding:12px;">
+							No resource packs loaded
+						</div>
+
+						<!-- Actions -->
+						<div style="margin-top:8px;display:flex;gap:4px;" x-show="resourcePacks.length > 0">
+							<button class="btn-action btn-outline btn-sm" style="flex:1;" @click="removeAllResourcePacks()">
+								<span class="material-icons-outlined" style="font-size:12px;">delete_sweep</span> Clear All
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

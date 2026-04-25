@@ -1345,7 +1345,8 @@ export class SchematicRenderer {
 		width?: number;
 		height?: number;
 		quality?: number;
-		format?: "image/png" | "image/jpeg";
+		format?: "image/png" | "image/jpeg" | "image/webp";
+		transparent?: boolean;
 	}): Promise<Blob> {
 		return this.cameraManager.recordingManager.takeScreenshot(options);
 	}

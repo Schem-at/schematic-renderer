@@ -21,13 +21,21 @@ export interface RecordingOptions {
 	onProgress?: (progress: number) => void;
 	onFfmpegProgress?: (progress: number, time: number) => void;
 	onComplete?: (blob: Blob) => void;
+	/**
+	 * Custom camera driver callback. Called before each frame with progress (0-1).
+	 * When provided, the recording loop uses this instead of animateCameraAlongPath.
+	 * Use this to drive the camera with keyframes, custom paths, etc.
+	 */
+	onFrame?: (progress: number) => void;
 }
 
 export interface ScreenshotOptions {
 	width?: number;
 	height?: number;
 	quality?: number;
-	format?: "image/png" | "image/jpeg";
+	format?: "image/png" | "image/jpeg" | "image/webp";
+	/** Capture with transparent background (requires alpha-capable renderer) */
+	transparent?: boolean;
 }
 
 // Frame buffer for batch processing
@@ -95,8 +103,10 @@ export class RecordingManager {
 		const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
 		if (!mainCanvas) return null;
 
-		// Draw to recording canvas
+		// Use 'copy' to replace pixels instead of alpha-blending (prevents frame stacking with transparent sources)
+		this.ctx2d.globalCompositeOperation = "copy";
 		this.ctx2d.drawImage(mainCanvas, 0, 0);
+		this.ctx2d.globalCompositeOperation = "source-over";
 
 		// Get raw pixel data (synchronous and fast)
 		return this.ctx2d.getImageData(0, 0, this.recordingCanvas.width, this.recordingCanvas.height);
@@ -147,8 +157,10 @@ export class RecordingManager {
 		const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
 		if (!mainCanvas) throw new Error("Main canvas not found");
 
-		// Draw directly without clearing (faster for opaque content)
+		// Use 'copy' to replace pixels instead of alpha-blending (prevents frame stacking with transparent sources)
+		this.ctx2d.globalCompositeOperation = "copy";
 		this.ctx2d.drawImage(mainCanvas, 0, 0);
+		this.ctx2d.globalCompositeOperation = "source-over";
 
 		// Use JPEG for video frames - much faster to encode and smaller
 		const mimeType = this.useJpegFrames ? "image/jpeg" : "image/png";
@@ -182,7 +194,9 @@ export class RecordingManager {
 		const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
 		if (!mainCanvas) throw new Error("Main canvas not found");
 
+		this.ctx2d.globalCompositeOperation = "copy";
 		this.ctx2d.drawImage(mainCanvas, 0, 0);
+		this.ctx2d.globalCompositeOperation = "source-over";
 
 		return new Promise<Uint8Array>((resolve, reject) => {
 			this.recordingCanvas.toBlob(
@@ -215,7 +229,8 @@ export class RecordingManager {
 	}
 
 	/**
-	 * Takes a screenshot of the current view
+	 * Takes a screenshot of the current view.
+	 * Supports PNG, JPEG, WebP formats with optional transparency.
 	 */
 	public async takeScreenshot(options: ScreenshotOptions = {}): Promise<Blob> {
 		const {
@@ -223,25 +238,92 @@ export class RecordingManager {
 			height = this.schematicRenderer.renderManager?.renderer.domElement.height || 2160,
 			quality = 0.95,
 			format = "image/png",
+			transparent = false,
 		} = options;
 
-		// Store original settings
+		const renderManager = this.schematicRenderer.renderManager;
+		if (!renderManager) throw new Error("RenderManager not initialized");
+
+		// Enable alpha mode if transparent requested
+		const wasAlpha = renderManager.isAlphaMode();
+		if (transparent && !wasAlpha) {
+			await renderManager.setAlphaMode(true);
+		}
+
 		const tempSettings = await this.setupTemporarySettings(width, height);
+
+		// Also resize composer if active
+		const rm = renderManager as any;
+		if (rm.composer) rm.composer.setSize(width, height);
 
 		await new Promise((resolve) => requestAnimationFrame(resolve));
 		try {
-			// For screenshots, we need to explicitly render since we're not in an animation loop
-			this.schematicRenderer.renderManager?.render();
+			// Render through composer (handles both alpha and opaque paths)
+			if (rm.composer) {
+				rm.composer.render();
+			} else {
+				renderManager.render();
+			}
 
-			// Use PNG capture for screenshots (lossless)
-			const frameData = await this.captureFramePNG(quality);
-			return new Blob([frameData as BlobPart], { type: format });
-		} catch (error) {
-			throw error;
+			if (transparent) {
+				// Capture directly from WebGL canvas to preserve alpha channel
+				const glRenderer = renderManager.renderer as THREE.WebGLRenderer;
+				const captureFormat = format === "image/jpeg" ? "image/png" : format; // JPEG can't do alpha
+				const blob = await new Promise<Blob>((resolve, reject) => {
+					glRenderer.domElement.toBlob(
+						(b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+						captureFormat,
+						captureFormat === "image/png" ? undefined : quality
+					);
+				});
+				return blob;
+			} else {
+				// Standard capture path
+				const frameData = await this.captureFramePNG(quality);
+				const intermediateBlob = new Blob([frameData as BlobPart], { type: "image/png" });
+
+				// Re-encode to WebP if requested (canvas toBlob handles it natively)
+				if (format === "image/webp") {
+					return this.reencodeBlob(intermediateBlob, "image/webp", quality);
+				}
+				return new Blob([frameData as BlobPart], { type: format });
+			}
 		} finally {
-			// Restore original settings
+			// Restore composer size
+			if (rm.composer) rm.composer.setSize(tempSettings.width, tempSettings.height);
 			this.restoreSettings(tempSettings);
+
+			// Restore alpha mode
+			if (transparent && !wasAlpha) {
+				await renderManager.setAlphaMode(false);
+			}
 		}
+	}
+
+	/** Re-encode a blob to a different image format via offscreen canvas */
+	private async reencodeBlob(source: Blob, targetType: string, quality: number): Promise<Blob> {
+		const img = new Image();
+		const url = URL.createObjectURL(source);
+		await new Promise<void>((resolve, reject) => {
+			img.onload = () => resolve();
+			img.onerror = reject;
+			img.src = url;
+		});
+		URL.revokeObjectURL(url);
+
+		const canvas = document.createElement("canvas");
+		canvas.width = img.width;
+		canvas.height = img.height;
+		const ctx = canvas.getContext("2d")!;
+		ctx.drawImage(img, 0, 0);
+
+		return new Promise<Blob>((resolve, reject) => {
+			canvas.toBlob(
+				(b) => (b ? resolve(b) : reject(new Error("Re-encode failed"))),
+				targetType,
+				quality
+			);
+		});
 	}
 
 	private async setupTemporarySettings(width: number, height: number) {
@@ -349,7 +431,13 @@ export class RecordingManager {
 			onProgress,
 			onFfmpegProgress,
 			onComplete,
+			onFrame,
 		} = options;
+
+		// If custom camera driver provided, use the self-contained recording path
+		if (onFrame) {
+			return this.startRecordingWithFrameCallback(duration, options);
+		}
 
 		// Configure frame capture
 		this.useJpegFrames = useJpegFrames;
@@ -635,6 +723,156 @@ export class RecordingManager {
 		console.log("Recording complete");
 		this.isRecording = false;
 		this.cleanup();
+	}
+
+	/**
+	 * Recording path using a custom onFrame callback for camera control.
+	 * Captures frames synchronously in a loop, then encodes with FFmpeg.
+	 */
+	private async startRecordingWithFrameCallback(
+		duration: number,
+		options: RecordingOptions
+	): Promise<void> {
+		const {
+			width = 1920,
+			height = 1080,
+			frameRate = 60,
+			useJpegFrames = true,
+			jpegQuality = 0.92,
+			encodingPreset = "veryfast",
+			crf = 20,
+			onStart,
+			onProgress,
+			onFfmpegProgress,
+			onComplete,
+			onFrame,
+		} = options;
+
+		if (!this.ffmpeg || !onFrame) return;
+
+		this.useJpegFrames = useJpegFrames;
+		this.jpegQuality = jpegQuality;
+
+		try {
+			await this.setupRecording(width, height);
+
+			// Resize composer if active
+			const rm = this.schematicRenderer.renderManager as any;
+			if (rm?.composer) rm.composer.setSize(width, height);
+
+			this.frameCount = 0;
+			this.isRecording = true;
+			if (onStart) onStart();
+
+			const totalFrames = duration * frameRate;
+			const ext = useJpegFrames ? "jpg" : "png";
+			const captureCanvas = document.createElement("canvas");
+			captureCanvas.width = width;
+			captureCanvas.height = height;
+			const ctx = captureCanvas.getContext("2d", { willReadFrequently: true })!;
+
+			const frames: { data: Uint8Array; index: number }[] = [];
+
+			for (let frame = 0; frame < totalFrames; frame++) {
+				if (!this.isRecording) break;
+
+				const progress = frame / (totalFrames - 1);
+				onFrame(progress);
+
+				// Render
+				if (rm?.composer) {
+					rm.composer.render();
+				} else {
+					this.schematicRenderer.renderManager?.render();
+				}
+
+				// Capture
+				const mainCanvas = this.schematicRenderer.renderManager?.renderer.domElement;
+				if (mainCanvas) {
+					ctx.globalCompositeOperation = "copy";
+					ctx.drawImage(mainCanvas, 0, 0);
+					ctx.globalCompositeOperation = "source-over";
+				}
+
+				const blob = await new Promise<Blob>((resolve) => {
+					captureCanvas.toBlob(
+						(b) => resolve(b!),
+						useJpegFrames ? "image/jpeg" : "image/png",
+						useJpegFrames ? jpegQuality : 1.0
+					);
+				});
+				const buffer = await blob.arrayBuffer();
+				frames.push({ data: new Uint8Array(buffer), index: frame });
+
+				if (onProgress) onProgress(frame / totalFrames);
+
+				// Yield to keep UI responsive
+				if (frame % 5 === 0) await new Promise((r) => setTimeout(r, 0));
+			}
+
+			// Restore renderer
+			if (rm?.composer && this.originalSettings) {
+				rm.composer.setSize(this.originalSettings.width, this.originalSettings.height);
+			}
+			this.cleanup();
+
+			if (!this.isRecording && frames.length < totalFrames) {
+				console.log("Recording cancelled");
+				return;
+			}
+
+			// Write frames to FFmpeg
+			for (let i = 0; i < frames.length; i++) {
+				const filename = `frame${frames[i].index.toString().padStart(6, "0")}.${ext}`;
+				await this.ffmpeg!.writeFile(filename, frames[i].data);
+				if (onFfmpegProgress && i % 30 === 0) {
+					onFfmpegProgress(50 + (i / frames.length) * 25, 0);
+				}
+			}
+
+			// Encode
+			if (onFfmpegProgress) onFfmpegProgress(75, 0);
+			await this.ffmpeg!.exec([
+				"-framerate",
+				frameRate.toString(),
+				"-pattern_type",
+				"sequence",
+				"-start_number",
+				"0",
+				"-i",
+				`frame%06d.${ext}`,
+				"-c:v",
+				"libx264",
+				"-preset",
+				encodingPreset,
+				"-threads",
+				"0",
+				"-crf",
+				crf.toString(),
+				"-pix_fmt",
+				"yuv420p",
+				"-movflags",
+				"+faststart",
+				"output.mp4",
+			]);
+
+			const data = await this.ffmpeg!.readFile("output.mp4");
+			const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
+			const videoBlob = new Blob([bytes as BlobPart], { type: "video/mp4" });
+
+			if (onFfmpegProgress) onFfmpegProgress(100, 0);
+			if (onComplete) onComplete(videoBlob);
+
+			// Cleanup FFmpeg files
+			this.cleanupFramesAsync(frames.length, ext);
+			await this.ffmpeg!.deleteFile("output.mp4").catch(() => {});
+
+			this.isRecording = false;
+		} catch (error) {
+			this.cleanup();
+			this.isRecording = false;
+			throw error;
+		}
 	}
 
 	public dispose(): void {

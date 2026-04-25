@@ -868,7 +868,7 @@ export class SchematicExporter {
 	 * to make each pixel a larger block, preserving the crisp look
 	 */
 	private upscaleTextureForUSDZ(texture: THREE.Texture, scale: number = 8): THREE.Texture {
-		const image = texture.image;
+		const image = texture.image as HTMLImageElement;
 		if (!image) return texture;
 
 		// Create a canvas to upscale the texture

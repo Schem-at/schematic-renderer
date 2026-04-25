@@ -2027,4 +2027,141 @@ export class CameraManager extends EventEmitter {
 		this.cameras.clear();
 		this.removeAllListeners(); // Clear event listeners from EventEmitter
 	}
+
+	// ===== CAMERA SNAP API =====
+
+	/** Preset angle definitions */
+	private static readonly SNAP_ANGLES = {
+		// Perspective angles (direction vector from center to camera)
+		front: { dir: [0, 0, 1] },
+		back: { dir: [0, 0, -1] },
+		right: { dir: [1, 0, 0] },
+		left: { dir: [-1, 0, 0] },
+		top: { dir: [0, 1, 0] },
+		bottom: { dir: [0, -1, 0] },
+		"3/4": { dir: [1, 0.7, 1] },
+		// Isometric angles (pitch, yaw in degrees)
+		"iso-ne": { iso: [35.264, 45] },
+		"iso-nw": { iso: [35.264, 135] },
+		"iso-sw": { iso: [35.264, 225] },
+		"iso-se": { iso: [35.264, 315] },
+		"iso-top": { iso: [89, 45] },
+		"iso-front": { iso: [10, 0] },
+		"iso-right": { iso: [10, 90] },
+		"iso-back": { iso: [10, 180] },
+		"iso-left": { iso: [10, 270] },
+	} as const;
+
+	/**
+	 * Snap the camera to a predefined viewing angle.
+	 * In perspective mode: positions camera along the given direction at current distance.
+	 * In isometric mode: sets pitch/yaw angles and refocuses.
+	 * @param angle - Named angle preset
+	 * @param refocus - Whether to refocus on schematics (default true)
+	 */
+	public snapToAngle(angle: string, refocus: boolean = true): void {
+		const preset = (CameraManager.SNAP_ANGLES as any)[angle];
+		if (!preset) {
+			console.warn(`Unknown snap angle: ${angle}`);
+			return;
+		}
+
+		if ("iso" in preset) {
+			this.setIsometricAngles(preset.iso[0], preset.iso[1], refocus);
+		} else if ("dir" in preset) {
+			const target = this.getControlsTarget();
+			const cam = this.activeCamera.camera;
+			const dist = cam.position.distanceTo(target);
+
+			const dir = new THREE.Vector3(preset.dir[0], preset.dir[1], preset.dir[2]).normalize();
+			const pos = target.clone().add(dir.multiplyScalar(dist));
+
+			cam.position.copy(pos);
+			cam.lookAt(target);
+
+			const controls = this.controls.get(this.activeControlKey);
+			if (controls && "target" in controls) {
+				controls.target.copy(target);
+				controls.update?.();
+			}
+
+			if (refocus) {
+				this.focusOnSchematics({ padding: 0.05, animationDuration: 0 });
+			}
+		}
+	}
+
+	/** Get the current orbit controls target */
+	private getControlsTarget(): THREE.Vector3 {
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls && "target" in controls) {
+			return controls.target.clone();
+		}
+		return new THREE.Vector3(0, 0, 0);
+	}
+
+	/**
+	 * Get the list of available snap angle names.
+	 */
+	public static getSnapAngles(): string[] {
+		return Object.keys(CameraManager.SNAP_ANGLES);
+	}
+
+	// ===== PUBLIC FRAMING API =====
+
+	/**
+	 * Calculate the minimum camera distance to frame a bounding box from a given direction.
+	 * Uses the current camera's FOV and the canvas aspect ratio.
+	 * @param direction - Unit vector FROM center TO camera
+	 * @param boundingBox - The bounding box to frame
+	 * @param padding - Padding factor (0.05 = 5% padding)
+	 * @returns The minimum distance from center
+	 */
+	public calculateFramingDistance(
+		direction: THREE.Vector3,
+		boundingBox: THREE.Box3,
+		padding: number = 0.05
+	): number {
+		const cam = this.activeCamera.camera as THREE.PerspectiveCamera;
+		const fov = THREE.MathUtils.degToRad(cam.fov);
+		const aspect = this.schematicRenderer.canvas.width / this.schematicRenderer.canvas.height;
+		const tanFov2 = Math.tan(fov / 2);
+		const paddingFactor = 1 + padding * 2;
+
+		const size = boundingBox.getSize(new THREE.Vector3());
+		const halfSize = size.clone().multiplyScalar(0.5);
+
+		// Build camera basis from direction
+		const worldUp = new THREE.Vector3(0, 1, 0);
+		const camRight = new THREE.Vector3().crossVectors(worldUp, direction).normalize();
+		if (camRight.lengthSq() < 0.001) camRight.set(1, 0, 0);
+		const camUp = new THREE.Vector3().crossVectors(direction, camRight).normalize();
+
+		// Project all 8 corners onto the camera's view plane
+		const corners = [
+			new THREE.Vector3(halfSize.x, halfSize.y, halfSize.z),
+			new THREE.Vector3(halfSize.x, halfSize.y, -halfSize.z),
+			new THREE.Vector3(halfSize.x, -halfSize.y, halfSize.z),
+			new THREE.Vector3(halfSize.x, -halfSize.y, -halfSize.z),
+			new THREE.Vector3(-halfSize.x, halfSize.y, halfSize.z),
+			new THREE.Vector3(-halfSize.x, halfSize.y, -halfSize.z),
+			new THREE.Vector3(-halfSize.x, -halfSize.y, halfSize.z),
+			new THREE.Vector3(-halfSize.x, -halfSize.y, -halfSize.z),
+		];
+
+		let maxRight = 0,
+			maxUp = 0;
+		for (const corner of corners) {
+			maxRight = Math.max(maxRight, Math.abs(corner.dot(camRight)));
+			maxUp = Math.max(maxUp, Math.abs(corner.dot(camUp)));
+		}
+
+		maxRight *= paddingFactor;
+		maxUp *= paddingFactor;
+
+		const distH = maxRight / (tanFov2 * aspect);
+		const distV = maxUp / tanFov2;
+
+		return Math.max(distH, distV);
+	}
 }

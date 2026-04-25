@@ -1,4 +1,6 @@
 export { SchematicRenderer } from "./SchematicRenderer";
+export { KeyframeTrack } from "./camera/KeyframeTrack";
+export type { InterpolationMode, CameraKeyframe, KeyframeResult } from "./camera/KeyframeTrack";
 export { SimulationManager } from "./managers/SimulationManager";
 export { SimulationLogger } from "./utils/SimulationLogger";
 export { CustomIoHighlight } from "./managers/highlight/CustomIoHighlight";
