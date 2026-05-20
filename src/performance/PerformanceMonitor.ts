@@ -229,7 +229,7 @@ export class PerformanceMonitor {
 		// Start FPS monitoring
 		this.startMonitoringLoop();
 
-		// console.log(`🚀 Performance monitoring session started: ${sessionId}`);
+		// console.log(`Performance monitoring session started: ${sessionId}`);
 		return sessionId;
 	}
 
@@ -342,7 +342,7 @@ export class PerformanceMonitor {
 	public endOperation(name: string): void {
 		const operationIndex = this.timingStack.findIndex((op) => op.name === name);
 		if (operationIndex === -1) {
-			console.warn(`⚠️ No matching start operation found for: ${name}`);
+			console.warn(`No matching start operation found for: ${name}`);
 			return;
 		}
 

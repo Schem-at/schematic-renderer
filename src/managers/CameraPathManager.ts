@@ -119,15 +119,6 @@ export class CameraPathManager {
 				`${name}Target`
 			);
 		}
-
-		console.log(
-			`Fitted circular path '${name}' with radius: ${optimalParams.radius.toFixed(
-				2
-			)}, height: ${optimalParams.height.toFixed(2)}`
-		);
-
-		// log the parent calling the method
-		console.log(`Called from: ${new Error().stack?.split("\n")[2].trim()}`);
 	}
 	private calculateSchematicBounds(): {
 		center: THREE.Vector3;

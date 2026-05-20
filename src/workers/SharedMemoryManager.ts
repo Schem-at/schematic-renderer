@@ -94,11 +94,6 @@ export class SharedMemoryPool {
 
 	constructor() {
 		this.isShared = isSharedArrayBufferAvailable();
-		if (this.isShared) {
-			console.log("[SharedMemoryPool] Using SharedArrayBuffer for zero-copy transfers");
-		} else {
-			console.log("[SharedMemoryPool] SharedArrayBuffer not available, using standard transfers");
-		}
 	}
 
 	/**

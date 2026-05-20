@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import * as THREE from "three";
 
 // Mock problematic imports BEFORE they are used/imported by other modules
-vi.mock("nucleation-wasm", () => ({ default: "mock-wasm" }));
 vi.mock("./wasm/minecraft_schematic_utils_bg.wasm", () => ({
 	default: "mock-utils-wasm",
 }));

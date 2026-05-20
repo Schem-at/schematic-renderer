@@ -809,8 +809,6 @@ export class CameraManager extends EventEmitter {
 			preserveCamera?: boolean; // Override: preserve camera position even if this method is called
 		} = {}
 	): Promise<void> {
-		console.log("Focusing on schematics with improved framing");
-
 		if (!this.schematicRenderer?.schematicManager) {
 			return;
 		}
@@ -1493,10 +1491,6 @@ export class CameraManager extends EventEmitter {
 
 		const center = boundingBox.getCenter(new THREE.Vector3());
 		const size = boundingBox.getSize(new THREE.Vector3());
-
-		console.log(
-			`[CameraManager] World-space bounds: center=${center.toArray()}, size=${size.toArray()}`
-		);
 
 		return { center, size, boundingBox };
 	}

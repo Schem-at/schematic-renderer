@@ -206,8 +206,6 @@ export class SchematicManager {
 
 		// Force single garbage collection
 		forceGarbageCollection();
-
-		console.log("✅ Deep cleanup completed");
 	}
 
 	public async loadSchematics(
@@ -224,8 +222,6 @@ export class SchematicManager {
 	): Promise<void> {
 		for (const key in schematicDataMap) {
 			if (schematicDataMap.hasOwnProperty(key)) {
-				console.log("Loading schematic", key);
-				console.log(schematicDataMap);
 				const arrayBuffer = await schematicDataMap[key]();
 				const properties = propertiesMap ? propertiesMap[key] : undefined;
 				await this.loadSchematic(key, arrayBuffer, properties).then(() => {

@@ -20,7 +20,6 @@ let postprocessingLoaded = false;
 
 async function loadPostProcessing() {
 	if (postprocessingLoaded) return;
-	console.log("[RenderManager] Lazy-loading post-processing effects...");
 	const postprocessing = await import("postprocessing");
 	// @ts-ignore - n8ao doesn't have TypeScript definitions
 	const n8ao = await import("n8ao");
@@ -33,7 +32,6 @@ async function loadPostProcessing() {
 	N8AOPostPass = n8ao.N8AOPostPass;
 	GammaCorrectionEffect = gammaEffect.GammaCorrectionEffect;
 	postprocessingLoaded = true;
-	console.log("[RenderManager] Post-processing effects loaded");
 }
 
 // HDRI Cache using IndexedDB
@@ -744,8 +742,6 @@ export class RenderManager {
 
 				this.passes.set("ssao", n8aoPass);
 				this.composer.addPass(n8aoPass);
-
-				console.log("N8AO SSAO enabled successfully");
 			} catch (error) {
 				console.warn("Failed to initialize N8AO SSAO:", error);
 			}

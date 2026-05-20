@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import * as THREE from "three";
 
 // Mock all problematic imports
-vi.mock("nucleation-wasm", () => ({ default: "mock-wasm" }));
 vi.mock("nucleation", () => ({
 	default: vi.fn().mockResolvedValue(undefined),
 	SchematicWrapper: class {},

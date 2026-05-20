@@ -860,13 +860,23 @@
 							<div class="panel-section">
 								<div class="panel-section-title">Encoding</div>
 								<div class="ctrl-group">
+									<div class="ctrl-label">Codec</div>
+									<select class="ctrl-select" x-model="recording.codec" @change="recording.transparent = recording.codec !== 'h264'">
+										<option value="h264">H.264 MP4 — small, opaque (~2–10 Mbps)</option>
+										<option value="vp9_alpha">VP9+alpha WebM — alpha, smallest tunable</option>
+										<option value="png_zip">PNG sequence (.zip) — alpha, lossless, frame-perfect</option>
+										<option value="prores_4444">ProRes 4444 MOV — alpha, ~330 Mbps</option>
+										<option value="dnxhr_444">DNxHR 444 MOV — alpha, ~880 Mbps</option>
+									</select>
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'h264'">
 									<div class="ctrl-label">Frame Format</div>
 									<div class="ctrl-toggle-group">
 										<button class="ctrl-toggle" :class="recording.useJpeg?'active':''" @click="recording.useJpeg=true">JPEG</button>
 										<button class="ctrl-toggle" :class="!recording.useJpeg?'active':''" @click="recording.useJpeg=false">PNG</button>
 									</div>
 								</div>
-								<div class="ctrl-group">
+								<div class="ctrl-group" x-show="recording.codec === 'h264'">
 									<div class="ctrl-label">Preset</div>
 									<select class="ctrl-select" x-model="recording.encodingPreset">
 										<option value="ultrafast">Ultra Fast</option>
@@ -877,9 +887,38 @@
 										<option value="medium">Medium</option>
 									</select>
 								</div>
-								<div class="ctrl-group">
-									<div class="ctrl-label">CRF <span class="ctrl-value" x-text="recording.crf"></span></div>
+								<div class="ctrl-group" x-show="recording.codec === 'h264'">
+									<div class="ctrl-label">CRF <span class="ctrl-value" x-text="recording.crf"></span> <span style="opacity:0.5;font-size:10px">(lower = better quality)</span></div>
 									<input class="ctrl-range" type="range" min="18" max="28" step="1" x-model.number="recording.crf" />
+								</div>
+
+								<div class="ctrl-group" x-show="recording.codec === 'vp9_alpha'">
+									<div class="ctrl-label">
+										Rate control:
+										<button class="ctrl-toggle" :class="recording.bitrateMbps === 0 ? 'active' : ''" @click="recording.bitrateMbps = 0" style="margin-left:8px">Constant quality</button>
+										<button class="ctrl-toggle" :class="recording.bitrateMbps > 0 ? 'active' : ''" @click="recording.bitrateMbps = 10">Target bitrate</button>
+									</div>
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'vp9_alpha' && recording.bitrateMbps === 0">
+									<div class="ctrl-label">VP9 CRF <span class="ctrl-value" x-text="recording.vp9Crf"></span> <span style="opacity:0.5;font-size:10px">(15–35, lower = better)</span></div>
+									<input class="ctrl-range" type="range" min="15" max="35" step="1" x-model.number="recording.vp9Crf" />
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'vp9_alpha' && recording.bitrateMbps > 0">
+									<div class="ctrl-label">Target bitrate <span class="ctrl-value" x-text="recording.bitrateMbps + ' Mbps'"></span></div>
+									<input class="ctrl-range" type="range" min="2" max="80" step="1" x-model.number="recording.bitrateMbps" />
+								</div>
+
+								<div class="ctrl-group" x-show="recording.codec === 'dnxhr_444'" style="font-size:11px;opacity:0.7">
+									DNxHR 444 — best NLE compatibility, fixed bitrate, no tuning. ~880 Mbps @ 1080p60 (~6.6 GB/min).
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'prores_4444'" style="font-size:11px;opacity:0.7">
+									ProRes 4444 — same NLE compatibility as DNxHR, fixed bitrate, ~330 Mbps @ 1080p60 (~2.5 GB/min, ~3× smaller than DNxHR).
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'vp9_alpha'" style="font-size:11px;opacity:0.7">
+									VP9 + alpha (WebM) — variable bitrate, much smaller files. Plays in browsers / OBS / Resolve; needs a plugin for Premiere.
+								</div>
+								<div class="ctrl-group" x-show="recording.codec === 'png_zip'" style="font-size:11px;opacity:0.7">
+									PNG sequence packed into a ZIP. Lossless, frame-perfect alpha — often the smallest option for sparse transparent scenes. Works with every compositor (After Effects, Resolve, Nuke, Premiere). No re-encoding step → fastest path.
 								</div>
 							</div>
 							<div class="panel-section">

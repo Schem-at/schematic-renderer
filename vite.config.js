@@ -1,42 +1,33 @@
 import { defineConfig } from 'vite';
-import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
-import dts from 'vite-plugin-dts';
 import path from 'path';
 import fs from 'fs';
 
-// WASM inline plugin - inlines WASM as base64 for library distribution
-// Note: This adds ~33% size overhead but ensures WASM works in all environments
-const wasmInlinePlugin = () => {
-  return {
-    name: 'wasm-inline',
-    enforce: 'pre',
-    transform(code, id) {
-      const cleanId = id.split('?')[0];
-      if (cleanId.endsWith('.wasm')) {
-        const buffer = fs.readFileSync(cleanId);
-        const base64 = buffer.toString('base64');
-        return {
-          code: `export default "data:application/wasm;base64,${base64}";`,
-          map: null
-        };
-      }
+// Inlines .wasm files as base64 data URLs so the library bundle is self-contained.
+const wasmInlinePlugin = () => ({
+  name: 'wasm-inline',
+  enforce: 'pre',
+  transform(_code, id) {
+    const cleanId = id.split('?')[0];
+    if (cleanId.endsWith('.wasm')) {
+      const base64 = fs.readFileSync(cleanId).toString('base64');
+      return {
+        code: `export default "data:application/wasm;base64,${base64}";`,
+        map: null,
+      };
     }
-  }
-};
+  },
+});
 
 export default defineConfig({
   server: {
     port: 4000,
     open: true,
-    // Required headers for SharedArrayBuffer support
-    // Using 'credentialless' instead of 'require-corp' to allow CDN resources
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'credentialless',
     },
-    // Serve schematics folder from project root
     fs: {
       allow: ['..', '../..'],
     },
@@ -51,33 +42,21 @@ export default defineConfig({
       fileName: (format) => `schematic-renderer.${format}.js`,
       formats: ['es', 'umd'],
     },
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
-      external: ['three'],
+      external: ['three', 'nucleation'],
       output: {
         globals: {
           three: 'THREE',
+          nucleation: 'Nucleation',
         },
-        // Code splitting is handled automatically via dynamic imports
-        // manualChunks cannot be used with library mode
       },
     },
   },
-  resolve: {
-    alias: {
-      'nucleation-wasm': path.resolve(__dirname, 'node_modules/nucleation/nucleation_bg.wasm')
-    }
-  },
   plugins: [
-    wasmInlinePlugin(), // Keep WASM inlined for library compatibility
-    viteCommonjs(),
+    wasmInlinePlugin(),
     topLevelAwait(),
-    wasm(), // Provides WASM support
-    dts({
-      insertTypesEntry: true,
-      outDir: '../dist',
-      exclude: ['test/**/*', '**/*.test.ts']
-    })
+    wasm(),
   ],
   define: {
     'process.env': {},
@@ -88,9 +67,7 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
-    plugins: [
-      wasmInlinePlugin()
-    ]
+    plugins: [wasmInlinePlugin()],
   },
   test: {
     root: './',

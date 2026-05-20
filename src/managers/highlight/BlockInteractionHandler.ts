@@ -29,7 +29,7 @@ export class BlockInteractionHandler {
 		// Block interaction event received
 
 		if (!schematicObject) {
-			console.warn("  ❌ No schematic provided in event.");
+			console.warn("  No schematic provided in event.");
 			return;
 		}
 
@@ -40,7 +40,7 @@ export class BlockInteractionHandler {
 		const schematic = schematicObject?.getSchematicWrapper();
 
 		if (!schematic) {
-			console.warn("  ❌ Could not get schematic wrapper");
+			console.warn("  Could not get schematic wrapper");
 			return;
 		}
 
@@ -54,7 +54,7 @@ export class BlockInteractionHandler {
 		// console.log("  Block found:", block ? block.name() : "NONE");
 
 		if (!block) {
-			console.warn("  ❌ No block found at the interacted position.");
+			console.warn("  No block found at the interacted position.");
 			return;
 		}
 

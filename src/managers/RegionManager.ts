@@ -195,7 +195,6 @@ export class RegionManager extends EventEmitter {
 		const regionNames: string[] = schematicWrapper.getDefinitionRegionNames();
 
 		if (regionNames.length === 0) {
-			console.log(`[RegionManager] No definition regions found in schematic '${schematicId}'.`);
 			return [];
 		}
 

@@ -61,7 +61,7 @@ export class InspectorManager {
 
 		// Create main GUI (lil-gui - works with both WebGL and WebGPU)
 		this.gui = new GUI({
-			title: "🔧 Schematic Renderer",
+			title: "Schematic Renderer",
 			width: 300,
 		});
 
@@ -450,7 +450,7 @@ export class InspectorManager {
 			renderer: "Unknown",
 			vendor: "Unknown",
 			webgpu: "Checking...",
-			activeRenderer: isWebGPUActive ? "🚀 WebGPU" : "🔷 WebGL",
+			activeRenderer: isWebGPUActive ? "WebGPU" : "🔷 WebGL",
 		};
 
 		// Get GPU info based on renderer type
@@ -477,18 +477,18 @@ export class InspectorManager {
 
 		// Check WebGPU availability
 		if (isWebGPUActive) {
-			gpuInfo.webgpu = "✅ Active";
+			gpuInfo.webgpu = "Active";
 		} else if (navigator.gpu) {
 			navigator.gpu
 				.requestAdapter()
 				.then((adapter) => {
-					gpuInfo.webgpu = adapter ? "✅ Available (not used)" : "❌ No adapter";
+					gpuInfo.webgpu = adapter ? "Available (not used)" : "No adapter";
 				})
 				.catch(() => {
-					gpuInfo.webgpu = "❌ Not supported";
+					gpuInfo.webgpu = "Not supported";
 				});
 		} else {
-			gpuInfo.webgpu = "❌ Not supported";
+			gpuInfo.webgpu = "Not supported";
 		}
 
 		infoFolder.add(gpuInfo, "activeRenderer").name("Active Renderer").disable();

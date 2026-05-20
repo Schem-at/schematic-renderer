@@ -133,6 +133,13 @@ interface Keyframe {
 			useJpeg: true,
 			encodingPreset: "veryfast",
 			crf: 20,
+			transparent: false,
+			// Codec: "h264" (opaque MP4) | "dnxhr_444" | "prores_4444" | "vp9_alpha" | "png_zip"
+			codec: "h264" as "h264" | "dnxhr_444" | "prores_4444" | "vp9_alpha" | "png_zip",
+			// Only used by vp9_alpha (CBR target). 0 = use CRF/constant-quality instead.
+			bitrateMbps: 0,
+			// VP9 CRF default — its range is wider than H.264's (15-35).
+			vp9Crf: 30,
 		},
 
 		// Background settings
@@ -487,8 +494,16 @@ interface Keyframe {
 			this.recordingProgress = 0;
 			this.recordingStatus = "Capturing frames...";
 
-			const { width, height, fps, duration, useJpeg, encodingPreset, crf } = this.recording;
-			this.log("event", `Recording: ${width}x${height} @ ${fps}fps, ${duration}s, ${this.interpolation}`);
+			const { width, height, fps, duration, useJpeg, encodingPreset, crf, transparent, codec, bitrateMbps, vp9Crf } = this.recording;
+			// Effective codec — if the user toggled `transparent` without picking an alpha codec,
+			// fall back to DNxHR 444 (matches the library's resolveCodec rule).
+			const alphaCodecs = ["dnxhr_444", "prores_4444", "vp9_alpha", "png_zip"];
+			const effectiveCodec = transparent && !alphaCodecs.includes(codec) ? "dnxhr_444" : codec;
+			this.log(
+				"event",
+				`Recording: ${width}x${height} @ ${fps}fps, ${duration}s, ${this.interpolation}, codec=${effectiveCodec}` +
+					(transparent ? " [TRANSPARENT]" : "")
+			);
 
 			// Jump to first keyframe
 			const firstKf = this.track.getKeyframe(0);
@@ -504,7 +519,11 @@ interface Keyframe {
 					frameRate: fps,
 					useJpegFrames: useJpeg,
 					encodingPreset: encodingPreset as any,
-					crf,
+					// VP9 uses its own CRF range (15-35); other codecs use the H.264 range (18-28).
+					crf: effectiveCodec === "vp9_alpha" ? vp9Crf : crf,
+					bitrateMbps: bitrateMbps > 0 ? bitrateMbps : undefined,
+					codec: effectiveCodec,
+					transparent, // hard-locks to an alpha codec; library upgrades h264 → dnxhr_444 if needed
 					// Use the library's onFrame callback — drives camera from our KeyframeTrack
 					onFrame: (progress: number) => {
 						const pct = progress * 100;
@@ -534,7 +553,16 @@ interface Keyframe {
 						const url = URL.createObjectURL(blob);
 						const a = document.createElement("a");
 						a.href = url;
-						a.download = `schematic-recording-${Date.now()}.mp4`;
+						// Pick extension from the blob's actual MIME type.
+						const ext =
+							blob.type === "video/quicktime"
+								? "mov"
+								: blob.type === "video/webm"
+									? "webm"
+									: blob.type === "application/zip"
+										? "zip"
+										: "mp4";
+						a.download = `schematic-recording-${Date.now()}.${ext}`;
 						a.click();
 						URL.revokeObjectURL(url);
 						this.log("success", `Downloaded: ${a.download}`);

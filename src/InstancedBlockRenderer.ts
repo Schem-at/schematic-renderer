@@ -118,8 +118,6 @@ export class InstancedBlockRenderer {
 	}
 
 	public initializeInstancedMeshes(): void {
-		console.log("🔥 Initializing VARIANT-AWARE instanced rendering system...");
-
 		if (!this.paletteCache?.isReady) {
 			throw new Error("Palette cache not ready for instanced rendering");
 		}
@@ -171,13 +169,9 @@ export class InstancedBlockRenderer {
 			this.instancedMeshes.set(blockTypeKey, instancedMeshesForBlock);
 			this.instanceCounts.set(blockTypeKey, 0);
 		});
-
-		console.log(`🎯 Created instanced meshes for ${uniqueBlockTypes.size} unique block variants`);
 	}
 
 	public initializeInstancedMeshesMerged(): void {
-		console.log("🔥 Initializing MERGED variant-aware instanced rendering...");
-
 		if (!this.paletteCache?.isReady) {
 			throw new Error("Palette cache not ready for instanced rendering");
 		}
@@ -245,19 +239,19 @@ export class InstancedBlockRenderer {
 			this.group.add(instancedMesh);
 
 			console.log(
-				`✅ Created merged instanced mesh for ${blockTypeKey} with ${mergedGeometry.attributes.position.count} vertices`
+				`Created merged instanced mesh for ${blockTypeKey} with ${mergedGeometry.attributes.position.count} vertices`
 			);
 		});
 
 		console.log(
-			`🎯 Created merged instanced meshes for ${uniqueBlockTypes.size} unique block variants`
+			`Created merged instanced meshes for ${uniqueBlockTypes.size} unique block variants`
 		);
 	}
 
 	public renderBlocksInstanced(
 		allBlocks: Array<{ x: number; y: number; z: number; paletteIndex: number }>
 	): void {
-		console.log(`🚀 Rendering ${allBlocks.length} blocks with overflow handling...`);
+		console.log(`Rendering ${allBlocks.length} blocks with overflow handling...`);
 		const startTime = performance.now();
 
 		this.instanceCounts.forEach((_, blockTypeKey) => {
@@ -325,7 +319,7 @@ export class InstancedBlockRenderer {
 
 		if (overflowCount > 0) {
 			console.log(
-				`⚠️ ${blockTypeKey}: ${overflowCount} blocks exceed instance limit, creating individual meshes`
+				`${blockTypeKey}: ${overflowCount} blocks exceed instance limit, creating individual meshes`
 			);
 			const overflowMeshes: THREE.Object3D[] = [];
 			for (let i = instanceCount; i < positions.length; i++) {
@@ -357,7 +351,7 @@ export class InstancedBlockRenderer {
 	}
 
 	private logInstancedStats(): void {
-		console.log("📊 ENHANCED INSTANCED RENDERING STATS:");
+		console.log("ENHANCED INSTANCED RENDERING STATS:");
 		console.log("=".repeat(60));
 
 		let totalInstances = 0;

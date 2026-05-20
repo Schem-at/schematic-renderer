@@ -89,7 +89,7 @@ export class ClickInteractionHandler implements Highlight {
 			}
 
 			if (!targetSchematic) {
-				console.error("  ❌ Could not find parent schematic for mesh");
+				console.error("  Could not find parent schematic for mesh");
 				return;
 			}
 

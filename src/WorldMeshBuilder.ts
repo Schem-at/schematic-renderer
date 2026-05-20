@@ -146,11 +146,9 @@ export class WorldMeshBuilder {
 
 			if (success) {
 				this.useGPUCompute = true;
-				console.warn(
-					"  ⚠️ WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!"
-				);
-				console.warn("  ⚠️ Textures will not render correctly (wireframe only).");
-				console.warn("  ⚠️ Set gpuComputeOptions.enabled = false for better performance.");
+				console.warn("  WARNING: GPU compute is ~6x SLOWER than workers due to GPU→CPU readback!");
+				console.warn("  Textures will not render correctly (wireframe only).");
+				console.warn("  Set gpuComputeOptions.enabled = false for better performance.");
 				return true;
 			} else {
 				console.warn("[WorldMeshBuilder] GPU compute init failed, using worker fallback");
@@ -609,29 +607,6 @@ export class WorldMeshBuilder {
 					paletteData: paletteGeometryData,
 				});
 			});
-		}
-
-		// Log summary of build mode
-		if (this.useGPUCompute) {
-			console.log(
-				"%c[Performance Mode] GPU Compute (NOT RECOMMENDED - slower)",
-				"background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px"
-			);
-		} else if (this.useWasmMeshBuilder && this.useSharedMemory) {
-			console.log(
-				`%c[Performance Mode] WASM + SharedArrayBuffer (${this.workers.length}x parallel, zero-copy) ✓✓ OPTIMAL`,
-				"background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px"
-			);
-		} else if (this.useWasmMeshBuilder) {
-			console.log(
-				`%c[Performance Mode] WASM Workers (${this.workers.length}x parallel)`,
-				"background: #8bc34a; color: white; padding: 2px 6px; border-radius: 3px"
-			);
-		} else {
-			console.log(
-				`%c[Performance Mode] JavaScript Workers (${this.workers.length}x parallel)`,
-				"background: #2196f3; color: white; padding: 2px 6px; border-radius: 3px"
-			);
 		}
 	}
 
@@ -1730,10 +1705,8 @@ export class WorldMeshBuilder {
 		this.instancedRenderer = new InstancedBlockRenderer(group, this.paletteCache);
 
 		if (merged) {
-			console.log("🔥 Enabling MERGED instanced rendering...");
 			this.instancedRenderer.initializeInstancedMeshesMerged();
 		} else {
-			console.log("🔥 Enabling COMPLETE instanced rendering...");
 			this.instancedRenderer.initializeInstancedMeshes();
 		}
 	}
@@ -1744,16 +1717,12 @@ export class WorldMeshBuilder {
 			this.instancedRenderer.disposeInstancedMeshes();
 			this.instancedRenderer = null;
 		}
-		console.log("🔄 Instanced rendering disabled, reverted to individual meshes");
 	}
 
 	public async renderSchematicInstanced(schematicObject: SchematicObject): Promise<void> {
 		if (!this.useInstancedRendering || !this.instancedRenderer) {
 			throw new Error("Instanced rendering not enabled. Call enableInstancedRendering() first.");
 		}
-
-		console.log("🚀 Starting instanced schematic rendering...");
-		const startTime = performance.now();
 
 		const schematic = schematicObject.schematicWrapper;
 
@@ -1787,10 +1756,6 @@ export class WorldMeshBuilder {
 		}
 
 		this.instancedRenderer.renderBlocksInstanced(allBlocks);
-
-		const duration = performance.now() - startTime;
-		console.log(`✨ Instanced schematic rendering completed in ${duration.toFixed(2)}ms`);
-		console.log(`   Rendered ${allBlocks.length} blocks using instanced meshes`);
 	}
 
 	public dispose(): void {

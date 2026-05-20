@@ -8,6 +8,7 @@ import { SelectableObject } from "./managers/SelectableObject";
 import { SchematicRenderer } from "./SchematicRenderer";
 import { ResourcePackOptions } from "./types/resourcePack";
 import { SidebarOptions, DEFAULT_SIDEBAR_OPTIONS } from "./ui/sidebar/types";
+import type { SlicerOverlayOptions } from "./ui/SlicerOverlay";
 
 // Re-export sidebar types for consumers
 export type {
@@ -19,6 +20,7 @@ export type {
 	SidebarPosition,
 	SidebarTabConfig,
 } from "./ui/sidebar/types";
+export type { SlicerOverlayOptions, SlicerOverlayCorner } from "./ui/SlicerOverlay";
 
 export interface ProgressBarOptions {
 	showLabel?: boolean;
@@ -65,6 +67,10 @@ export interface DebugOptions {
 	enableInspector?: boolean;
 	// Show the GUI on startup (can be toggled with keyboard shortcut)
 	showOnStartup?: boolean;
+	// Log the per-build "Detailed Breakdown" performance table to console.warn
+	// after every rebuildMesh. Off by default — slicing fires many rebuilds per
+	// second and this would otherwise spam the console.
+	logBuildPerformance?: boolean;
 	// Custom panels to add to the GUI
 	customPanels?: Array<{
 		name: string;
@@ -147,7 +153,7 @@ export interface GPUComputeOptions {
 	/**
 	 * Enable WebGPU compute for mesh building
 	 *
-	 * ⚠️ WARNING: GPU compute is currently SLOWER than workers due to GPU→CPU
+	 * WARNING: GPU compute is currently SLOWER than workers due to GPU→CPU
 	 * readback overhead (~6x slower, ~10x more memory). Additionally, textures
 	 * don't render correctly (wireframe only).
 	 *
@@ -292,6 +298,14 @@ export interface SchematicRendererOptions {
 	 * Resource Packs, Performance) into a single tabbed sidebar.
 	 */
 	sidebarOptions?: SidebarOptions;
+	/**
+	 * Show the floating rendering-bounds slicer overlay on startup. Off by default.
+	 * Can also be toggled at runtime via `renderer.showSlicerOverlay()` /
+	 * `renderer.hideSlicerOverlay()` / `renderer.toggleSlicerOverlay()`.
+	 */
+	showSlicerOverlay?: boolean;
+	/** Configuration for the floating slicer overlay (debounce, corner, etc.). */
+	slicerOverlayOptions?: SlicerOverlayOptions;
 	// Callbacks for lifecycle events
 	callbacks?: Callbacks;
 	// Additional options can be added here

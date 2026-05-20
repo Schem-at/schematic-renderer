@@ -151,7 +151,7 @@ export class InsignIoHoverHandler implements Highlight {
 							label: "Data Type",
 							value: region.dataType,
 							color: "#4fc3f7",
-							icon: "📊",
+							icon: "",
 						},
 						{
 							label: "Bit Width",

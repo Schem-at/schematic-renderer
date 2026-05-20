@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as THREE from "three";
 
 // Mock all problematic imports
-vi.mock("nucleation-wasm", () => ({ default: "mock-wasm" }));
 vi.mock("nucleation", () => ({
 	default: vi.fn().mockResolvedValue(undefined),
 	SchematicWrapper: class {},
@@ -158,10 +157,238 @@ function createMockSchematicRenderer(overrides: Record<string, any> = {}) {
 describe("RecordingManager", () => {
 	// We import dynamically after mocks are set up
 	let RecordingManager: typeof import("../../managers/RecordingManager").RecordingManager;
+	let buildFfmpegArgs: typeof import("../../managers/RecordingManager").buildFfmpegArgs;
+	let getOutputInfo: typeof import("../../managers/RecordingManager").getOutputInfo;
 
 	beforeEach(async () => {
 		const mod = await import("../../managers/RecordingManager");
 		RecordingManager = mod.RecordingManager;
+		buildFfmpegArgs = mod.buildFfmpegArgs;
+		getOutputInfo = mod.getOutputInfo;
+	});
+
+	describe("buildFfmpegArgs - codec branching", () => {
+		it("returns H.264 MP4 args when codec is h264", () => {
+			const args = buildFfmpegArgs({
+				codec: "h264",
+				frameRate: 60,
+				ext: "jpg",
+				encodingPreset: "veryfast",
+				crf: 20,
+			});
+			expect(args).toContain("libx264");
+			expect(args[args.indexOf("-pix_fmt") + 1]).toBe("yuv420p");
+			expect(args[args.length - 1]).toBe("output.mp4");
+			expect(args).not.toContain("dnxhd");
+		});
+
+		it("returns DNxHR 444 MOV args when codec is dnxhr_444", () => {
+			const args = buildFfmpegArgs({
+				codec: "dnxhr_444",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 20,
+			});
+			expect(args).toContain("dnxhd");
+			expect(args[args.indexOf("-profile:v") + 1]).toBe("dnxhr_444");
+			expect(args[args.indexOf("-pix_fmt") + 1]).toBe("yuva444p10le");
+			expect(args[args.length - 1]).toBe("output.mov");
+			expect(args).not.toContain("libx264");
+			// CRF / preset are H.264-only and must not appear for DNxHR
+			expect(args).not.toContain("-crf");
+			expect(args).not.toContain("-preset");
+		});
+
+		it("returns ProRes 4444 MOV args when codec is prores_4444", () => {
+			const args = buildFfmpegArgs({
+				codec: "prores_4444",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 20,
+			});
+			expect(args).toContain("prores_ks");
+			// ProRes profile 4 = 4444 (5 = 4444 XQ, both have alpha; we use 4)
+			expect(args[args.indexOf("-profile:v") + 1]).toBe("4");
+			expect(args[args.indexOf("-pix_fmt") + 1]).toBe("yuva444p10le");
+			expect(args[args.length - 1]).toBe("output.mov");
+			expect(args).not.toContain("libx264");
+			expect(args).not.toContain("dnxhd");
+		});
+
+		it("returns VP9+alpha WebM args when codec is vp9_alpha", () => {
+			const args = buildFfmpegArgs({
+				codec: "vp9_alpha",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 20,
+			});
+			expect(args).toContain("libvpx-vp9");
+			expect(args[args.indexOf("-pix_fmt") + 1]).toBe("yuva420p");
+			// VP9 alpha requires auto-alt-ref disabled
+			expect(args[args.indexOf("-auto-alt-ref") + 1]).toBe("0");
+			expect(args[args.length - 1]).toBe("output.webm");
+		});
+
+		it("VP9 args do NOT include -row-mt (ffmpeg.wasm is single-threaded — would fail)", () => {
+			const args = buildFfmpegArgs({
+				codec: "vp9_alpha",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 30,
+			});
+			expect(args).not.toContain("-row-mt");
+		});
+
+		it("VP9 uses constant-quality CRF by default and CBR when bitrate set", () => {
+			const cq = buildFfmpegArgs({
+				codec: "vp9_alpha",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 30,
+			});
+			// Constant quality: -b:v 0 -crf <n>
+			expect(cq[cq.indexOf("-b:v") + 1]).toBe("0");
+			expect(cq[cq.indexOf("-crf") + 1]).toBe("30");
+
+			const cbr = buildFfmpegArgs({
+				codec: "vp9_alpha",
+				frameRate: 60,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 30,
+				bitrateMbps: 8,
+			});
+			// CBR: -b:v 8M, no -crf
+			expect(cbr[cbr.indexOf("-b:v") + 1]).toBe("8M");
+			expect(cbr).not.toContain("-crf");
+		});
+
+		it("uses the supplied frame rate and input pattern extension", () => {
+			const args = buildFfmpegArgs({
+				codec: "dnxhr_444",
+				frameRate: 30,
+				ext: "png",
+				encodingPreset: "veryfast",
+				crf: 20,
+			});
+			expect(args[args.indexOf("-framerate") + 1]).toBe("30");
+			expect(args[args.indexOf("-i") + 1]).toBe("frame%06d.png");
+		});
+	});
+
+	describe("resolveCodec - transparent enforcement", () => {
+		let resolveCodec: typeof import("../../managers/RecordingManager").resolveCodec;
+		beforeEach(async () => {
+			const mod = await import("../../managers/RecordingManager");
+			resolveCodec = mod.resolveCodec;
+		});
+
+		it("returns the explicit codec when transparent is not set", () => {
+			expect(resolveCodec({ codec: "h264" })).toBe("h264");
+			expect(resolveCodec({ codec: "dnxhr_444" })).toBe("dnxhr_444");
+			expect(resolveCodec({})).toBe("h264");
+		});
+
+		it("forces dnxhr_444 when transparent: true, overriding any codec", () => {
+			expect(resolveCodec({ transparent: true })).toBe("dnxhr_444");
+			expect(resolveCodec({ transparent: true, codec: "h264" })).toBe("dnxhr_444");
+			expect(resolveCodec({ transparent: true, codec: "dnxhr_444" })).toBe("dnxhr_444");
+		});
+
+		it("does not silently upgrade to dnxhr_444 when transparent is false/undefined", () => {
+			expect(resolveCodec({ transparent: false, codec: "h264" })).toBe("h264");
+			expect(resolveCodec({ transparent: false })).toBe("h264");
+		});
+	});
+
+	describe("getOutputInfo - codec branching", () => {
+		it("returns mp4 / video/mp4 for h264", () => {
+			const info = getOutputInfo("h264");
+			expect(info.filename).toBe("output.mp4");
+			expect(info.mimeType).toBe("video/mp4");
+		});
+
+		it("returns mov / video/quicktime for dnxhr_444", () => {
+			const info = getOutputInfo("dnxhr_444");
+			expect(info.filename).toBe("output.mov");
+			expect(info.mimeType).toBe("video/quicktime");
+		});
+
+		it("returns mov / video/quicktime for prores_4444", () => {
+			const info = getOutputInfo("prores_4444");
+			expect(info.filename).toBe("output.mov");
+			expect(info.mimeType).toBe("video/quicktime");
+		});
+
+		it("returns webm / video/webm for vp9_alpha", () => {
+			const info = getOutputInfo("vp9_alpha");
+			expect(info.filename).toBe("output.webm");
+			expect(info.mimeType).toBe("video/webm");
+		});
+
+		it("returns zip / application/zip for png_zip", () => {
+			const info = getOutputInfo("png_zip");
+			expect(info.filename).toBe("output.zip");
+			expect(info.mimeType).toBe("application/zip");
+		});
+	});
+
+	describe("png_zip codec - PNG sequence in zip", () => {
+		it("is alpha-capable (lossless transparent frames)", async () => {
+			const mod = await import("../../managers/RecordingManager");
+			expect(mod.codecNeedsAlpha("png_zip")).toBe(true);
+		});
+
+		it("does not need ffmpeg encoding", async () => {
+			const mod = await import("../../managers/RecordingManager");
+			expect(mod.codecIsFFmpegEncoded("png_zip")).toBe(false);
+			expect(mod.codecIsFFmpegEncoded("h264")).toBe(true);
+			expect(mod.codecIsFFmpegEncoded("dnxhr_444")).toBe(true);
+			expect(mod.codecIsFFmpegEncoded("vp9_alpha")).toBe(true);
+		});
+	});
+
+	describe("resolveCodec - keeps alpha-capable codecs when transparent", () => {
+		let resolveCodec: typeof import("../../managers/RecordingManager").resolveCodec;
+		beforeEach(async () => {
+			const mod = await import("../../managers/RecordingManager");
+			resolveCodec = mod.resolveCodec;
+		});
+
+		it("keeps prores_4444 when transparent:true", () => {
+			expect(resolveCodec({ transparent: true, codec: "prores_4444" })).toBe("prores_4444");
+		});
+
+		it("keeps vp9_alpha when transparent:true", () => {
+			expect(resolveCodec({ transparent: true, codec: "vp9_alpha" })).toBe("vp9_alpha");
+		});
+
+		it("upgrades h264 to dnxhr_444 when transparent:true (h264 has no alpha)", () => {
+			expect(resolveCodec({ transparent: true, codec: "h264" })).toBe("dnxhr_444");
+		});
+	});
+
+	describe("codecNeedsAlpha", () => {
+		let codecNeedsAlpha: typeof import("../../managers/RecordingManager").codecNeedsAlpha;
+		beforeEach(async () => {
+			const mod = await import("../../managers/RecordingManager");
+			codecNeedsAlpha = mod.codecNeedsAlpha;
+		});
+
+		it("returns true for alpha-capable codecs", () => {
+			expect(codecNeedsAlpha("dnxhr_444")).toBe(true);
+			expect(codecNeedsAlpha("prores_4444")).toBe(true);
+			expect(codecNeedsAlpha("vp9_alpha")).toBe(true);
+		});
+
+		it("returns false for h264", () => {
+			expect(codecNeedsAlpha("h264")).toBe(false);
+		});
 	});
 
 	describe("ScreenshotOptions interface", () => {

@@ -298,7 +298,7 @@ export class ChunkRenderingChart {
             </div>
             
             <div style="margin-bottom: 8px;">
-                <strong>📊 Performance:</strong><br>
+                <strong>Performance:</strong><br>
                 • Total Time: ${chunk.totalTime.toFixed(2)}ms<br>
                 • Blocks: ${chunk.blockCount}<br>
                 • Avg Vertices/Block: ${avgVertices}
@@ -356,7 +356,7 @@ export class ChunkRenderingChart {
 							phase.metadata
 								? `
             <div style="margin-top: 8px;">
-                <strong>📋 Details:</strong><br>
+                <strong>Details:</strong><br>
                 ${Object.entries(phase.metadata)
 									.map(([key, value]) => `• ${key}: ${value}`)
 									.join("<br>")}

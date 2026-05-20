@@ -2,21 +2,48 @@ import * as THREE from "three";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 
+/**
+ * Video output codec / format.
+ * - "h264":        H.264 in MP4 — opaque, lossy, very small (~1–10 Mbps).
+ * - "dnxhr_444":   Avid DNxHR 444 in MOV — 12-bit 4:4:4 + alpha. Fixed-bitrate (~880 Mbps @ 1080p60).
+ * - "prores_4444": Apple ProRes 4444 in MOV — 4:4:4 + alpha. Fixed-bitrate (~330 Mbps @ 1080p60).
+ * - "vp9_alpha":   VP9 in WebM — yuva420p alpha. Variable bitrate, fully tunable (~5–60 Mbps).
+ * - "png_zip":     ZIP archive of PNG frames — lossless, frame-perfect, no encoding step.
+ *                  Often smallest for sparse transparent scenes; works with any compositor.
+ *
+ * Any codec marked alpha-capable implies transparent recording: alpha mode is enabled
+ * on the renderer and intermediate frames are forced to PNG.
+ */
+export type RecordingCodec = "h264" | "dnxhr_444" | "prores_4444" | "vp9_alpha" | "png_zip";
+
 export interface RecordingOptions {
 	width?: number;
 	height?: number;
 	frameRate?: number;
 	quality?: number;
-	/** Use JPEG for intermediate frames (faster, smaller) vs PNG (lossless) */
+	/** Output codec. Default "h264". Use "dnxhr_444" for transparent MOV. */
+	codec?: RecordingCodec;
+	/**
+	 * Force a transparent-background recording. When true, the output is hard-locked to
+	 * DNxHR 444 in a QuickTime MOV with a real alpha channel — regardless of any `codec`
+	 * passed alongside. Use this when you want "transparent or fail," not "transparent if convenient."
+	 */
+	transparent?: boolean;
+	/** Use JPEG for intermediate frames (faster, smaller) vs PNG (lossless). Ignored for codec="dnxhr_444" (PNG forced). */
 	useJpegFrames?: boolean;
 	/** JPEG quality for intermediate frames (0.8-0.95 recommended) */
 	jpegQuality?: number;
 	/** Batch size for writing frames to FFmpeg (higher = more memory, faster) */
 	batchSize?: number;
-	/** FFmpeg encoding preset: ultrafast, superfast, veryfast, faster, fast, medium */
+	/** FFmpeg encoding preset (H.264 only — ignored for DNxHR) */
 	encodingPreset?: "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium";
-	/** CRF value for encoding quality (18-28, lower = better quality, larger file) */
+	/** CRF value for encoding quality. H.264: 18–28 (lower=better). VP9: 15–35 (lower=better, default 30). Ignored for DNxHR/ProRes (fixed bitrate). */
 	crf?: number;
+	/**
+	 * Target video bitrate in Mbps. Only honored by `vp9_alpha` — switches it from
+	 * constant-quality to constant-bitrate. Ignored by every other codec.
+	 */
+	bitrateMbps?: number;
 	onStart?: () => void;
 	onProgress?: (progress: number) => void;
 	onFfmpegProgress?: (progress: number, time: number) => void;
@@ -27,6 +54,160 @@ export interface RecordingOptions {
 	 * Use this to drive the camera with keyframes, custom paths, etc.
 	 */
 	onFrame?: (progress: number) => void;
+}
+
+/**
+ * True for codecs that produce a real alpha channel.
+ * Drives the alpha-mode renderer toggle and PNG-frames enforcement.
+ */
+export function codecNeedsAlpha(codec: RecordingCodec): boolean {
+	return (
+		codec === "dnxhr_444" || codec === "prores_4444" || codec === "vp9_alpha" || codec === "png_zip"
+	);
+}
+
+/**
+ * True for codecs that go through FFmpeg. The `png_zip` codec skips FFmpeg
+ * entirely (we zip the captured PNG frames directly with JSZip).
+ */
+export function codecIsFFmpegEncoded(codec: RecordingCodec): boolean {
+	return codec !== "png_zip";
+}
+
+/**
+ * Resolve the effective codec from a (possibly partial) RecordingOptions.
+ * `transparent: true` hard-locks the result to an alpha-capable codec — there is no
+ * fallback to H.264 once transparent is requested. If the caller specified a non-alpha
+ * codec alongside `transparent: true`, we upgrade to the DNxHR 444 default.
+ * Pure helper — exported for testing.
+ */
+export function resolveCodec(opts: {
+	codec?: RecordingCodec;
+	transparent?: boolean;
+}): RecordingCodec {
+	if (opts.transparent) {
+		if (opts.codec && codecNeedsAlpha(opts.codec)) return opts.codec;
+		return "dnxhr_444";
+	}
+	return opts.codec ?? "h264";
+}
+
+/**
+ * Build the FFmpeg argv array for the given codec.
+ * Pure helper — exported for testing.
+ *
+ * `bitrateMbps` is only used by codecs that support variable bitrate (currently vp9_alpha).
+ * When provided, VP9 switches from constant-quality to constant-bitrate.
+ */
+export function buildFfmpegArgs(opts: {
+	codec: RecordingCodec;
+	frameRate: number;
+	ext: string;
+	encodingPreset: string;
+	crf: number;
+	bitrateMbps?: number;
+}): string[] {
+	const { codec, frameRate, ext, encodingPreset, crf, bitrateMbps } = opts;
+	const input = [
+		"-framerate",
+		frameRate.toString(),
+		"-pattern_type",
+		"sequence",
+		"-start_number",
+		"0",
+		"-i",
+		`frame%06d.${ext}`,
+	];
+	if (codec === "dnxhr_444") {
+		return [
+			...input,
+			"-c:v",
+			"dnxhd",
+			"-profile:v",
+			"dnxhr_444",
+			"-pix_fmt",
+			"yuva444p10le",
+			"output.mov",
+		];
+	}
+	if (codec === "prores_4444") {
+		// prores_ks profile 4 = ProRes 4444 (alpha). Profile 5 = 4444 XQ (also alpha, higher bitrate).
+		// -bits_per_mb tuning is left at encoder default for predictable output.
+		return [
+			...input,
+			"-c:v",
+			"prores_ks",
+			"-profile:v",
+			"4",
+			"-pix_fmt",
+			"yuva444p10le",
+			"output.mov",
+		];
+	}
+	if (codec === "vp9_alpha") {
+		// VP9 with alpha: yuva420p, auto-alt-ref must be 0.
+		// NOTE: ffmpeg.wasm is built with --disable-pthreads, so we MUST NOT pass -row-mt
+		// or any threading flag — those fail silently with no useful error message.
+		// Variable-quality mode by default (-b:v 0 -crf N), CBR when bitrateMbps is set.
+		const rateControl =
+			bitrateMbps && bitrateMbps > 0
+				? ["-b:v", `${bitrateMbps}M`]
+				: ["-b:v", "0", "-crf", crf.toString()];
+		// "good"/4 is the recommended quality/speed balance for non-realtime VP9 encoding.
+		return [
+			...input,
+			"-c:v",
+			"libvpx-vp9",
+			"-pix_fmt",
+			"yuva420p",
+			"-auto-alt-ref",
+			"0",
+			"-deadline",
+			"good",
+			"-cpu-used",
+			"4",
+			...rateControl,
+			"output.webm",
+		];
+	}
+	if (codec === "png_zip") {
+		// png_zip never reaches FFmpeg — codecIsFFmpegEncoded() is checked first.
+		// Return empty for symmetry with the rest of the API.
+		return [];
+	}
+	return [
+		...input,
+		"-c:v",
+		"libx264",
+		"-preset",
+		encodingPreset,
+		"-threads",
+		"0",
+		"-crf",
+		crf.toString(),
+		"-pix_fmt",
+		"yuv420p",
+		"-movflags",
+		"+faststart",
+		"output.mp4",
+	];
+}
+
+/**
+ * Output filename + MIME type for the given codec.
+ * Pure helper — exported for testing.
+ */
+export function getOutputInfo(codec: RecordingCodec): { filename: string; mimeType: string } {
+	if (codec === "dnxhr_444" || codec === "prores_4444") {
+		return { filename: "output.mov", mimeType: "video/quicktime" };
+	}
+	if (codec === "vp9_alpha") {
+		return { filename: "output.webm", mimeType: "video/webm" };
+	}
+	if (codec === "png_zip") {
+		return { filename: "output.zip", mimeType: "application/zip" };
+	}
+	return { filename: "output.mp4", mimeType: "video/mp4" };
 }
 
 export interface ScreenshotOptions {
@@ -73,6 +254,14 @@ export class RecordingManager {
 	// Raw frame storage for fast capture mode
 	private rawFrames: RawFrame[] = [];
 	private useFastCapture: boolean = true;
+
+	// DNxHR 444 alpha-mode bookkeeping — restored by cleanup()
+	private alphaModeToRestore: boolean | null = null;
+
+	// Rolling buffer of the last N ffmpeg log lines for error surfacing
+	private ffmpegLogBuffer: string[] = [];
+	private readonly FFMPEG_LOG_MAX = 60;
+	private ffmpegLogHandler: ((data: { message?: string }) => void) | null = null;
 
 	constructor(schematicRenderer: SchematicRenderer) {
 		this.schematicRenderer = schematicRenderer;
@@ -422,7 +611,6 @@ export class RecordingManager {
 			width = 1920, // Default to 1080p for faster encoding
 			height = 1080,
 			frameRate = 60,
-			useJpegFrames = true, // JPEG is 3-5x faster to encode
 			jpegQuality = 0.92,
 			batchSize = 30, // Larger batches for better throughput
 			encodingPreset = "veryfast", // Good balance of speed and quality
@@ -433,6 +621,13 @@ export class RecordingManager {
 			onComplete,
 			onFrame,
 		} = options;
+
+		// transparent: true HARD-LOCKS codec to an alpha-capable codec — no fallback to h264.
+		const codec = resolveCodec(options);
+		const needsAlpha = codecNeedsAlpha(codec);
+		// Any alpha codec requires PNG frames — JPEG would strip the channel.
+		const useJpegFrames = needsAlpha ? false : (options.useJpegFrames ?? true);
+		const bitrateMbps = options.bitrateMbps;
 
 		// If custom camera driver provided, use the self-contained recording path
 		if (onFrame) {
@@ -446,6 +641,32 @@ export class RecordingManager {
 		this.pendingWrites = [];
 		this.rawFrames = [];
 		this.useFastCapture = true; // Use fast synchronous capture
+
+		// Transparent codec: enable alpha mode on renderer + alpha-capable 2D context.
+		// Restore both in cleanup. We snapshot the previous alpha state to restore correctly.
+		const renderManager = this.schematicRenderer.renderManager;
+		const wasAlphaMode = needsAlpha && renderManager ? renderManager.isAlphaMode() : false;
+		if (needsAlpha && renderManager && !wasAlphaMode) {
+			await renderManager.setAlphaMode(true);
+			this.alphaModeToRestore = false;
+		}
+		if (needsAlpha) {
+			// Recreate the recording 2D context with alpha so getImageData/toBlob preserve the channel.
+			this.ctx2d = this.recordingCanvas.getContext("2d", {
+				alpha: true,
+				desynchronized: true,
+				willReadFrequently: true,
+			});
+			const codecNotes: Record<Exclude<RecordingCodec, "h264">, string> = {
+				dnxhr_444: "DNxHR 444 (~880 Mbps @ 1080p60, ~3.5 Gbps @ 4K60)",
+				prores_4444: "ProRes 4444 (~330 Mbps @ 1080p60)",
+				vp9_alpha: `VP9+alpha WebM${bitrateMbps ? ` (CBR ${bitrateMbps} Mbps)` : " (CRF " + crf + ")"}`,
+				png_zip: "PNG sequence in ZIP (lossless, frame-perfect, no codec)",
+			};
+			console.warn(
+				`Transparent export: PNG frames + alpha channel. Codec: ${codecNotes[codec as Exclude<RecordingCodec, "h264">]}.`
+			);
+		}
 
 		try {
 			console.log("Setting up recording...");
@@ -558,6 +779,21 @@ export class RecordingManager {
 						this.pendingWrites = [];
 					}
 
+					// png_zip: skip FFmpeg entirely, pack PNG frames into a ZIP blob.
+					if (!codecIsFFmpegEncoded(codec)) {
+						console.log("Packing PNG frames into ZIP...");
+						const zipStart = performance.now();
+						const zipBlob = await this.packFramesAsZip(this.frameCount, ext, onFfmpegProgress);
+						console.log(
+							`Zip complete in ${((performance.now() - zipStart) / 1000).toFixed(1)}s (${(zipBlob.size / 1024 / 1024).toFixed(2)} MB)`
+						);
+						this.cleanupFramesAsync(this.frameCount, ext);
+						if (onFfmpegProgress) onFfmpegProgress(100, performance.now() - zipStart);
+						if (onComplete) onComplete(zipBlob);
+						this.stopRecording();
+						return;
+					}
+
 					console.log("Encoding video with FFmpeg...");
 					const ffmpegStart = performance.now();
 
@@ -599,31 +835,23 @@ export class RecordingManager {
 						}
 
 						// Build FFmpeg command with optimized settings
-						const ffmpegArgs = [
-							"-framerate",
-							frameRate.toString(),
-							"-pattern_type",
-							"sequence",
-							"-start_number",
-							"0",
-							"-i",
-							`frame%06d.${ext}`,
-							"-c:v",
-							"libx264",
-							"-preset",
+						const ffmpegArgs = buildFfmpegArgs({
+							codec,
+							frameRate,
+							ext,
 							encodingPreset,
-							"-threads",
-							"0",
-							"-crf",
-							crf.toString(),
-							"-pix_fmt",
-							"yuv420p",
-							"-movflags",
-							"+faststart",
-							"output.mp4",
-						];
+							crf,
+							bitrateMbps,
+						});
 
-						await this.ffmpeg.exec(ffmpegArgs);
+						this.attachFfmpegLogCapture();
+						try {
+							await this.ffmpeg.exec(ffmpegArgs);
+						} catch (e) {
+							throw this.wrapFfmpegError(e, ffmpegArgs);
+						} finally {
+							this.detachFfmpegLogCapture();
+						}
 
 						if (progressInterval) {
 							clearInterval(progressInterval);
@@ -637,7 +865,8 @@ export class RecordingManager {
 						console.log(`FFmpeg encoding complete in ${(ffmpegTime / 1000).toFixed(1)}s`);
 
 						// Get the video data
-						const data = await this.ffmpeg.readFile("output.mp4");
+						const { filename: outputFilename, mimeType: outputMime } = getOutputInfo(codec);
+						const data = await this.ffmpeg.readFile(outputFilename);
 
 						let blobData: BlobPart;
 						if (data instanceof Uint8Array) {
@@ -653,14 +882,14 @@ export class RecordingManager {
 							throw new Error("Unexpected data type from FFmpeg");
 						}
 
-						const blob = new Blob([blobData], { type: "video/mp4" });
+						const blob = new Blob([blobData], { type: outputMime });
 						console.log(`Video size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
 
 						// Cleanup frames in background
 						this.cleanupFramesAsync(this.frameCount, ext);
 
 						try {
-							await this.ffmpeg.deleteFile("output.mp4");
+							await this.ffmpeg.deleteFile(outputFilename);
 						} catch (e) {
 							// Ignore cleanup errors
 						}
@@ -705,6 +934,95 @@ export class RecordingManager {
 		}
 	}
 
+	/**
+	 * Read PNG frames out of FFmpeg's MEMFS and pack them into a ZIP blob.
+	 * Used by the `png_zip` codec — bypasses video encoding entirely so the
+	 * output is the original lossless frames, plus a manifest.json.
+	 */
+	private async packFramesAsZip(
+		frameCount: number,
+		ext: string,
+		onFfmpegProgress?: (progress: number, time: number) => void
+	): Promise<Blob> {
+		if (!this.ffmpeg) throw new Error("FFmpeg not available — cannot read frames");
+		const { default: JSZip } = await import("jszip");
+		const zip = new JSZip();
+		const startedAt = performance.now();
+
+		for (let i = 0; i < frameCount; i++) {
+			const filename = `frame${i.toString().padStart(6, "0")}.${ext}`;
+			const data = await this.ffmpeg.readFile(filename);
+			const bytes =
+				data instanceof Uint8Array ? data : new TextEncoder().encode(data as unknown as string);
+			zip.file(filename, bytes, { binary: true });
+			if (onFfmpegProgress && i % 5 === 0) {
+				// 50–95% slice covers reading frames out of MEMFS
+				onFfmpegProgress(50 + (i / frameCount) * 45, performance.now() - startedAt);
+			}
+		}
+
+		// Add a tiny manifest so consumers know frame rate / count without parsing filenames.
+		zip.file(
+			"manifest.json",
+			JSON.stringify(
+				{
+					frameCount,
+					extension: ext,
+					filenamePattern: `frame%06d.${ext}`,
+				},
+				null,
+				2
+			)
+		);
+
+		// store (compression level 0) — PNGs are already deflate-compressed; recompressing
+		// gains ~0% and costs CPU. ZIP serves as the container, not a compressor.
+		return zip.generateAsync({
+			type: "blob",
+			compression: "STORE",
+			mimeType: "application/zip",
+		});
+	}
+
+	/** Start buffering ffmpeg's log output for error surfacing. */
+	private attachFfmpegLogCapture(): void {
+		if (!this.ffmpeg) return;
+		this.ffmpegLogBuffer = [];
+		this.ffmpegLogHandler = (data: { message?: string }) => {
+			if (!data.message) return;
+			this.ffmpegLogBuffer.push(data.message);
+			if (this.ffmpegLogBuffer.length > this.FFMPEG_LOG_MAX) {
+				this.ffmpegLogBuffer.shift();
+			}
+		};
+		// @ts-ignore — ffmpeg.wasm log event
+		this.ffmpeg.on("log", this.ffmpegLogHandler);
+	}
+
+	private detachFfmpegLogCapture(): void {
+		if (this.ffmpeg && this.ffmpegLogHandler) {
+			// @ts-ignore
+			this.ffmpeg.off?.("log", this.ffmpegLogHandler);
+		}
+		this.ffmpegLogHandler = null;
+	}
+
+	/**
+	 * Wrap an ffmpeg.exec failure with the last log lines so the caller sees a
+	 * real error message instead of "undefined". The original ffmpeg.wasm
+	 * exception is usually a plain non-zero exit code with no message.
+	 */
+	private wrapFfmpegError(original: unknown, args: string[]): Error {
+		const tail = this.ffmpegLogBuffer.slice(-15).join("\n");
+		const origMsg =
+			original instanceof Error ? original.message : String(original ?? "exec failed");
+		const wrapped = new Error(
+			`FFmpeg exec failed (${origMsg}).\nargs: ${args.join(" ")}\n--- last ffmpeg log lines ---\n${tail || "(no log captured)"}`
+		);
+		console.error(wrapped.message);
+		return wrapped;
+	}
+
 	private cleanup(): void {
 		if (this.originalSettings) {
 			const renderer = this.schematicRenderer.renderManager?.renderer;
@@ -716,6 +1034,21 @@ export class RecordingManager {
 			camera.aspect = this.originalSettings.aspect;
 			camera.updateProjectionMatrix();
 			this.originalSettings = null;
+		}
+
+		// Restore renderer alpha mode if DNxHR 444 enabled it. Fire-and-forget — cleanup is sync.
+		if (this.alphaModeToRestore !== null) {
+			const target = this.alphaModeToRestore;
+			this.alphaModeToRestore = null;
+			this.schematicRenderer.renderManager?.setAlphaMode(target).catch((e) => {
+				console.warn("Failed to restore alpha mode:", e);
+			});
+			// Restore opaque ctx2d for subsequent (non-transparent) recordings/screenshots
+			this.ctx2d = this.recordingCanvas.getContext("2d", {
+				alpha: false,
+				desynchronized: true,
+				willReadFrequently: true,
+			});
 		}
 	}
 
@@ -737,7 +1070,6 @@ export class RecordingManager {
 			width = 1920,
 			height = 1080,
 			frameRate = 60,
-			useJpegFrames = true,
 			jpegQuality = 0.92,
 			encodingPreset = "veryfast",
 			crf = 20,
@@ -748,12 +1080,26 @@ export class RecordingManager {
 			onFrame,
 		} = options;
 
+		// transparent: true HARD-LOCKS codec to an alpha-capable codec.
+		const codec = resolveCodec(options);
+		const needsAlpha = codecNeedsAlpha(codec);
+		const bitrateMbps = options.bitrateMbps;
+		// Any alpha codec must use PNG to preserve the channel.
+		const useJpegFrames = needsAlpha ? false : (options.useJpegFrames ?? true);
+
 		if (!this.ffmpeg || !onFrame) return;
 
 		this.useJpegFrames = useJpegFrames;
 		this.jpegQuality = jpegQuality;
 
 		try {
+			// Enable alpha on renderer for any alpha codec; restore in cleanup().
+			const renderManager = this.schematicRenderer.renderManager;
+			if (needsAlpha && renderManager && !renderManager.isAlphaMode()) {
+				await renderManager.setAlphaMode(true);
+				this.alphaModeToRestore = false;
+			}
+
 			await this.setupRecording(width, height);
 
 			// Resize composer if active
@@ -769,7 +1115,11 @@ export class RecordingManager {
 			const captureCanvas = document.createElement("canvas");
 			captureCanvas.width = width;
 			captureCanvas.height = height;
-			const ctx = captureCanvas.getContext("2d", { willReadFrequently: true })!;
+			// Alpha-capable context for any alpha codec so toBlob preserves the channel.
+			const ctx = captureCanvas.getContext("2d", {
+				alpha: needsAlpha,
+				willReadFrequently: true,
+			})!;
 
 			const frames: { data: Uint8Array; index: number }[] = [];
 
@@ -830,42 +1180,40 @@ export class RecordingManager {
 				}
 			}
 
+			// png_zip: skip FFmpeg, zip the frames.
+			if (!codecIsFFmpegEncoded(codec)) {
+				if (onFfmpegProgress) onFfmpegProgress(80, 0);
+				const zipBlob = await this.packFramesAsZip(frames.length, ext, onFfmpegProgress);
+				if (onFfmpegProgress) onFfmpegProgress(100, 0);
+				if (onComplete) onComplete(zipBlob);
+				this.cleanupFramesAsync(frames.length, ext);
+				this.isRecording = false;
+				return;
+			}
+
 			// Encode
 			if (onFfmpegProgress) onFfmpegProgress(75, 0);
-			await this.ffmpeg!.exec([
-				"-framerate",
-				frameRate.toString(),
-				"-pattern_type",
-				"sequence",
-				"-start_number",
-				"0",
-				"-i",
-				`frame%06d.${ext}`,
-				"-c:v",
-				"libx264",
-				"-preset",
-				encodingPreset,
-				"-threads",
-				"0",
-				"-crf",
-				crf.toString(),
-				"-pix_fmt",
-				"yuv420p",
-				"-movflags",
-				"+faststart",
-				"output.mp4",
-			]);
+			const ffArgs = buildFfmpegArgs({ codec, frameRate, ext, encodingPreset, crf, bitrateMbps });
+			this.attachFfmpegLogCapture();
+			try {
+				await this.ffmpeg!.exec(ffArgs);
+			} catch (e) {
+				throw this.wrapFfmpegError(e, ffArgs);
+			} finally {
+				this.detachFfmpegLogCapture();
+			}
 
-			const data = await this.ffmpeg!.readFile("output.mp4");
+			const { filename: outputFilename, mimeType: outputMime } = getOutputInfo(codec);
+			const data = await this.ffmpeg!.readFile(outputFilename);
 			const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
-			const videoBlob = new Blob([bytes as BlobPart], { type: "video/mp4" });
+			const videoBlob = new Blob([bytes as BlobPart], { type: outputMime });
 
 			if (onFfmpegProgress) onFfmpegProgress(100, 0);
 			if (onComplete) onComplete(videoBlob);
 
 			// Cleanup FFmpeg files
 			this.cleanupFramesAsync(frames.length, ext);
-			await this.ffmpeg!.deleteFile("output.mp4").catch(() => {});
+			await this.ffmpeg!.deleteFile(outputFilename).catch(() => {});
 
 			this.isRecording = false;
 		} catch (error) {

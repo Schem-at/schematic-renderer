@@ -25,7 +25,6 @@ export class HoverHighlight implements Highlight {
 	}
 
 	activate() {
-		console.log("HoverHighlight activated");
 		this.schematicRenderer.eventEmitter.on("hoverEnter", this.onHoverEnter);
 		this.schematicRenderer.eventEmitter.on("hoverExit", this.onHoverExit);
 	}

@@ -160,16 +160,12 @@ export class SchematicObject extends EventEmitter {
 
 		const schematicDimensions = this.getDimensions();
 		const tightDimensions = this.getTightDimensions();
-		console.log("Schematic dimensions (allocated):", schematicDimensions);
-		console.log("Schematic dimensions (tight bounds):", tightDimensions);
 
 		// Use tight bounds for centering if available, otherwise fall back to allocated dimensions
 		const centeringDimensions =
 			tightDimensions[0] > 0 && tightDimensions[1] > 0 && tightDimensions[2] > 0
 				? tightDimensions
 				: schematicDimensions;
-
-		console.log("Centering schematic using dimensions:", centeringDimensions);
 		this.position = new THREE.Vector3(
 			-centeringDimensions[0] / 2 + 0.5, // Center the schematic
 			0.5,
@@ -429,7 +425,7 @@ export class SchematicObject extends EventEmitter {
 	 */
 	private displayPerformanceResults(sessionData: any): void {
 		if (!sessionData) {
-			console.warn("⚠️ displayPerformanceResults called with no data!");
+			console.warn("displayPerformanceResults called with no data!");
 			return;
 		}
 
@@ -446,14 +442,14 @@ export class SchematicObject extends EventEmitter {
 		}
 
 		if (sessionData.breakdown && sessionData.breakdown.length > 0) {
-			console.warn("📋 Detailed Breakdown:");
+			console.warn("Detailed Breakdown:");
 			sessionData.breakdown.forEach((op: any) => {
 				console.warn(
 					`  - ${op.operationId}: ${op.duration !== undefined ? op.duration.toFixed(2) : "0.00"}ms`
 				);
 			});
 		} else {
-			console.warn("⚠️ No breakdown data available.");
+			console.warn("No breakdown data available.");
 			if (sessionData.timingData) {
 				console.log("Raw timing data:", JSON.stringify(sessionData.timingData));
 			}
@@ -794,7 +790,11 @@ export class SchematicObject extends EventEmitter {
 			// End performance monitoring session and display results
 			const sessionData = performanceMonitor.endSession(sessionId);
 			if (sessionData) {
-				this.displayPerformanceResults(sessionData);
+				// Gate the console breakdown behind an explicit debug flag — rebuilds
+				// fire frequently (e.g. slicer scrubbing) and the table is noisy.
+				if (this.schematicRenderer.options.debugOptions?.logBuildPerformance) {
+					this.displayPerformanceResults(sessionData);
+				}
 
 				// Dispatch event for UI components to react
 				if (typeof window !== "undefined") {
@@ -1222,6 +1222,83 @@ export class SchematicObject extends EventEmitter {
 	}
 
 	/**
+	/**
+	 * Clip a list of chunks against renderingBounds before they're handed to
+	 * the batched worker. `processChunksBatched` doesn't accept bounds, so we
+	 * cull whole chunks that fall outside the slice and rewrite the block
+	 * Int32Arrays of chunks that overlap.
+	 */
+	private applyBoundsToChunks(
+		chunks: Array<{ blocks: Int32Array; chunk_x: number; chunk_y: number; chunk_z: number }>,
+		bounds: { min: THREE.Vector3; max: THREE.Vector3 },
+		chunkDimensions: { chunkWidth: number; chunkHeight: number; chunkLength: number }
+	): Array<{ blocks: Int32Array; chunk_x: number; chunk_y: number; chunk_z: number }> {
+		const out: Array<{ blocks: Int32Array; chunk_x: number; chunk_y: number; chunk_z: number }> =
+			[];
+		const minX = bounds.min.x;
+		const minY = bounds.min.y;
+		const minZ = bounds.min.z;
+		const maxX = bounds.max.x;
+		const maxY = bounds.max.y;
+		const maxZ = bounds.max.z;
+
+		for (const c of chunks) {
+			const chunkMinX = c.chunk_x * chunkDimensions.chunkWidth;
+			const chunkMinY = c.chunk_y * chunkDimensions.chunkHeight;
+			const chunkMinZ = c.chunk_z * chunkDimensions.chunkLength;
+			const chunkMaxX = chunkMinX + chunkDimensions.chunkWidth;
+			const chunkMaxY = chunkMinY + chunkDimensions.chunkHeight;
+			const chunkMaxZ = chunkMinZ + chunkDimensions.chunkLength;
+
+			// Whole chunk outside bounds — drop it.
+			if (
+				chunkMaxX <= minX ||
+				chunkMinX >= maxX ||
+				chunkMaxY <= minY ||
+				chunkMinY >= maxY ||
+				chunkMaxZ <= minZ ||
+				chunkMinZ >= maxZ
+			) {
+				continue;
+			}
+
+			// Whole chunk inside bounds — keep as-is, no per-block filter.
+			if (
+				chunkMinX >= minX &&
+				chunkMaxX <= maxX &&
+				chunkMinY >= minY &&
+				chunkMaxY <= maxY &&
+				chunkMinZ >= minZ &&
+				chunkMaxZ <= maxZ
+			) {
+				out.push(c);
+				continue;
+			}
+
+			// Partial overlap — filter the block list.
+			const blocks = c.blocks;
+			const filtered: number[] = [];
+			for (let i = 0; i < blocks.length; i += 4) {
+				const x = blocks[i];
+				const y = blocks[i + 1];
+				const z = blocks[i + 2];
+				if (x >= minX && x < maxX && y >= minY && y < maxY && z >= minZ && z < maxZ) {
+					filtered.push(x, y, z, blocks[i + 3]);
+				}
+			}
+			if (filtered.length > 0) {
+				out.push({
+					blocks: new Int32Array(filtered),
+					chunk_x: c.chunk_x,
+					chunk_y: c.chunk_y,
+					chunk_z: c.chunk_z,
+				});
+			}
+		}
+		return out;
+	}
+
+	/**
 	 * High-performance batched build mode
 	 *
 	 * Processes all chunks through a single worker that accumulates geometry,
@@ -1315,13 +1392,24 @@ export class SchematicObject extends EventEmitter {
 			});
 		}
 
+		// Apply rendering bounds: drop whole chunks that don't intersect, and
+		// filter individual blocks in chunks that overlap the slice. The
+		// batched worker path doesn't accept renderingBounds, so we strip
+		// the blocks here before they ever leave the main thread.
+		const bounds = schematicObject.renderingBounds?.enabled
+			? schematicObject.renderingBounds
+			: undefined;
+		const chunksToProcess = bounds
+			? this.applyBoundsToChunks(allChunks, bounds, chunkDimensions)
+			: allChunks;
+
 		// STEP 4: Process all chunks in batch mode
 		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);
 		performanceMonitor.startOperation("Process All Chunks");
 
 		let processedCount = 0;
 		const batchedMeshes = await this.worldMeshBuilder.processChunksBatched(
-			allChunks,
+			chunksToProcess,
 			(processed, total) => {
 				processedCount = processed;
 				const progress = 0.2 + (processed / total) * 0.7;

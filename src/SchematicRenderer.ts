@@ -1,8 +1,4 @@
 import initializeNucleationWasm from "nucleation";
-// @ts-ignore
-import nucleationWasm from "nucleation-wasm";
-// Initialize with inlined WASM for single-file support
-// await initializeNucleationWasm(nucleationWasm);
 
 import * as THREE from "three";
 import { CameraManager } from "./managers/CameraManager";
@@ -18,6 +14,7 @@ import { EventEmitter } from "events";
 import { ResourcePackManager, DefaultPackCallback } from "./managers/ResourcePackManager";
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
 import { SidebarManager } from "./ui/sidebar/SidebarManager";
+import { SlicerOverlay, type SlicerOverlayOptions } from "./ui/SlicerOverlay";
 import type { SidebarTabId } from "./ui/sidebar/types";
 import type {
 	PacksChangedEvent,
@@ -79,6 +76,7 @@ export class SchematicRenderer {
 	public packs!: ResourcePackManagerProxy;
 	/** Unified sidebar UI manager */
 	public sidebar: SidebarManager | undefined;
+	public slicerOverlay: SlicerOverlay | undefined;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -139,6 +137,12 @@ export class SchematicRenderer {
 		// Initialize unified sidebar UI
 		if (this.options.sidebarOptions?.enabled !== false) {
 			this.sidebar = new SidebarManager(this, this.options.sidebarOptions);
+		}
+
+		// Initialize floating slicer overlay if requested. Always constructed
+		// lazily via the API methods; this only auto-opens it on startup.
+		if (this.options.showSlicerOverlay) {
+			this.slicerOverlay = new SlicerOverlay(this, this.options.slicerOverlayOptions);
 		}
 
 		this.state = {
@@ -252,7 +256,7 @@ export class SchematicRenderer {
 			showProgress("Loading WebAssembly module...", 0.15);
 			// Wasm is already initialized at module level
 			if (!SchematicRenderer.isNucleationInitialized) {
-				await initializeNucleationWasm(nucleationWasm);
+				await initializeNucleationWasm();
 				SchematicRenderer.isNucleationInitialized = true;
 			}
 
@@ -281,16 +285,6 @@ export class SchematicRenderer {
 			// Initialize RenderManager (async for WebGPU support)
 			this.renderManager = new RenderManager(this);
 			await this.renderManager.initialize();
-
-			// Log renderer type
-			if (this.renderManager.isWebGPU) {
-				console.log(
-					"%c[SchematicRenderer] Using WebGPU Renderer",
-					"color: #4caf50; font-weight: bold"
-				);
-			} else {
-				console.log("[SchematicRenderer] Using WebGL Renderer");
-			}
 
 			this.highlightManager = new HighlightManager(this);
 			this.insignManager = new InsignManager(this);
@@ -622,9 +616,6 @@ export class SchematicRenderer {
 		// Check if Cubane already has packs loaded (from auto-restore)
 		const cubanePackCount = this.cubane.getPackCount?.() ?? 0;
 		if (cubanePackCount > 0) {
-			console.log(
-				`[SchematicRenderer] Cubane already has ${cubanePackCount} pack(s) from auto-restore, skipping initial pack loading`
-			);
 			return;
 		}
 
@@ -693,7 +684,6 @@ export class SchematicRenderer {
 			this.lastInteractionTime = performance.now();
 
 			if (this.isIdle) {
-				console.log("[Renderer] Waking up from idle mode due to pointer event");
 				this.isIdle = false;
 
 				// Cancel the pending setTimeout if we're in idle mode
@@ -750,7 +740,6 @@ export class SchematicRenderer {
 		if (this.lastDebugTime === 0) {
 			this.lastDebugTime = now;
 			this.lastInteractionTime = now;
-			console.log("[Renderer] Animation loop started with adaptive FPS");
 		}
 
 		// Adaptive FPS logic (only if enabled)
@@ -770,18 +759,10 @@ export class SchematicRenderer {
 
 			// Determine if scene is idle
 			const timeSinceInteraction = now - this.lastInteractionTime;
-			const wasIdle = this.isIdle;
 			this.isIdle = timeSinceInteraction > this.idleThreshold;
 
 			// Adapt frame interval based on idle state
 			currentTargetFPS = this.isIdle ? this.idleFPS : this.targetFPS;
-
-			// Log state changes
-			if (wasIdle !== this.isIdle) {
-				console.log(
-					`[Renderer] ${this.isIdle ? "Entering idle mode" : "Exiting idle mode"} (target FPS: ${currentTargetFPS})`
-				);
-			}
 		}
 
 		// Update frame interval (0 = uncapped)
@@ -1015,6 +996,32 @@ export class SchematicRenderer {
 		}
 
 		return schematic.createBoundsControls();
+	}
+
+	/**
+	 * Show the floating slicer overlay (rendering-bounds controls).
+	 * Lazily constructs the overlay if it hasn't been created yet.
+	 */
+	public showSlicerOverlay(options?: SlicerOverlayOptions): SlicerOverlay {
+		if (!this.slicerOverlay) {
+			this.slicerOverlay = new SlicerOverlay(this, options ?? this.options.slicerOverlayOptions);
+		}
+		this.slicerOverlay.show();
+		return this.slicerOverlay;
+	}
+
+	/** Hide the floating slicer overlay (no-op if it hasn't been created). */
+	public hideSlicerOverlay(): void {
+		this.slicerOverlay?.hide();
+	}
+
+	/** Toggle the floating slicer overlay, constructing it on first call. */
+	public toggleSlicerOverlay(): void {
+		if (!this.slicerOverlay) {
+			this.showSlicerOverlay();
+			return;
+		}
+		this.slicerOverlay.toggle();
 	}
 
 	/**

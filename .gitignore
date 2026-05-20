@@ -33,3 +33,13 @@ package-lock.json
 mesh_builder_wasm/target/
 mesh_builder_wasm/pkg/
 mesh_builder_wasm/Cargo.lock
+
+# Claude Code local instructions
+CLAUDE.md
+
+# Node compile cache
+node-compile-cache/
+
+# Local smoke-test scripts (not part of the package)
+smoke.html
+smoke-server.ts

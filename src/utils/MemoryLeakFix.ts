@@ -195,7 +195,7 @@ export class MemoryLeakFix {
 			// Log warning if memory usage is high
 			if (memory.used > 1000) {
 				// 1GB
-				console.warn(`⚠️ High memory usage detected: ${memory.used}MB / ${memory.limit}MB`);
+				console.warn(`High memory usage detected: ${memory.used}MB / ${memory.limit}MB`);
 			}
 
 			return memory;

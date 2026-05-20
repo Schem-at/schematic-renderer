@@ -99,6 +99,16 @@ const renderer = new SchematicRenderer(
 		enableInteraction: false,
 		enableDragAndDrop: true,
 		enableGizmos: true,
+
+		// Floating rendering-bounds slicer overlay (X/Y/Z min/max sliders).
+		// Toggle at runtime with `renderer.toggleSlicerOverlay()` or the
+		// keyboard shortcut wired further down (press 'L' for Layer slicer).
+		showSlicerOverlay: true,
+		slicerOverlayOptions: {
+			debounceMs: 80,
+			corner: "top-right",
+			showHelperByDefault: true,
+		},
 		interactionOptions: {
 			enableSelection: true,
 			enableMovingSchematics: true,
@@ -329,3 +339,16 @@ if (listButton) {
 		console.log("Stored resource packs:", packs);
 	});
 }
+
+// Press 'L' to toggle the layer slicer overlay. Ignore when typing in an input.
+window.addEventListener("keydown", (e) => {
+	if (e.repeat) return;
+	const t = e.target as HTMLElement | null;
+	if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+	if (e.key === "l" || e.key === "L") {
+		renderer.toggleSlicerOverlay();
+	}
+});
+
+// Expose for console tinkering.
+(window as unknown as { renderer: typeof renderer }).renderer = renderer;
