@@ -86,6 +86,7 @@ export default tseslint.config(
 			"*.config.js",
 			"*.config.mjs",
 			"mesh_builder_wasm/**",
+			"src/wasm/**", // generated wasm-bindgen output (mesh_builder_wasm, minecraft_schematic_utils)
 		],
 	}
 );
