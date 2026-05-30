@@ -19,7 +19,7 @@ vi.mock("./workers/MeshBuilder.worker?worker&inline", () => ({
 
 // Mock dependencies
 vi.mock("./SchematicRenderer");
-vi.mock("cubane", () => {
+vi.mock("./cubane", () => {
 	return {
 		Cubane: class MockCubane {
 			getBlockMesh = vi

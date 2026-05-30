@@ -4,5 +4,4 @@ node_modules/
 *.tgz
 bun.lock
 mesh_builder_wasm/
-nucleation_local/
 test/

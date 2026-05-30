@@ -71,6 +71,10 @@ export interface DebugOptions {
 	// after every rebuildMesh. Off by default — slicing fires many rebuilds per
 	// second and this would otherwise spam the console.
 	logBuildPerformance?: boolean;
+	// Render a debug placeholder (purple/magenta wireframe) for blocks Cubane
+	// can't build a model for (unknown/unhandled blocks). When false (default),
+	// unhandled blocks render nothing.
+	showUnknownBlocks?: boolean;
 	// Custom panels to add to the GUI
 	customPanels?: Array<{
 		name: string;
@@ -383,6 +387,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	debugOptions: {
 		enableInspector: false,
 		showOnStartup: true,
+		showUnknownBlocks: false,
 	},
 	postProcessingOptions: {
 		enabled: true,

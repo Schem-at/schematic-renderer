@@ -633,7 +633,14 @@ impl MeshBuilder {
                                     };
                                     
                                     if neighbor_face_index < 6 {
-                                        if (neighbor_entry.occlusion_flags & (1 << neighbor_face_index)) != 0 {
+                                        // Only cull against a neighbour in the SAME render
+                                        // category. This keeps see-through blocks (glass,
+                                        // leaves, water) from culling the solid blocks behind
+                                        // them, while still letting same-category neighbours
+                                        // (e.g. glass-on-glass) cull as before.
+                                        if neighbor_entry.category.as_str() == category
+                                            && (neighbor_entry.occlusion_flags & (1 << neighbor_face_index)) != 0
+                                        {
                                             is_visible = false;
                                         }
                                     }

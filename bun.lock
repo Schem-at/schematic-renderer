@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "schematic-renderer",
@@ -8,7 +9,6 @@
         "@ffmpeg/util": "^0.12.2",
         "chokidar": "^3.6.0",
         "concurrently": "^8.2.2",
-        "cubane": "^1.0.20",
         "deepmerge": "^4.3.1",
         "fs-extra": "^11.2.0",
         "gif.js.optimized": "^1.0.1",
@@ -17,7 +17,7 @@
         "jszip": "^3.10.1",
         "lil-gui": "^0.19.2",
         "n8ao": "^1.10.0",
-        "nucleation": "^0.1.184",
+        "nucleation": "^0.2.11",
         "pako": "^2.1.0",
         "postprocessing": "^6.35.4",
         "simplex-noise": "^4.0.3",
@@ -562,8 +562,6 @@
 
     "crypto-browserify": ["crypto-browserify@3.12.1", "", { "dependencies": { "browserify-cipher": "^1.0.1", "browserify-sign": "^4.2.3", "create-ecdh": "^4.0.4", "create-hash": "^1.2.0", "create-hmac": "^1.1.7", "diffie-hellman": "^5.0.3", "hash-base": "~3.0.4", "inherits": "^2.0.4", "pbkdf2": "^3.1.2", "public-encrypt": "^4.0.3", "randombytes": "^2.1.0", "randomfill": "^1.0.4" } }, ""],
 
-    "cubane": ["cubane@1.0.20", "", { "dependencies": { "jszip": "^3.10.1" }, "peerDependencies": { "three": "^0.184.0" } }, "sha512-szD2xNdzochYzyO81K8w8fzSMho5U3YXtwie6pv04uTxDfAW82qlhN1tSU1jptiG9dlRbh7Qnn4bsZbr6RwatA=="],
-
     "d3": ["d3@7.9.0", "", { "dependencies": { "d3-array": "3", "d3-axis": "3", "d3-brush": "3", "d3-chord": "3", "d3-color": "3", "d3-contour": "4", "d3-delaunay": "6", "d3-dispatch": "3", "d3-drag": "3", "d3-dsv": "3", "d3-ease": "3", "d3-fetch": "3", "d3-force": "3", "d3-format": "3", "d3-geo": "3", "d3-hierarchy": "3", "d3-interpolate": "3", "d3-path": "3", "d3-polygon": "3", "d3-quadtree": "3", "d3-random": "3", "d3-scale": "4", "d3-scale-chromatic": "3", "d3-selection": "3", "d3-shape": "3", "d3-time": "3", "d3-time-format": "4", "d3-timer": "3", "d3-transition": "3", "d3-zoom": "3" } }, ""],
 
     "d3-array": ["d3-array@3.2.4", "", { "dependencies": { "internmap": "1 - 2" } }, ""],
@@ -1038,7 +1036,7 @@
 
     "normalize-path": ["normalize-path@3.0.0", "", {}, ""],
 
-    "nucleation": ["nucleation@0.1.184", "", {}, "sha512-1DWNelsRq7vkiRTurNW68+K73nTfxdBMMqlNa+VPodfK26sjUvUZ+/RjtU7wtUjKGmF2s296qgOKZjThKKqXDA=="],
+    "nucleation": ["nucleation@0.2.11", "", {}, "sha512-R130mpBueECjMT/laeR0JzaUaLt+jyCMg+V2bjrKMUt2ArDYRRLfQ10Y1Htu1wbm/QylXuckApug1oin0ERuPw=="],
 
     "oauth-sign": ["oauth-sign@0.9.0", "", {}, ""],
 

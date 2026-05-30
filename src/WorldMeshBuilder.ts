@@ -11,7 +11,7 @@ import type {
 	ChunkGeometryData,
 } from "./types";
 // @ts-ignore
-import { Cubane } from "cubane";
+import { Cubane } from "./cubane";
 import { InstancedBlockRenderer } from "./InstancedBlockRenderer";
 import { performanceMonitor } from "./performance/PerformanceMonitor";
 // Worker imports - Vite handles bundling

@@ -236,7 +236,8 @@ function buildChunk(request: ChunkBuildRequest) {
 			getIndex,
 			originX,
 			originY,
-			originZ
+			originZ,
+			category
 		);
 
 		if (merged) {
@@ -278,7 +279,8 @@ function mergeGeometriesWithCulling(
 	getIndex: (x: number, y: number, z: number) => number,
 	originX: number,
 	originY: number,
-	originZ: number
+	originZ: number,
+	category: string
 ) {
 	let totalVerts = 0;
 	let totalIndices = 0;
@@ -368,7 +370,14 @@ function mergeGeometriesWithCulling(
 								else if (dz === -1) neighborFaceIndex = 5;
 
 								if (neighborFaceIndex !== -1) {
-									if ((neighborGeomData.occlusionFlags & (1 << neighborFaceIndex)) !== 0) {
+									// Only cull against a neighbour in the SAME render category,
+									// so see-through blocks (glass, leaves, water) don't cull the
+									// solid blocks behind them while same-category neighbours
+									// (e.g. glass-on-glass) still cull.
+									if (
+										(neighborGeomData as any).category === category &&
+										(neighborGeomData.occlusionFlags & (1 << neighborFaceIndex)) !== 0
+									) {
 										isVisible = false;
 									}
 								}

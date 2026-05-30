@@ -39,7 +39,7 @@ import { OverlayManager } from "./managers/OverlayManager";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
-import { Cubane } from "cubane";
+import { Cubane } from "./cubane";
 import { KeyboardControls } from "./managers/KeyboardControls";
 import { InspectorManager } from "./managers/InspectorManager";
 import { RegionManager } from "./managers/RegionManager";
@@ -155,7 +155,9 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.1);
 		}
 
-		this.cubane = new Cubane();
+		this.cubane = new Cubane({
+			showUnknownBlocks: this.options.debugOptions?.showUnknownBlocks,
+		});
 
 		// Bind pointer events for immediate wake-up from idle mode
 		this.bindPointerEvents();
@@ -1118,7 +1120,9 @@ export class SchematicRenderer {
 
 		// Clear Cubane's existing resources
 		this.cubane.dispose();
-		this.cubane = new Cubane(); // Recreate fresh instance
+		this.cubane = new Cubane({
+			showUnknownBlocks: this.options.debugOptions?.showUnknownBlocks,
+		}); // Recreate fresh instance
 
 		// Reinitialize resource packs in Cubane
 		await this.initializeResourcePacks();

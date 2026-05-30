@@ -66,6 +66,19 @@ export default tseslint.config(
 		},
 	},
 	{
+		// Vendored Cubane source, absorbed from github.com/Schem-at/Cubane.
+		// Relax style rules that reflect Cubane's conventions rather than this
+		// project's, matching the treatment of other vendored code (workers/wasm).
+		files: ["src/cubane/**/*.ts"],
+		rules: {
+			"@typescript-eslint/no-explicit-any": "off",
+			"@typescript-eslint/no-non-null-assertion": "off",
+			"@typescript-eslint/no-unused-vars": "off",
+			"prefer-const": "off",
+			"no-empty": "off",
+		},
+	},
+	{
 		ignores: [
 			"dist/**",
 			"node_modules/**",
@@ -73,7 +86,6 @@ export default tseslint.config(
 			"*.config.js",
 			"*.config.mjs",
 			"mesh_builder_wasm/**",
-			"nucleation_local/**",
 		],
 	}
 );

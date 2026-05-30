@@ -1,45 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
-/**
- * Initialize the WASM module with better panic messages
- */
-export function init(): void;
-/**
- * Get the version of the mesh builder
- */
-export function get_version(): string;
+
 /**
  * Main mesh builder that holds palette data and performs chunk building
  */
 export class MeshBuilder {
 	free(): void;
 	[Symbol.dispose](): void;
-	constructor();
-	/**
-	 * Enable or disable voxel-based ambient occlusion (Minecraft-style smooth lighting)
-	 */
-	set_voxel_ao(enabled: boolean): void;
-	/**
-	 * Enable batch mode - chunks will be accumulated instead of returned immediately
-	 */
-	start_batch(): void;
-	/**
-	 * Disable batch mode and return all accumulated geometry
-	 */
-	finish_batch(): any;
-	/**
-	 * Clear accumulators without returning data
-	 */
-	clear_batch(): void;
-	/**
-	 * Get batch mode status
-	 */
-	is_batch_mode(): boolean;
-	/**
-	 * Update palette with geometry data from JavaScript
-	 * palette_data is an array of objects with: { index, occlusionFlags, category, geometries: [...] }
-	 */
-	update_palette(palette_data: Array<any>): void;
 	/**
 	 * Build a chunk mesh from block data
 	 *
@@ -56,7 +23,30 @@ export class MeshBuilder {
 	 * dramatically reducing vertex count for large flat surfaces.
 	 */
 	build_chunk_greedy(blocks: Int32Array, origin_x: number, origin_y: number, origin_z: number): any;
+	/**
+	 * Clear accumulators without returning data
+	 */
+	clear_batch(): void;
+	/**
+	 * Disable batch mode and return all accumulated geometry
+	 */
+	finish_batch(): any;
+	/**
+	 * Get batch mode status
+	 */
+	is_batch_mode(): boolean;
+	constructor();
+	/**
+	 * Enable batch mode - chunks will be accumulated instead of returned immediately
+	 */
+	start_batch(): void;
+	/**
+	 * Update palette with geometry data from JavaScript
+	 * palette_data is an array of objects with: { index, occlusionFlags, category, geometries: [...] }
+	 */
+	update_palette(palette_data: Array<any>): void;
 }
+
 /**
  * Palette geometry entry - stores precomputed geometry for a block type
  */
@@ -74,29 +64,24 @@ export class PaletteEntry {
 	);
 }
 
+/**
+ * Get the version of the mesh builder
+ */
+export function get_version(): string;
+
+/**
+ * Initialize the WASM module with better panic messages
+ */
+export function init(): void;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
 	readonly memory: WebAssembly.Memory;
-	readonly init: () => void;
-	readonly __wbg_paletteentry_free: (a: number, b: number) => void;
-	readonly paletteentry_new: (
-		a: number,
-		b: number,
-		c: any,
-		d: any,
-		e: any,
-		f: any,
-		g: number
-	) => number;
 	readonly __wbg_meshbuilder_free: (a: number, b: number) => void;
-	readonly meshbuilder_new: () => number;
-	readonly meshbuilder_set_voxel_ao: (a: number, b: number) => void;
-	readonly meshbuilder_start_batch: (a: number) => void;
-	readonly meshbuilder_finish_batch: (a: number) => [number, number, number];
-	readonly meshbuilder_clear_batch: (a: number) => void;
-	readonly meshbuilder_is_batch_mode: (a: number) => number;
-	readonly meshbuilder_update_palette: (a: number, b: any) => void;
+	readonly __wbg_paletteentry_free: (a: number, b: number) => void;
+	readonly get_version: () => [number, number];
+	readonly init: () => void;
 	readonly meshbuilder_build_chunk: (
 		a: number,
 		b: any,
@@ -111,7 +96,21 @@ export interface InitOutput {
 		d: number,
 		e: number
 	) => [number, number, number];
-	readonly get_version: () => [number, number];
+	readonly meshbuilder_clear_batch: (a: number) => void;
+	readonly meshbuilder_finish_batch: (a: number) => [number, number, number];
+	readonly meshbuilder_is_batch_mode: (a: number) => number;
+	readonly meshbuilder_new: () => number;
+	readonly meshbuilder_start_batch: (a: number) => void;
+	readonly meshbuilder_update_palette: (a: number, b: any) => void;
+	readonly paletteentry_new: (
+		a: number,
+		b: number,
+		c: any,
+		d: any,
+		e: any,
+		f: any,
+		g: number
+	) => number;
 	readonly __wbindgen_malloc: (a: number, b: number) => number;
 	readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 	readonly __wbindgen_free: (a: number, b: number, c: number) => void;
@@ -123,6 +122,7 @@ export interface InitOutput {
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
+
 /**
  * Instantiates the given `module`, which can either be bytes or
  * a precompiled `WebAssembly.Module`.
