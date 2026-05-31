@@ -103,12 +103,46 @@ export class ResourcePackPanel extends BasePanel {
 		if (packs.length === 0) {
 			const emptyState = document.createElement("div");
 			Object.assign(emptyState.style, {
-				padding: "20px",
+				padding: "20px 16px",
 				textAlign: "center",
 				color: UIColors.textDim,
 				fontSize: "12px",
+				lineHeight: "1.5",
 			});
-			emptyState.textContent = "No resource packs loaded";
+
+			const title = document.createElement("div");
+			Object.assign(title.style, {
+				color: UIColors.text,
+				fontWeight: "600",
+				marginBottom: "4px",
+			});
+			title.textContent = "No resource packs loaded";
+
+			const desc = document.createElement("div");
+			desc.textContent =
+				"Minecraft blocks need a resource pack for textures — without one they render as placeholders.";
+			desc.style.marginBottom = "12px";
+
+			const loadBtn = document.createElement("button");
+			loadBtn.type = "button";
+			loadBtn.textContent = "+ Load resource pack";
+			Object.assign(loadBtn.style, {
+				cursor: "pointer",
+				background: "#3a7afe",
+				color: "#fff",
+				border: "none",
+				borderRadius: "6px",
+				padding: "7px 12px",
+				fontSize: "12px",
+				fontWeight: "600",
+			});
+			loadBtn.addEventListener("click", () => this.promptLoadPack());
+
+			const hint = document.createElement("div");
+			hint.textContent = "…or drag a pack (.zip) onto the view";
+			Object.assign(hint.style, { marginTop: "8px", fontSize: "11px" });
+
+			emptyState.append(title, desc, loadBtn, hint);
 			this.packList.appendChild(emptyState);
 			return;
 		}
@@ -117,6 +151,26 @@ export class ResourcePackPanel extends BasePanel {
 			const item = this.createPackItem(pack);
 			this.packList.appendChild(item);
 		}
+	}
+
+	/** Opens a file picker and loads the chosen pack via the renderer. */
+	private promptLoadPack(): void {
+		const input = document.createElement("input");
+		input.type = "file";
+		input.accept = ".zip";
+		input.style.display = "none";
+		input.addEventListener("change", async () => {
+			const file = input.files?.[0];
+			input.remove();
+			if (!file) return;
+			try {
+				await this.renderer.addResourcePack(file);
+			} catch (error) {
+				console.error("[ResourcePackPanel] Failed to load resource pack:", error);
+			}
+		});
+		document.body.appendChild(input);
+		input.click();
 	}
 
 	private getPacksInfo(): PackInfo[] {

@@ -417,6 +417,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	resourcePackOptions: {
 		autoRebuild: true, // Auto-rebuild atlas when packs change
 		maxPacks: 0, // 0 = unlimited
+		showMissingPackNotice: true, // In-viewport notice when no pack is loaded
 	},
 	sidebarOptions: DEFAULT_SIDEBAR_OPTIONS,
 	resourcePackBlobs: [],

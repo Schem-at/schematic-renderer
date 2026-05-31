@@ -59,11 +59,11 @@ const renderer = new SchematicRenderer(
 		ssDetector: () => Promise.resolve(base64ToArrayBuffer(ssDetector)),
 	},
 	{
-		vanillaPack: async () => {
-			const response = await fetch("/pack.zip");
-			const buffer = await response.arrayBuffer();
-			return new Blob([buffer], { type: "application/zip" });
-		},
+		// vanillaPack: async () => {
+		// 	const response = await fetch("/pack.zip");
+		// 	const buffer = await response.arrayBuffer();
+		// 	return new Blob([buffer], { type: "application/zip" });
+		// },
 	},
 
 	{

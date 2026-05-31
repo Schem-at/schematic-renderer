@@ -15,6 +15,7 @@ import { ResourcePackManager, DefaultPackCallback } from "./managers/ResourcePac
 import { ResourcePackManagerProxy } from "./managers/ResourcePackManagerProxy";
 import { SidebarManager } from "./ui/sidebar/SidebarManager";
 import { SlicerOverlay, type SlicerOverlayOptions } from "./ui/SlicerOverlay";
+import { ResourcePackNotice } from "./ui/ResourcePackNotice";
 import type { SidebarTabId } from "./ui/sidebar/types";
 import type {
 	PacksChangedEvent,
@@ -77,6 +78,7 @@ export class SchematicRenderer {
 	/** Unified sidebar UI manager */
 	public sidebar: SidebarManager | undefined;
 	public slicerOverlay: SlicerOverlay | undefined;
+	public resourcePackNotice: ResourcePackNotice | undefined;
 	public cubane: Cubane;
 	public state: {
 		cameraPosition: THREE.Vector3;
@@ -158,6 +160,14 @@ export class SchematicRenderer {
 		this.cubane = new Cubane({
 			showUnknownBlocks: this.options.debugOptions?.showUnknownBlocks,
 		});
+
+		// In-viewport notice shown when no resource pack is loaded. The renderer
+		// toggles it via updateMissingPackNotice() once pack loading settles.
+		if (this.options.resourcePackOptions?.showMissingPackNotice !== false) {
+			this.resourcePackNotice = new ResourcePackNotice(this, {
+				docsUrl: "https://github.com/Schem-at/schematic-renderer#resource-packs",
+			});
+		}
 
 		// Bind pointer events for immediate wake-up from idle mode
 		this.bindPointerEvents();
@@ -265,6 +275,7 @@ export class SchematicRenderer {
 			// Step 2: Initialize resource packs
 			showProgress("Initializing resource packs...", 0.3);
 			await this.initializeResourcePacks(defaultResourcePacks);
+			this.updateMissingPackNotice();
 
 			// Step 4: Initialize builders and managers
 			showProgress("Setting up renderer components...", 0.6);
@@ -610,6 +621,19 @@ export class SchematicRenderer {
 		console.log("Schematic rebuild complete");
 	}
 
+	/**
+	 * Show or hide the in-viewport "no resource pack loaded" notice based on how
+	 * many packs are currently loaded. Safe to call any time; a no-op when the
+	 * notice is disabled (`resourcePackOptions.showMissingPackNotice: false`) or
+	 * the user has dismissed it.
+	 */
+	public updateMissingPackNotice(): void {
+		if (!this.resourcePackNotice) return;
+		const packCount = this.cubane?.getPackCount?.() ?? 0;
+		if (packCount > 0) this.resourcePackNotice.hide();
+		else this.resourcePackNotice.show();
+	}
+
 	private async initializeResourcePacks(
 		defaultResourcePacks?: Record<string, DefaultPackCallback>
 	): Promise<void> {
@@ -627,7 +651,11 @@ export class SchematicRenderer {
 		);
 
 		if (resourcePackBlobs.length === 0) {
-			console.log("[SchematicRenderer] No resource packs to load");
+			console.info(
+				"[SchematicRenderer] No resource pack loaded — blocks will render with " +
+					"placeholder textures.\n  Add one with `renderer.addResourcePack(file)` " +
+					"or drop a Minecraft resource pack (.zip) onto the canvas."
+			);
 			return;
 		}
 
@@ -1086,6 +1114,8 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(1.0, "Resource pack added");
 			setTimeout(() => this.uiManager?.hideProgressBar(), 500);
 		}
+
+		this.updateMissingPackNotice();
 	}
 
 	public async toggleResourcePackEnabled(name: string, enabled: boolean): Promise<void> {
@@ -1126,6 +1156,7 @@ export class SchematicRenderer {
 
 		// Reinitialize resource packs in Cubane
 		await this.initializeResourcePacks();
+		this.updateMissingPackNotice();
 
 		if (this.options.enableProgressBar && this.uiManager) {
 			this.uiManager.updateProgress(0.5, "Loading textures and models...");
@@ -1629,6 +1660,7 @@ export class SchematicRenderer {
 		this.highlightManager.dispose();
 		this.renderManager.renderer.dispose();
 		this.dragAndDropManager?.dispose();
+		this.resourcePackNotice?.dispose();
 		this.uiManager.dispose();
 		this.cameraManager.dispose();
 

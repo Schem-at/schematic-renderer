@@ -224,6 +224,11 @@ export interface ResourcePackOptions {
 	toggleUIShortcut?: string;
 	/** Maximum packs allowed (0 = unlimited) */
 	maxPacks?: number;
+	/**
+	 * Show an in-viewport notice when no resource pack is loaded, explaining the
+	 * placeholder textures and how to add a pack. (default: true)
+	 */
+	showMissingPackNotice?: boolean;
 	/** Default packs to load on init */
 	defaultPacks?: Record<string, () => Promise<Blob>>;
 
