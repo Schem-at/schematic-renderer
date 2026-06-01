@@ -58,6 +58,16 @@ export class AnimatedTextureManager {
 	 * Create an animated texture
 	 */
 	public async createAnimatedTexture(texturePath: string): Promise<THREE.Texture | null> {
+		// Reuse an already-registered animated texture. Without this, a block whose
+		// faces share one texture (e.g. kelp's 4 cross faces) creates a new texture
+		// per face, but only the last one is tracked in `animatedTextures` and gets
+		// advanced by update() — so only some faces animate. Returning the shared
+		// instance makes every face animate together.
+		const existing = this.animatedTextures.get(texturePath);
+		if (existing) {
+			return existing.texture;
+		}
+
 		// Load the metadata
 		const metadata = await this.loadAnimationMetadata(texturePath);
 		if (!metadata) {

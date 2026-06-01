@@ -15,6 +15,10 @@ type ChunkBuildRequest = {
 	chunkId: string;
 	blocks: number[][] | Int32Array; // [x, y, z, paletteIndex] or flat array
 	chunkOrigin?: [number, number, number]; // [x, y, z] origin for relative coordinates
+	// Boundary blocks from neighbouring chunks (flat [x, y, z, paletteIndex, …] in
+	// world coords). Written into the voxel map for cross-chunk face culling only —
+	// never rendered. Lets boundary faces cull against the adjacent chunk.
+	apronBlocks?: Int32Array;
 };
 
 // Constants
@@ -50,7 +54,7 @@ function updatePalette(paletteData: PaletteGeometryData[]) {
 }
 
 function buildChunk(request: ChunkBuildRequest) {
-	const { chunkId, blocks, chunkOrigin } = request;
+	const { chunkId, blocks, chunkOrigin, apronBlocks } = request;
 
 	// Calculate bounds for voxel map
 	const startSetup = performance.now();
@@ -122,6 +126,33 @@ function buildChunk(request: ChunkBuildRequest) {
 	} else {
 		for (const [x, y, z, paletteIndex] of blocks) {
 			voxelMap[getIndex(x, y, z)] = paletteIndex + 1; // Store index + 1 so 0 is empty
+		}
+	}
+
+	// Populate the 1-voxel apron with neighbouring chunks' boundary blocks so faces
+	// on a chunk seam cull against the adjacent chunk. These are written to the voxel
+	// map ONLY (not the render batches below), and bounds-checked so sparse/far ghost
+	// blocks that fall outside this chunk's padded volume are skipped. Real blocks are
+	// never overwritten.
+	if (apronBlocks && apronBlocks.length > 0) {
+		for (let i = 0; i < apronBlocks.length; i += 4) {
+			const x = apronBlocks[i];
+			const y = apronBlocks[i + 1];
+			const z = apronBlocks[i + 2];
+			if (
+				x < minX - pad ||
+				x > maxX + pad ||
+				y < minY - pad ||
+				y > maxY + pad ||
+				z < minZ - pad ||
+				z > maxZ + pad
+			) {
+				continue;
+			}
+			const vi = getIndex(x, y, z);
+			if (voxelMap[vi] === 0) {
+				voxelMap[vi] = apronBlocks[i + 3] + 1;
+			}
 		}
 	}
 

@@ -26,6 +26,12 @@ export interface RenderSettings {
 	smaaEnabled: boolean;
 	gammaEnabled: boolean;
 	gammaValue: number;
+	tiltShiftEnabled: boolean;
+	tiltShiftAmount: number;
+	tiltShiftPitch: number;
+	tiltShiftYaw: number;
+	tiltShiftGizmoVisible: boolean;
+	slicerVisible: boolean;
 	showGrid: boolean;
 	showAxes: boolean;
 	ambientLightIntensity: number;
@@ -47,6 +53,12 @@ const DEFAULT_RENDER_SETTINGS: RenderSettings = {
 	smaaEnabled: true,
 	gammaEnabled: true,
 	gammaValue: 0.5,
+	tiltShiftEnabled: false,
+	tiltShiftAmount: 0.5,
+	tiltShiftPitch: 0,
+	tiltShiftYaw: 0,
+	tiltShiftGizmoVisible: true,
+	slicerVisible: false,
 	showGrid: false,
 	showAxes: false,
 	ambientLightIntensity: 2.2,
@@ -354,6 +366,88 @@ export class RenderSettingsPanel extends BasePanel {
 		});
 		section.appendChild(createSettingRow("Gamma Value", gammaSlider));
 
+		const tiltShiftToggle = createToggle(this.settings.tiltShiftEnabled, (enabled) => {
+			this.settings.tiltShiftEnabled = enabled;
+			// Use the dedicated setter — it also swaps `renderToScreen` between
+			// the main effect pass and the tilt-shift pass, which is required
+			// because the depth-of-field pass lives in its own EffectPass.
+			this.renderer.renderManager?.setTiltShiftEnabled(enabled);
+			this.emitChange(this.settings);
+		});
+		section.appendChild(
+			createSettingRow("Tilt-Shift", tiltShiftToggle, {
+				tooltip: "Miniature-photography focus band with blur falloff",
+			})
+		);
+
+		const tiltShiftSlider = createSlider(this.settings.tiltShiftAmount, {
+			min: 0,
+			max: 1,
+			step: 0.05,
+			formatValue: (v) => v.toFixed(2),
+			onChange: (value) => {
+				this.settings.tiltShiftAmount = value;
+				this.renderer.renderManager?.setTiltShiftAmount(value);
+				this.emitChange(this.settings);
+			},
+		});
+		section.appendChild(createSettingRow("Tilt-Shift Amount", tiltShiftSlider));
+
+		const pickFocusButton = createButton("Pick focus point", () => {
+			this.renderer.renderManager?.pickTiltShiftFocus();
+		});
+		section.appendChild(
+			createSettingRow("Focus", pickFocusButton, {
+				tooltip: "Click the button, then click on the subject in the scene",
+			})
+		);
+
+		const pitchSlider = createSlider(this.settings.tiltShiftPitch, {
+			min: -45,
+			max: 45,
+			step: 1,
+			formatValue: (v) => `${v.toFixed(0)}°`,
+			onChange: (value) => {
+				this.settings.tiltShiftPitch = value;
+				this.renderer.renderManager?.setTiltShiftTilt(value, this.settings.tiltShiftYaw);
+				this.emitChange(this.settings);
+			},
+		});
+		section.appendChild(
+			createSettingRow("Tilt Pitch", pitchSlider, {
+				tooltip:
+					"Tilts the focus plane around the camera's horizontal axis (the Scheimpflug effect)",
+			})
+		);
+
+		const yawSlider = createSlider(this.settings.tiltShiftYaw, {
+			min: -45,
+			max: 45,
+			step: 1,
+			formatValue: (v) => `${v.toFixed(0)}°`,
+			onChange: (value) => {
+				this.settings.tiltShiftYaw = value;
+				this.renderer.renderManager?.setTiltShiftTilt(this.settings.tiltShiftPitch, value);
+				this.emitChange(this.settings);
+			},
+		});
+		section.appendChild(
+			createSettingRow("Tilt Yaw", yawSlider, {
+				tooltip: "Tilts the focus plane around the camera's vertical axis",
+			})
+		);
+
+		const gizmoToggle = createToggle(this.settings.tiltShiftGizmoVisible, (enabled) => {
+			this.settings.tiltShiftGizmoVisible = enabled;
+			this.renderer.renderManager?.setTiltShiftGizmoVisible(enabled);
+			this.emitChange(this.settings);
+		});
+		section.appendChild(
+			createSettingRow("Focus Plane Gizmo", gizmoToggle, {
+				tooltip: "Show the tilt-shift focus plane in 3D",
+			})
+		);
+
 		return section;
 	}
 
@@ -373,6 +467,21 @@ export class RenderSettingsPanel extends BasePanel {
 			this.emitChange(this.settings);
 		});
 		section.appendChild(createSettingRow("Show Axes", axesToggle));
+
+		const slicerToggle = createToggle(this.settings.slicerVisible, (enabled) => {
+			this.settings.slicerVisible = enabled;
+			if (enabled) {
+				this.renderer.showSlicerOverlay?.();
+			} else {
+				this.renderer.hideSlicerOverlay?.();
+			}
+			this.emitChange(this.settings);
+		});
+		section.appendChild(
+			createSettingRow("Slicer Overlay", slicerToggle, {
+				tooltip: "X/Y/Z rendering-bounds sliders",
+			})
+		);
 
 		return section;
 	}

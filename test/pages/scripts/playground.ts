@@ -103,7 +103,7 @@ const renderer = new SchematicRenderer(
 		// Floating rendering-bounds slicer overlay (X/Y/Z min/max sliders).
 		// Toggle at runtime with `renderer.toggleSlicerOverlay()` or the
 		// keyboard shortcut wired further down (press 'L' for Layer slicer).
-		showSlicerOverlay: true,
+		showSlicerOverlay: false,
 		slicerOverlayOptions: {
 			debounceMs: 80,
 			corner: "top-right",

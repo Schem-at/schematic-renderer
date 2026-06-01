@@ -16,6 +16,8 @@ let EffectPass: any = null;
 let SMAAEffect: any = null;
 let N8AOPostPass: any = null;
 let GammaCorrectionEffect: any = null;
+// Our own Scheimpflug tilt-shift effect. Lazy-loaded alongside postprocessing.
+let TiltShiftPlaneEffect: any = null;
 let postprocessingLoaded = false;
 
 async function loadPostProcessing() {
@@ -31,7 +33,40 @@ async function loadPostProcessing() {
 	SMAAEffect = postprocessing.SMAAEffect;
 	N8AOPostPass = n8ao.N8AOPostPass;
 	GammaCorrectionEffect = gammaEffect.GammaCorrectionEffect;
+	const tiltModule = await import("../effects/TiltShiftPlaneEffect");
+	TiltShiftPlaneEffect = tiltModule.TiltShiftPlaneEffect;
 	postprocessingLoaded = true;
+}
+
+/**
+ * Maps a 0..1 amount to DepthOfFieldEffect parameters so the user gets a
+ * single "strength" knob that produces a miniature/tilt-shift look without
+ * having to understand bokehScale/focusRange/focusDistance.
+ *
+ * - amount 0: wide focus, almost no blur
+ * - amount 1: very narrow focus zone, strong bokeh
+ *
+ * `focusDistance` stays at 0 so the focus plane lives near the camera; the
+ * orbit camera always centres the schematic, so that lands the focus on the
+ * subject. `focusRange` controls how deep the in-focus slab is, `bokehScale`
+ * controls how strong the blur is outside it.
+ */
+/**
+ * Maps amount 0..1 to TiltShiftPlaneEffect parameters. We work in world
+ * units (focusRange) and screen-UV units (blurStrength) so the controls
+ * behave the same regardless of camera distance or canvas size.
+ */
+function tiltShiftAmountToParams(amount: number): {
+	focusRange: number;
+	blurStrength: number;
+} {
+	const a = Math.max(0, Math.min(1, amount));
+	return {
+		// Half-width of the in-focus slab in world units. Wide at 0, tight at 1.
+		focusRange: 6 - a * 5.5,
+		// Max sample radius in UV units. 0.005 ≈ subtle, 0.02 ≈ heavy bokeh.
+		blurStrength: 0.005 + a * 0.02,
+	};
 }
 
 // HDRI Cache using IndexedDB
@@ -721,6 +756,11 @@ export class RenderManager {
 			effects.push(smaaEffect);
 		}
 
+		// Depth-of-field (the "tilt-shift" miniature look). DepthOfFieldEffect
+		// requires a depth texture and is expensive; we only construct the
+		// effect + its pass the first time the user actually turns it on, so
+		// the default render path is unchanged when it's off.
+
 		if (postOpts?.enableSSAO !== false) {
 			try {
 				const parent = this.schematicRenderer.canvas.parentElement;
@@ -747,25 +787,29 @@ export class RenderManager {
 			}
 		}
 
+		let effectPass: any = null;
 		if (effects.length > 0) {
-			const effectPass = new EffectPass(
+			effectPass = new EffectPass(
 				this.schematicRenderer.cameraManager.activeCamera.camera,
 				...effects
 			);
-			effectPass.renderToScreen = true;
 			this.composer.addPass(effectPass);
 			this.passes.set("effectPass", effectPass);
+		}
+
+		if (effectPass) {
+			effectPass.renderToScreen = true;
 		} else if (this.composer.passes.length > 1) {
-			// If we have other passes (like SSAO) but no effect pass, make sure the last pass renders to screen
-			// N8AO pass usually renders to screen if it's the last one?
-			// N8AO might need renderToScreen set manually if it's the final pass
 			const lastPass = this.composer.passes[this.composer.passes.length - 1];
-			if (lastPass) {
-				lastPass.renderToScreen = true;
-			}
+			if (lastPass) lastPass.renderToScreen = true;
 		} else {
-			// If we have composer but no effects added (edge case), better to just disable composer
 			this.composer = null;
+		}
+
+		// Honour `enableTiltShift: true` at boot by lazily building the pass
+		// the same way a runtime toggle would.
+		if (postOpts?.enableTiltShift === true) {
+			this.setTiltShiftEnabled(true);
 		}
 	}
 
@@ -831,6 +875,223 @@ export class RenderManager {
 		if (gammaEffect) {
 			gammaEffect.setGamma(value);
 		}
+	}
+
+	/**
+	 * Update the tilt-shift strength at runtime. `amount` is 0..1 where 0
+	 * leaves nearly the whole frame in focus and 1 is a thin focus band with
+	 * dramatic blur outside.
+	 */
+	/**
+	 * Pending amount for tilt-shift when the effect doesn't exist yet (the
+	 * user moved the slider before turning the effect on).
+	 */
+	private _pendingTiltShiftAmount: number | null = null;
+
+	public setTiltShiftAmount(amount: number): void {
+		const effect = this.passes.get("tiltShift");
+		if (!effect) {
+			this._pendingTiltShiftAmount = amount;
+			return;
+		}
+		const params = tiltShiftAmountToParams(amount);
+		effect.setFocusRange?.(params.focusRange);
+		effect.setBlurStrength?.(params.blurStrength);
+		this.updateTiltShiftGizmo();
+	}
+
+	/**
+	 * Read focus params back off the effect's uniforms and push them into the
+	 * gizmo so the visual stays in sync with the shader.
+	 */
+	private updateTiltShiftGizmo(): void {
+		if (!this.tiltShiftGizmo) return;
+		const effect = this.passes.get("tiltShift");
+		if (!effect?.uniforms) return;
+		const point = effect.uniforms.get("focusPoint")?.value as THREE.Vector3 | undefined;
+		const normal = effect.uniforms.get("focusNormal")?.value as THREE.Vector3 | undefined;
+		const range = effect.uniforms.get("focusRange")?.value as number | undefined;
+		if (!point || !normal || range == null) return;
+		this.tiltShiftGizmo.update(point, normal, range);
+	}
+
+	/** Show or hide the tilt-shift focus-plane gizmo. */
+	public setTiltShiftGizmoVisible(visible: boolean): void {
+		this.tiltShiftGizmoVisible = visible;
+		this.tiltShiftGizmo?.setVisible(visible);
+	}
+
+	/**
+	 * Move the tilt-shift focus point to a specific world-space position.
+	 * Used by the click-to-focus picker after a raycast hit.
+	 */
+	public setTiltShiftFocusPoint(point: THREE.Vector3): void {
+		const effect = this.passes.get("tiltShift");
+		effect?.setFocusPoint?.(point);
+		this.updateTiltShiftGizmo();
+	}
+
+	/**
+	 * Tilt the focus plane by `pitchDeg` (around camera right) and
+	 * `yawDeg` (around camera up). Pitch is the actual Scheimpflug tilt;
+	 * a non-zero value is what makes this different from regular DOF.
+	 */
+	public setTiltShiftTilt(pitchDeg: number, yawDeg: number): void {
+		const effect = this.passes.get("tiltShift");
+		effect?.setTiltAngles?.(pitchDeg, yawDeg);
+		this._pendingTiltPitch = pitchDeg;
+		this._pendingTiltYaw = yawDeg;
+		this.updateTiltShiftGizmo();
+	}
+
+	private _pendingTiltPitch = 0;
+	private _pendingTiltYaw = 0;
+	private tiltShiftGizmo: import("../effects/TiltShiftGizmo").TiltShiftGizmo | null = null;
+	private tiltShiftGizmoVisible = true;
+
+	private _focusPickRaycaster: THREE.Raycaster | null = null;
+
+	/**
+	 * Arm a one-shot click handler that raycasts the next canvas click into
+	 * the schematic, computes the world distance from camera to the hit
+	 * point, and sets that as the tilt-shift focus plane. Escape cancels.
+	 */
+	public pickTiltShiftFocus(): void {
+		const canvas = this.schematicRenderer.canvas;
+		const prevCursor = canvas.style.cursor;
+		canvas.style.cursor = "crosshair";
+
+		const onClick = (e: MouseEvent) => {
+			e.stopPropagation();
+			e.preventDefault();
+			cleanup();
+			this.focusTiltShiftOnScreenPoint(e.clientX, e.clientY);
+		};
+		const onEscape = (e: KeyboardEvent) => {
+			if (e.key === "Escape") cleanup();
+		};
+		const cleanup = () => {
+			canvas.style.cursor = prevCursor;
+			canvas.removeEventListener("click", onClick, true);
+			window.removeEventListener("keydown", onEscape);
+		};
+
+		// Capture-phase so we run before any block-interaction handlers can
+		// claim the click.
+		canvas.addEventListener("click", onClick, true);
+		window.addEventListener("keydown", onEscape);
+	}
+
+	/**
+	 * Raycast through the screen point into all loaded schematics; if any
+	 * geometry is hit, set the tilt-shift focus distance to the hit's
+	 * camera-space depth.
+	 */
+	private focusTiltShiftOnScreenPoint(clientX: number, clientY: number): void {
+		const canvas = this.schematicRenderer.canvas;
+		const camera = this.schematicRenderer.cameraManager?.activeCamera?.camera;
+		if (!camera) return;
+
+		const rect = canvas.getBoundingClientRect();
+		const ndc = new THREE.Vector2(
+			((clientX - rect.left) / rect.width) * 2 - 1,
+			-(((clientY - rect.top) / rect.height) * 2 - 1)
+		);
+
+		if (!this._focusPickRaycaster) this._focusPickRaycaster = new THREE.Raycaster();
+		this._focusPickRaycaster.setFromCamera(ndc, camera);
+
+		const targets: THREE.Object3D[] = [];
+		const schematics = this.schematicRenderer.schematicManager?.getAllSchematics?.() ?? [];
+		for (const s of schematics) if (s.group) targets.push(s.group);
+		if (targets.length === 0) return;
+
+		const hits = this._focusPickRaycaster.intersectObjects(targets, true);
+		if (hits.length === 0) return;
+		// The Scheimpflug effect anchors focus on a world-space point, not a
+		// distance — that way the plane's tilt makes sense in the scene rather
+		// than around the camera.
+		this.setTiltShiftFocusPoint(hits[0].point);
+	}
+
+	/**
+	 * Compute a sensible initial focus point in world space — the centre of
+	 * the first loaded schematic when available, falling back to the camera's
+	 * lookAt target or origin.
+	 */
+	private computeSubjectWorldPosition(): THREE.Vector3 {
+		const sm = this.schematicRenderer.schematicManager;
+		const first = sm?.getFirstSchematic?.();
+		if (first?.group) {
+			const p = new THREE.Vector3();
+			first.group.getWorldPosition(p);
+			return p;
+		}
+		const cam = this.schematicRenderer.cameraManager?.activeCamera?.camera as any;
+		return (cam?.userData?.target as THREE.Vector3 | undefined) ?? new THREE.Vector3();
+	}
+
+	/**
+	 * Enable or disable the depth-of-field/tilt-shift pass. The first call
+	 * with `true` lazily constructs the effect + pass (DepthOfFieldEffect is
+	 * expensive and needs a depth texture, so we only allocate it when
+	 * actually used). Subsequent toggles just flip `pass.enabled` and move
+	 * `renderToScreen` to whichever pass is the final visible one.
+	 */
+	public setTiltShiftEnabled(enabled: boolean): void {
+		if (!this.composer || !TiltShiftPlaneEffect || !EffectPass) return;
+		let tiltPass = this.passes.get("tiltShiftPass");
+		const effectPass = this.passes.get("effectPass");
+
+		if (enabled && !tiltPass) {
+			const amount = this._pendingTiltShiftAmount ?? 0.5;
+			const params = tiltShiftAmountToParams(amount);
+			const camera = this.schematicRenderer.cameraManager.activeCamera.camera;
+			const focusPoint = this.computeSubjectWorldPosition();
+
+			const effect = new TiltShiftPlaneEffect(camera, {
+				focusPoint,
+				focusRange: params.focusRange,
+				blurStrength: params.blurStrength,
+			});
+			effect.setTiltAngles(this._pendingTiltPitch, this._pendingTiltYaw);
+
+			tiltPass = new EffectPass(camera, effect);
+			this.passes.set("tiltShift", effect);
+			this.passes.set("tiltShiftPass", tiltPass);
+			this.composer.addPass(tiltPass);
+
+			const parent = this.schematicRenderer.canvas.parentElement;
+			const width = parent ? parent.clientWidth : window.innerWidth;
+			const height = parent ? parent.clientHeight : window.innerHeight;
+			this.composer.setSize?.(width, height);
+
+			// Lazy-build the gizmo too so the scene shows the focus plane.
+			void this.ensureTiltShiftGizmo();
+		}
+
+		if (!tiltPass) return;
+		tiltPass.enabled = enabled;
+		if (effectPass) effectPass.renderToScreen = !enabled;
+		tiltPass.renderToScreen = enabled;
+		// Gizmo follows the effect's enable state, but only if the user
+		// hasn't explicitly hidden it via setTiltShiftGizmoVisible(false).
+		this.tiltShiftGizmo?.setVisible(enabled && this.tiltShiftGizmoVisible);
+		if (enabled) this.updateTiltShiftGizmo();
+	}
+
+	/**
+	 * Build the focus-plane gizmo and attach it to the scene the first time
+	 * tilt-shift is enabled. Subsequent calls are no-ops.
+	 */
+	private async ensureTiltShiftGizmo(): Promise<void> {
+		if (this.tiltShiftGizmo) return;
+		const { TiltShiftGizmo } = await import("../effects/TiltShiftGizmo");
+		const scene = this.schematicRenderer.sceneManager?.scene;
+		if (!scene) return;
+		this.tiltShiftGizmo = new TiltShiftGizmo(scene);
+		this.tiltShiftGizmo.setVisible(this.tiltShiftGizmoVisible);
+		this.updateTiltShiftGizmo();
 	}
 
 	/**

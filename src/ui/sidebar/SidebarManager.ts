@@ -340,6 +340,7 @@ export class SidebarManager {
 		}
 
 		this.options.onVisibilityChange(true);
+		this.emitVisibilityChanged(true);
 	}
 
 	/**
@@ -351,6 +352,23 @@ export class SidebarManager {
 		this.sidebar.hide();
 		this.visible = false;
 		this.options.onVisibilityChange(false);
+		this.emitVisibilityChanged(false);
+	}
+
+	/**
+	 * Broadcast visibility changes through the renderer's event bus so other
+	 * UI elements (e.g. SlicerOverlay) can reposition themselves around the
+	 * sidebar without owning a direct reference to it.
+	 */
+	private emitVisibilityChanged(visible: boolean): void {
+		const ee = (this.renderer as any).eventEmitter;
+		if (ee && typeof ee.emit === "function") {
+			ee.emit("sidebarVisibilityChanged", {
+				visible,
+				position: this.options.position,
+				width: this.options.width,
+			});
+		}
 	}
 
 	/**

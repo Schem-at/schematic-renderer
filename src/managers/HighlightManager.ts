@@ -19,16 +19,26 @@ export class HighlightManager {
 	}
 
 	private loadHighlights() {
+		// Block selection highlighting (green box on hover, white outline on click) is
+		// opt-in: without a consumer of the resulting events it just adds a distracting
+		// highlight. Off by default — enable via interactionOptions.enableBlockSelection.
+		const enableBlockSelection =
+			this.schematicRenderer.options.interactionOptions?.enableBlockSelection ?? false;
+
 		// Instantiate and add all highlight types here
-		const hoverHighlight = new HoverHighlight(this.schematicRenderer);
-		this.addHighlight(hoverHighlight);
+		if (enableBlockSelection) {
+			const hoverHighlight = new HoverHighlight(this.schematicRenderer);
+			this.addHighlight(hoverHighlight);
+		}
 
 		const annotationHighlight = new AnnotationHighlight(this.schematicRenderer);
 		this.addHighlight(annotationHighlight);
 
 		// Add click interaction handler for block interactions
-		const clickHandler = new ClickInteractionHandler(this.schematicRenderer);
-		this.addHighlight(clickHandler);
+		if (enableBlockSelection) {
+			const clickHandler = new ClickInteractionHandler(this.schematicRenderer);
+			this.addHighlight(clickHandler);
+		}
 
 		// Add custom IO highlight for simulation custom IO nodes
 		this.customIoHighlight = new CustomIoHighlight(this.schematicRenderer);

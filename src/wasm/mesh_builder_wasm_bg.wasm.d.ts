@@ -10,14 +10,16 @@ export const meshbuilder_build_chunk: (
 	b: any,
 	c: number,
 	d: number,
-	e: number
+	e: number,
+	f: any
 ) => [number, number, number];
 export const meshbuilder_build_chunk_greedy: (
 	a: number,
 	b: any,
 	c: number,
 	d: number,
-	e: number
+	e: number,
+	f: any
 ) => [number, number, number];
 export const meshbuilder_clear_batch: (a: number) => void;
 export const meshbuilder_finish_batch: (a: number) => [number, number, number];

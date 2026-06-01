@@ -6,6 +6,10 @@ import { SchematicObject } from "./SchematicObject";
 export interface InteractionManagerOptions {
 	enableSelection?: boolean;
 	enableMovingSchematics?: boolean;
+	// Highlight a block on hover/click (the green hover box and white click outline).
+	// Off by default — with no consumer of the `interactBlock` event it just adds a
+	// distracting highlight that does nothing.
+	enableBlockSelection?: boolean;
 }
 
 export class InteractionManager {

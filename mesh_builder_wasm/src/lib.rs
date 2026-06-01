@@ -384,6 +384,7 @@ impl MeshBuilder {
         origin_x: i32,
         origin_y: i32,
         origin_z: i32,
+        apron_blocks: &Int32Array,
     ) -> Result<JsValue, JsValue> {
         let blocks_vec = blocks.to_vec();
         let block_count = blocks_vec.len() / 4;
@@ -424,7 +425,12 @@ impl MeshBuilder {
             let palette_idx = blocks_vec[base + 3];
             voxel_map[get_index(x, y, z)] = palette_idx + 1; // +1 so 0 means empty
         }
-        
+
+        Self::populate_apron(
+            apron_blocks, &mut voxel_map, stride_y, stride_z, pad,
+            min_x, min_y, min_z, max_x, max_y, max_z,
+        );
+
         // Group blocks by category and palette index
         let mut category_batches: std::collections::HashMap<String, std::collections::HashMap<u32, Vec<usize>>> = 
             std::collections::HashMap::new();
@@ -479,6 +485,51 @@ impl MeshBuilder {
         Reflect::set(&result, &"origin".into(), &origin)?;
         
         Ok(result.into())
+    }
+
+    /// Write neighbouring chunks' boundary blocks (flat [x, y, z, palette_idx, …],
+    /// world coords) into the 1-voxel apron of the voxel map so faces on a chunk
+    /// seam cull against the adjacent chunk. These are used for occlusion lookup
+    /// only — they are never meshed (the build loops iterate real blocks). Cells
+    /// outside the padded volume are skipped, and real blocks are never overwritten.
+    #[allow(clippy::too_many_arguments)]
+    fn populate_apron(
+        apron_blocks: &Int32Array,
+        voxel_map: &mut [i32],
+        stride_y: usize,
+        stride_z: usize,
+        pad: usize,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        max_x: i32,
+        max_y: i32,
+        max_z: i32,
+    ) {
+        let apron_vec = apron_blocks.to_vec();
+        let apron_count = apron_vec.len() / 4;
+        let pad_i = pad as i32;
+        for i in 0..apron_count {
+            let base = i * 4;
+            let x = apron_vec[base];
+            let y = apron_vec[base + 1];
+            let z = apron_vec[base + 2];
+            // Keep only cells inside the padded volume. Done in i32 BEFORE the usize
+            // cast, since an apron coord can be min-1 (a negative local offset).
+            if x < min_x - pad_i || x > max_x + pad_i
+                || y < min_y - pad_i || y > max_y + pad_i
+                || z < min_z - pad_i || z > max_z + pad_i
+            {
+                continue;
+            }
+            let lx = (x - min_x + pad_i) as usize;
+            let ly = (y - min_y + pad_i) as usize;
+            let lz = (z - min_z + pad_i) as usize;
+            let idx = lx + ly * stride_y + lz * stride_z;
+            if voxel_map[idx] == 0 {
+                voxel_map[idx] = apron_vec[base + 3] + 1;
+            }
+        }
     }
 
     fn calculate_bounds(&self, blocks: &[i32]) -> (i32, i32, i32, i32, i32, i32) {
@@ -791,6 +842,7 @@ impl MeshBuilder {
         origin_x: i32,
         origin_y: i32,
         origin_z: i32,
+        apron_blocks: &Int32Array,
     ) -> Result<JsValue, JsValue> {
         let blocks_vec = blocks.to_vec();
         let block_count = blocks_vec.len() / 4;
@@ -830,7 +882,12 @@ impl MeshBuilder {
             let palette_idx = blocks_vec[base + 3];
             voxel_map[get_index(x, y, z)] = palette_idx + 1;
         }
-        
+
+        Self::populate_apron(
+            apron_blocks, &mut voxel_map, stride_y, stride_z, pad,
+            min_x, min_y, min_z, max_x, max_y, max_z,
+        );
+
         // Collect visible faces grouped by direction and material
         // Key: (direction, material_index), Value: list of faces
         let mut face_groups: HashMap<(FaceDir, u32), Vec<GreedyFace>> = HashMap::new();

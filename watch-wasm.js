@@ -33,7 +33,7 @@ chokidar.watch(path.join(rustProjectPath, 'src'), {
 });
 
 function rebuildWasm() {
-    exec('wasm-pack build --target web --features wasm', { cwd: rustProjectPath }, (error, stdout, stderr) => {
+    exec('wasm-pack build --target web', { cwd: rustProjectPath }, (error, stdout, stderr) => {
         if (error) {
             console.error(`exec error: ${error}`);
             return;

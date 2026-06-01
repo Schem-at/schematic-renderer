@@ -1031,6 +1031,102 @@ export class SchematicObject extends EventEmitter {
 		return { meshes: finalMeshes, chunkMap };
 	}
 
+	/**
+	 * Build, for every chunk, a flat list of its neighbours' boundary blocks so the
+	 * mesher can cull faces that sit on a chunk seam. Runs in a single pass over all
+	 * blocks (extract each chunk's 6 boundary planes) plus a cheap assembly pass, so
+	 * cost is linear in block count — and it reduces output geometry, which usually
+	 * makes large schematics render faster overall.
+	 *
+	 * Coordinates are world-space; a chunk (cx,cy,cz) spans [cx*W .. cx*W+W-1] etc.
+	 * Returns a map of "cx,cy,cz" -> Int32Array of [x, y, z, paletteIndex, …].
+	 */
+	private computeChunkAprons(
+		allChunks: Array<{ chunk_x: number; chunk_y: number; chunk_z: number; blocks: any }>,
+		dims: { chunkWidth: number; chunkHeight: number; chunkLength: number }
+	): Map<string, Int32Array> {
+		const W = dims.chunkWidth;
+		const H = dims.chunkHeight;
+		const L = dims.chunkLength;
+		const key = (cx: number, cy: number, cz: number) => `${cx},${cy},${cz}`;
+
+		const forEachBlock = (
+			blocks: any,
+			cb: (x: number, y: number, z: number, idx: number) => void
+		) => {
+			if (blocks instanceof Int32Array) {
+				for (let i = 0; i < blocks.length; i += 4) {
+					cb(blocks[i], blocks[i + 1], blocks[i + 2], blocks[i + 3]);
+				}
+			} else if (Array.isArray(blocks)) {
+				for (const b of blocks) cb(b[0], b[1], b[2], b[3]);
+			}
+		};
+
+		type Faces = {
+			negX: number[];
+			posX: number[];
+			negY: number[];
+			posY: number[];
+			negZ: number[];
+			posZ: number[];
+		};
+
+		// Pass 1: extract each chunk's six boundary planes.
+		const facesByKey = new Map<string, Faces>();
+		for (const c of allChunks) {
+			const planeNegX = c.chunk_x * W;
+			const planePosX = c.chunk_x * W + W - 1;
+			const planeNegY = c.chunk_y * H;
+			const planePosY = c.chunk_y * H + H - 1;
+			const planeNegZ = c.chunk_z * L;
+			const planePosZ = c.chunk_z * L + L - 1;
+			const f: Faces = { negX: [], posX: [], negY: [], posY: [], negZ: [], posZ: [] };
+			forEachBlock(c.blocks, (x, y, z, idx) => {
+				if (x === planeNegX) f.negX.push(x, y, z, idx);
+				if (x === planePosX) f.posX.push(x, y, z, idx);
+				if (y === planeNegY) f.negY.push(x, y, z, idx);
+				if (y === planePosY) f.posY.push(x, y, z, idx);
+				if (z === planeNegZ) f.negZ.push(x, y, z, idx);
+				if (z === planePosZ) f.posZ.push(x, y, z, idx);
+			});
+			facesByKey.set(key(c.chunk_x, c.chunk_y, c.chunk_z), f);
+		}
+
+		// Pass 2: each chunk's apron is the union of its neighbours' facing planes.
+		const aprons = new Map<string, Int32Array>();
+		for (const c of allChunks) {
+			const cx = c.chunk_x;
+			const cy = c.chunk_y;
+			const cz = c.chunk_z;
+			const parts: number[][] = [];
+			const add = (k: string, pick: (f: Faces) => number[]) => {
+				const f = facesByKey.get(k);
+				if (f) parts.push(pick(f));
+			};
+			add(key(cx + 1, cy, cz), (f) => f.negX);
+			add(key(cx - 1, cy, cz), (f) => f.posX);
+			add(key(cx, cy + 1, cz), (f) => f.negY);
+			add(key(cx, cy - 1, cz), (f) => f.posY);
+			add(key(cx, cy, cz + 1), (f) => f.negZ);
+			add(key(cx, cy, cz - 1), (f) => f.posZ);
+
+			let total = 0;
+			for (const p of parts) total += p.length;
+			if (total === 0) continue;
+
+			const apron = new Int32Array(total);
+			let offset = 0;
+			for (const p of parts) {
+				apron.set(p, offset);
+				offset += p.length;
+			}
+			aprons.set(key(cx, cy, cz), apron);
+		}
+
+		return aprons;
+	}
+
 	// Also fix the incremental version
 	public async buildSchematicMeshesIncremental(
 		schematicObject: SchematicObject,
@@ -1123,6 +1219,11 @@ export class SchematicObject extends EventEmitter {
 					allChunks.push({ chunk_x, chunk_y, chunk_z, blocks });
 				}
 
+				// Build a 1-voxel "apron" of each chunk's neighbours so faces on chunk
+				// seams cull against the adjacent chunk (otherwise internal faces — most
+				// visibly water — show along every boundary).
+				const chunkAprons = this.computeChunkAprons(allChunks, chunkDimensions);
+
 				// Process in batches to avoid overwhelming the worker pool
 				const BATCH_SIZE = 8; // Match worker count
 				const totalChunksToProcess = allChunks.length;
@@ -1134,7 +1235,17 @@ export class SchematicObject extends EventEmitter {
 					// Send all chunks in this batch to workers simultaneously
 					const batchPromises = batch.map(({ chunk_x, chunk_y, chunk_z, blocks }) =>
 						this.worldMeshBuilder
-							.getChunkMesh({ blocks, chunk_x, chunk_y, chunk_z }, schematicObject, renderingBounds)
+							.getChunkMesh(
+								{
+									blocks,
+									chunk_x,
+									chunk_y,
+									chunk_z,
+									apronBlocks: chunkAprons.get(`${chunk_x},${chunk_y},${chunk_z}`),
+								},
+								schematicObject,
+								renderingBounds
+							)
 							.then((meshes) => ({ chunk_x, chunk_y, chunk_z, meshes }))
 					);
 
@@ -1399,9 +1510,21 @@ export class SchematicObject extends EventEmitter {
 		const bounds = schematicObject.renderingBounds?.enabled
 			? schematicObject.renderingBounds
 			: undefined;
-		const chunksToProcess = bounds
-			? this.applyBoundsToChunks(allChunks, bounds, chunkDimensions)
-			: allChunks;
+		const chunksToProcess: Array<{
+			blocks: Int32Array;
+			chunk_x: number;
+			chunk_y: number;
+			chunk_z: number;
+			apronBlocks?: Int32Array;
+		}> = bounds ? this.applyBoundsToChunks(allChunks, bounds, chunkDimensions) : allChunks;
+
+		// Attach each chunk's neighbour "apron" so faces on chunk seams cull against
+		// the adjacent chunk (computed from the bounds-filtered set so it matches what
+		// actually renders). Built once, linear in block count.
+		const chunkAprons = this.computeChunkAprons(chunksToProcess, chunkDimensions);
+		for (const c of chunksToProcess) {
+			c.apronBlocks = chunkAprons.get(`${c.chunk_x},${c.chunk_y},${c.chunk_z}`);
+		}
 
 		// STEP 4: Process all chunks in batch mode
 		this.reportBuildProgress("Processing chunks in BATCH mode...", 0.2, totalChunks, 0);

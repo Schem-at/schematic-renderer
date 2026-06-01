@@ -1,6 +1,13 @@
 /* tslint:disable */
 /* eslint-disable */
-
+/**
+ * Initialize the WASM module with better panic messages
+ */
+export function init(): void;
+/**
+ * Get the version of the mesh builder
+ */
+export function get_version(): string;
 /**
  * Main mesh builder that holds palette data and performs chunk building
  */
@@ -15,18 +22,21 @@ export class MeshBuilder {
 	 *
 	 * Returns a JavaScript object with the merged mesh data
 	 */
-	build_chunk(blocks: Int32Array, origin_x: number, origin_y: number, origin_z: number): any;
-	/**
-	 * Build a chunk mesh with greedy meshing optimization
-	 *
-	 * This merges coplanar faces of the same material into larger quads,
-	 * dramatically reducing vertex count for large flat surfaces.
-	 */
-	build_chunk_greedy(blocks: Int32Array, origin_x: number, origin_y: number, origin_z: number): any;
+	build_chunk(
+		blocks: Int32Array,
+		origin_x: number,
+		origin_y: number,
+		origin_z: number,
+		apron_blocks: Int32Array
+	): any;
 	/**
 	 * Clear accumulators without returning data
 	 */
 	clear_batch(): void;
+	/**
+	 * Enable batch mode - chunks will be accumulated instead of returned immediately
+	 */
+	start_batch(): void;
 	/**
 	 * Disable batch mode and return all accumulated geometry
 	 */
@@ -35,18 +45,26 @@ export class MeshBuilder {
 	 * Get batch mode status
 	 */
 	is_batch_mode(): boolean;
-	constructor();
-	/**
-	 * Enable batch mode - chunks will be accumulated instead of returned immediately
-	 */
-	start_batch(): void;
 	/**
 	 * Update palette with geometry data from JavaScript
 	 * palette_data is an array of objects with: { index, occlusionFlags, category, geometries: [...] }
 	 */
 	update_palette(palette_data: Array<any>): void;
+	/**
+	 * Build a chunk mesh with greedy meshing optimization
+	 *
+	 * This merges coplanar faces of the same material into larger quads,
+	 * dramatically reducing vertex count for large flat surfaces.
+	 */
+	build_chunk_greedy(
+		blocks: Int32Array,
+		origin_x: number,
+		origin_y: number,
+		origin_z: number,
+		apron_blocks: Int32Array
+	): any;
+	constructor();
 }
-
 /**
  * Palette geometry entry - stores precomputed geometry for a block type
  */
@@ -64,16 +82,6 @@ export class PaletteEntry {
 	);
 }
 
-/**
- * Get the version of the mesh builder
- */
-export function get_version(): string;
-
-/**
- * Initialize the WASM module with better panic messages
- */
-export function init(): void;
-
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -87,14 +95,16 @@ export interface InitOutput {
 		b: any,
 		c: number,
 		d: number,
-		e: number
+		e: number,
+		f: any
 	) => [number, number, number];
 	readonly meshbuilder_build_chunk_greedy: (
 		a: number,
 		b: any,
 		c: number,
 		d: number,
-		e: number
+		e: number,
+		f: any
 	) => [number, number, number];
 	readonly meshbuilder_clear_batch: (a: number) => void;
 	readonly meshbuilder_finish_batch: (a: number) => [number, number, number];
@@ -122,7 +132,6 @@ export interface InitOutput {
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
-
 /**
  * Instantiates the given `module`, which can either be bytes or
  * a precompiled `WebAssembly.Module`.

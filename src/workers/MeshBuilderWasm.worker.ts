@@ -32,7 +32,13 @@ type ChunkBuildRequest = {
 	chunkOrigin?: [number, number, number];
 	// SharedArrayBuffer support
 	sharedInputBuffer?: SharedArrayBuffer;
+	// Neighbouring chunks' boundary blocks (flat [x, y, z, paletteIndex, …], world
+	// coords) for cross-chunk face culling. Occlusion lookup only — never rendered.
+	apronBlocks?: Int32Array;
 };
+
+// Reused empty apron so chunks with no neighbour data don't allocate.
+const EMPTY_APRON = new Int32Array(0);
 
 // State
 let meshBuilder: MeshBuilder | null = null;
@@ -201,7 +207,7 @@ function buildChunkBatched(request: ChunkBuildRequest) {
 		throw new Error("WASM MeshBuilder not initialized");
 	}
 
-	const { chunkId, blocks, chunkOrigin, sharedInputBuffer } = request;
+	const { chunkId, blocks, chunkOrigin, sharedInputBuffer, apronBlocks } = request;
 	const startTime = performance.now();
 
 	let blocksArray: Int32Array;
@@ -235,9 +241,10 @@ function buildChunkBatched(request: ChunkBuildRequest) {
 
 	// Build chunk with WASM - use chunk's min position as origin
 	// Use greedy meshing if enabled for better vertex reduction
+	const apron = apronBlocks ?? EMPTY_APRON;
 	const result = useGreedyMeshing
-		? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
-		: meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
+		? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ, apron)
+		: meshBuilder.build_chunk(blocksArray, originX, originY, originZ, apron);
 
 	// The WASM returns quantized Int16 positions relative to the origin we passed
 	// We need to de-quantize and convert to world Float32 coordinates
@@ -363,7 +370,7 @@ function buildChunk(request: ChunkBuildRequest) {
 		throw new Error("WASM MeshBuilder not initialized");
 	}
 
-	const { chunkId, blocks, chunkOrigin, sharedInputBuffer } = request;
+	const { chunkId, blocks, chunkOrigin, sharedInputBuffer, apronBlocks } = request;
 	const startTime = performance.now();
 	let dataTransferStart = startTime;
 
@@ -436,9 +443,10 @@ function buildChunk(request: ChunkBuildRequest) {
 	const wasmStart = performance.now();
 
 	// Call WASM build_chunk (with or without greedy meshing)
+	const apron = apronBlocks ?? EMPTY_APRON;
 	const result = useGreedyMeshing
-		? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ)
-		: meshBuilder.build_chunk(blocksArray, originX, originY, originZ);
+		? meshBuilder.build_chunk_greedy(blocksArray, originX, originY, originZ, apron)
+		: meshBuilder.build_chunk(blocksArray, originX, originY, originZ, apron);
 
 	const wasmTime = performance.now() - wasmStart;
 	const elapsed = performance.now() - startTime;

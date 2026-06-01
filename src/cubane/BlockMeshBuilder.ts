@@ -29,7 +29,7 @@ export class BlockMeshBuilder {
 	): Promise<THREE.Object3D> {
 		const blockData = block || transform.block;
 		let mesh: THREE.Object3D;
-		if (blockData?.properties?.waterlogged === "true") {
+		if (this.isWaterlogged(blockData)) {
 			mesh = await this.createWaterloggedBlockMesh(model, transform, block, biome);
 		} else {
 			mesh = await this.createBlockMeshNoWater(model, transform, block, biome);
@@ -144,10 +144,8 @@ export class BlockMeshBuilder {
 		// Create the main block mesh
 		const mainBlockMesh = await this.createBlockMeshNoWater(model, transform, block, biome);
 
-		// Check if this block is waterlogged
-		const isWaterlogged = blockData?.properties?.waterlogged === "true";
-
-		if (!isWaterlogged) {
+		// Check if this block is waterlogged (explicit property or implicitly, e.g. kelp)
+		if (!this.isWaterlogged(blockData)) {
 			return mainBlockMesh;
 		}
 
@@ -1075,12 +1073,18 @@ export class BlockMeshBuilder {
 			// Determine if we should use atlas for this texture
 			const useAtlas = this.shouldUseAtlas(texturePath, isLiquid);
 
+			// A liquid is "flowing" when it has a non-zero level (source water is
+			// level 0). Only flowing liquid uses the *_flow texture on its sides.
+			const liquidLevel = blockData?.properties?.level;
+			const isFlowing = (isWater || isLava) && liquidLevel !== undefined && liquidLevel !== "0";
+
 			// Material options for AssetLoader
 			const materialOptions: any = {
 				tint: tint,
 				isLiquid: isLiquid,
 				isWater: isWater,
 				isLava: isLava,
+				isFlowing: isFlowing,
 				faceDirection: direction,
 				forceAnimation: isLiquid,
 				biome: biome,
@@ -1283,6 +1287,23 @@ export class BlockMeshBuilder {
 		if (!blockData) return false;
 
 		return `${blockData.namespace}:${blockData.name}` === "minecraft:water";
+	}
+
+	// Blocks that are implicitly waterlogged in vanilla — they hold water without
+	// ever exposing a `waterlogged` property, so they must still generate a
+	// surrounding water mesh.
+	private static readonly ALWAYS_WATERLOGGED = new Set<string>([
+		"minecraft:kelp",
+		"minecraft:kelp_plant",
+		"minecraft:seagrass",
+		"minecraft:tall_seagrass",
+		"minecraft:bubble_column",
+	]);
+
+	private isWaterlogged(blockData?: Block): boolean {
+		if (!blockData) return false;
+		if (blockData.properties?.waterlogged === "true") return true;
+		return BlockMeshBuilder.ALWAYS_WATERLOGGED.has(`${blockData.namespace}:${blockData.name}`);
 	}
 
 	private isLavaBlock(blockData?: Block): boolean {

@@ -98,6 +98,15 @@ export interface PostProcessingOptions {
 	enableSSAO?: boolean;
 	enableSMAA?: boolean;
 	enableGamma?: boolean;
+	/** Enable the tilt-shift miniature-photography effect. Off by default. */
+	enableTiltShift?: boolean;
+	/**
+	 * Strength of the tilt-shift effect, 0..1. 0 = no effect (whole image in
+	 * focus), 1 = thin focus band with heavy blur outside. Maps internally to
+	 * the underlying focusArea / kernelSize so users don't have to touch the
+	 * low-level controls. Default 0.5.
+	 */
+	tiltShiftAmount?: number;
 	// SSAO presets for different camera modes
 	ssaoPresets?: {
 		perspective?: {
@@ -347,6 +356,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	interactionOptions: {
 		enableSelection: false,
 		enableMovingSchematics: false,
+		enableBlockSelection: false,
 	},
 	dragAndDropOptions: {
 		acceptedFileTypes: ["schematic", "nbt", "schem", "litematic", "mcstructure"],

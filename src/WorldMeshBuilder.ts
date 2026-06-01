@@ -343,7 +343,21 @@ export class WorldMeshBuilder {
 
 	// Removed unused isBlockOccluding method
 
-	private async computeOcclusionFlags(blockString: string): Promise<number> {
+	private async computeOcclusionFlags(
+		blockString: string,
+		category: keyof ChunkMeshes = "solid"
+	): Promise<number> {
+		// Liquids get their own render category and must cull against themselves,
+		// like glass-on-glass. Their synthesized model carries no `cullface` and is
+		// sub-cube height (14/16), so the generic opaque/full-face path below never
+		// flags them and adjacent water faces are never hidden. Treat every face as
+		// self-occluding: the worker only culls a face when the SAME-category
+		// neighbour has the opposite bit set, so water still won't cull solids, and
+		// the worker's flush test keeps the 14/16-high top surface visible.
+		if (category === "water") {
+			return 0b111111; // all six faces occlude same-category (water) neighbours
+		}
+
 		try {
 			// @ts-ignore - Accessing Cubane's optimization data
 			const data = await this.cubane.getBlockOptimizationData(blockString, "plains", true);
@@ -545,18 +559,20 @@ export class WorldMeshBuilder {
 					});
 				}
 
+				const category = this.getBlockCategory(blockState.name, blockState.properties);
+
 				paletteBlockData[index] = {
 					blockName: blockState.name,
 					materialGroups,
-					category: this.getBlockCategory(blockState.name),
+					category,
 				};
 
 				// Add to worker payload
 				if (geometryData.length > 0) {
-					const occlusionFlags = await this.computeOcclusionFlags(blockString);
+					const occlusionFlags = await this.computeOcclusionFlags(blockString, category);
 					paletteGeometryData.push({
 						index,
-						category: this.getBlockCategory(blockState.name),
+						category,
 						occlusionFlags: occlusionFlags,
 						isCubic: occlusionFlags === 63, // Optimization: All 6 faces are occluding = full cube
 						geometries: geometryData,
@@ -639,6 +655,8 @@ export class WorldMeshBuilder {
 			chunk_x: number;
 			chunk_y: number;
 			chunk_z: number;
+			// Neighbouring chunks' boundary blocks for cross-chunk face culling (occlusion only).
+			apronBlocks?: Int32Array;
 		}>,
 		onProgress?: (processed: number, total: number) => void
 	): Promise<THREE.Mesh[]> {
@@ -722,6 +740,7 @@ export class WorldMeshBuilder {
 							chunkId,
 							sharedInputBuffer: sharedBuffer,
 							chunkOrigin: [originX, originY, originZ],
+							apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
 						});
 					} else {
 						batchWorker.postMessage(
@@ -730,6 +749,7 @@ export class WorldMeshBuilder {
 								chunkId,
 								blocks: blocksArray,
 								chunkOrigin: [originX, originY, originZ],
+								apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
 							},
 							[blocksArray.buffer]
 						);
@@ -1127,6 +1147,8 @@ export class WorldMeshBuilder {
 			chunk_x: number;
 			chunk_y: number;
 			chunk_z: number;
+			// Neighbouring chunks' boundary blocks for cross-chunk face culling (occlusion only).
+			apronBlocks?: Int32Array;
 		},
 		schematicObject: SchematicObject,
 		renderingBounds?: {
@@ -1407,6 +1429,7 @@ export class WorldMeshBuilder {
 						chunkId,
 						sharedInputBuffer: sharedBuffer,
 						chunkOrigin: [originX, originY, originZ],
+						apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
 						_sendTime: sendTime, // Pass timestamp for round-trip measurement
 					});
 				} else {
@@ -1422,6 +1445,7 @@ export class WorldMeshBuilder {
 							chunkId,
 							blocks: workerBlocks,
 							chunkOrigin: [originX, originY, originZ],
+							apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
 						},
 						transferList
 					);
@@ -1601,8 +1625,31 @@ export class WorldMeshBuilder {
 		return blockString;
 	}
 
-	private getBlockCategory(blockName: string): keyof ChunkMeshes {
+	// Blocks that hold water without ever exposing a `waterlogged` property. Mirrors
+	// BlockMeshBuilder.ALWAYS_WATERLOGGED so their generated water joins the water pass.
+	private static readonly IMPLICIT_WATERLOGGED = new Set<string>([
+		"minecraft:kelp",
+		"minecraft:kelp_plant",
+		"minecraft:seagrass",
+		"minecraft:tall_seagrass",
+		"minecraft:bubble_column",
+	]);
+
+	private getBlockCategory(
+		blockName: string,
+		properties?: Record<string, string>
+	): keyof ChunkMeshes {
 		if (blockName.includes("water") || blockName.includes("lava")) return "water";
+		// Waterlogged blocks carry a surrounding water cube that must cull against
+		// neighbouring water (real water or other waterlogged cells), so they render
+		// in the water category. Their own geometry is unaffected: cross/non-flush
+		// faces never cull, and solid faces simply draw in the water pass.
+		if (
+			properties?.waterlogged === "true" ||
+			WorldMeshBuilder.IMPLICIT_WATERLOGGED.has(blockName)
+		) {
+			return "water";
+		}
 		if (
 			blockName.includes("glass") ||
 			blockName.includes("leaves") ||

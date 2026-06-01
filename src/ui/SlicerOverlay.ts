@@ -76,6 +76,8 @@ function ensureStyles(): void {
 	letter-spacing: 0.02em;
 	z-index: 10000;
 	user-select: none;
+	transition: left 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+		right 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .slicer-overlay .slicer-axis {
 	display: grid;
@@ -262,11 +264,20 @@ export class SlicerOverlay {
 	private schematicSelect: HTMLSelectElement | null = null;
 	private schematicPickerRow: HTMLDivElement | null = null;
 	private helperToggleEl: HTMLDivElement | null = null;
+	// Tracks how much the sidebar is pushing us aside, in pixels. Added to
+	// the configured horizontal offset so the slicer stays clear of the
+	// sidebar when both occupy the same screen edge.
+	private sidebarShift = 0;
 
 	private boundOnSchematicAdded = (data: { schematic: SchematicObject }) =>
 		this.onSchematicLoaded(data.schematic);
 	private boundOnSchematicLoaded = (data: { id: string }) => this.refreshSchematicList(data.id);
 	private boundOnSchematicRemoved = () => this.refreshSchematicList();
+	private boundOnSidebarVisibilityChanged = (data: {
+		visible: boolean;
+		position: "left" | "right";
+		width: number;
+	}) => this.handleSidebarVisibilityChanged(data);
 
 	constructor(renderer: SchematicRenderer, options: SlicerOverlayOptions = {}) {
 		ensureStyles();
@@ -297,7 +308,14 @@ export class SlicerOverlay {
 			ee.on("schematicAdded", this.boundOnSchematicAdded as (...a: unknown[]) => void);
 			ee.on("schematicLoaded", this.boundOnSchematicLoaded as (...a: unknown[]) => void);
 			ee.on("schematicRemoved", this.boundOnSchematicRemoved as (...a: unknown[]) => void);
+			ee.on(
+				"sidebarVisibilityChanged",
+				this.boundOnSidebarVisibilityChanged as (...a: unknown[]) => void
+			);
 		}
+
+		// Seed the current sidebar state in case it's already visible when we mount.
+		this.syncToSidebarState();
 
 		if (!this.opts.visible) this.hide();
 	}
@@ -348,6 +366,10 @@ export class SlicerOverlay {
 			ee.off("schematicAdded", this.boundOnSchematicAdded as (...a: unknown[]) => void);
 			ee.off("schematicLoaded", this.boundOnSchematicLoaded as (...a: unknown[]) => void);
 			ee.off("schematicRemoved", this.boundOnSchematicRemoved as (...a: unknown[]) => void);
+			ee.off(
+				"sidebarVisibilityChanged",
+				this.boundOnSidebarVisibilityChanged as (...a: unknown[]) => void
+			);
 		}
 		this.container.remove();
 	}
@@ -389,8 +411,47 @@ export class SlicerOverlay {
 		el.style.top = el.style.bottom = el.style.left = el.style.right = "";
 		if (corner === "top-right" || corner === "top-left") el.style.top = `${offset.y}px`;
 		else el.style.bottom = `${offset.y}px`;
-		if (corner === "top-right" || corner === "bottom-right") el.style.right = `${offset.x}px`;
-		else el.style.left = `${offset.x}px`;
+		// Fold in any horizontal shift requested by the sidebar listener.
+		const x = offset.x + this.sidebarShift;
+		if (corner === "top-right" || corner === "bottom-right") el.style.right = `${x}px`;
+		else el.style.left = `${x}px`;
+	}
+
+	/**
+	 * If the sidebar shares a side with the slicer (e.g. both on the right),
+	 * push the slicer aside by the sidebar's width when it opens so the two
+	 * stop fighting for the same corner. Left/right mismatches need no shift.
+	 */
+	private handleSidebarVisibilityChanged(data: {
+		visible: boolean;
+		position: "left" | "right";
+		width: number;
+	}): void {
+		const slicerSide = this.opts.corner.includes("right") ? "right" : "left";
+		if (data.position !== slicerSide) {
+			this.sidebarShift = 0;
+		} else {
+			this.sidebarShift = data.visible ? data.width : 0;
+		}
+		this.applyCornerPosition(this.container);
+	}
+
+	/**
+	 * On construction, the sidebar may already be visible (hidden-by-default
+	 * is false, or a saved layout). Read its current state via the renderer
+	 * so we start in the right position instead of overlapping.
+	 */
+	private syncToSidebarState(): void {
+		const sidebar = (this.renderer as any).sidebar;
+		if (!sidebar || typeof sidebar.isVisible !== "function") return;
+		const visible = sidebar.isVisible();
+		const opts = sidebar.options ?? sidebar.opts;
+		if (!opts) return;
+		this.handleSidebarVisibilityChanged({
+			visible,
+			position: opts.position,
+			width: opts.width,
+		});
 	}
 
 	private buildSchematicPicker(): HTMLDivElement {

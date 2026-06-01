@@ -1,1 +1,7 @@
+#!/usr/bin/env sh
+# Many GUI git clients (IDE integrations, GitHub Desktop, etc.) launch with a
+# minimal PATH that doesn't include user-installed runtime dirs. Prepend the
+# common ones so `bunx` is findable regardless of how git is invoked.
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 bunx lint-staged

@@ -69,6 +69,9 @@ export class AssetLoader {
 		this.materialCache.forEach((m) => m.dispose());
 		this.materialCache.clear();
 
+		// Force colormaps to reload from the newly-enabled packs.
+		this.colormapsLoaded = false;
+
 		if (this.textureAtlas) {
 			this.textureAtlas.dispose();
 			this.textureAtlas = null;
@@ -603,6 +606,41 @@ export class AssetLoader {
 		return this.tintManager.getTint(blockId, properties, biome, position);
 	}
 
+	private colormapsLoaded = false;
+
+	/**
+	 * Load Minecraft's grass/foliage colormaps from the active resource pack and
+	 * hand them to the TintManager so biome tints come from real colormap pixels.
+	 * If the pack ships no colormaps the TintManager falls back to sane defaults.
+	 * Guarded so it only decodes once per atlas (re)build.
+	 */
+	public async loadColormaps(): Promise<void> {
+		if (this.colormapsLoaded) return;
+		this.colormapsLoaded = true;
+
+		const [grass, foliage] = await Promise.all([
+			this.loadColormapImageData("colormap/grass"),
+			this.loadColormapImageData("colormap/foliage"),
+		]);
+		this.tintManager.setColormaps(grass, foliage);
+	}
+
+	private async loadColormapImageData(texturePath: string): Promise<ImageData | null> {
+		const blob = await this.getResourceBlob(`textures/${texturePath}.png`);
+		if (!blob) return null;
+		try {
+			const bitmap = await createImageBitmap(blob);
+			const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return null;
+			ctx.drawImage(bitmap, 0, 0);
+			return ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+		} catch (error) {
+			console.warn(`Failed to decode colormap ${texturePath}:`, error);
+			return null;
+		}
+	}
+
 	/**
 	 * Analyze PNG texture transparency by examining alpha channel data
 	 */
@@ -754,6 +792,7 @@ export class AssetLoader {
 			isLiquid?: boolean;
 			isWater?: boolean;
 			isLava?: boolean;
+			isFlowing?: boolean;
 			faceDirection?: string;
 			forceAnimation?: boolean;
 			alphaTest?: number;
@@ -783,12 +822,23 @@ export class AssetLoader {
 			return this.materialCache.get(cacheKey)!;
 		}
 
-		// Handle special paths for liquids
+		// Handle special paths for liquids.
+		// A still water/lava source uses the *_still texture on every face — only
+		// genuinely flowing liquid (options.isFlowing) uses the *_flow texture on
+		// its sides. Previously every non-`up` face was forced to *_flow, so the
+		// side faces showed the flow texture, which in many resource packs lacks an
+		// .mcmeta and therefore never animated while the still top did.
 		let finalTexturePath = texturePath;
 		if (options.isWater) {
-			finalTexturePath = options.faceDirection === "up" ? "block/water_still" : "block/water_flow";
+			finalTexturePath =
+				options.isFlowing && options.faceDirection !== "up"
+					? "block/water_flow"
+					: "block/water_still";
 		} else if (options.isLava) {
-			finalTexturePath = options.faceDirection === "up" ? "block/lava_still" : "block/lava_flow";
+			finalTexturePath =
+				options.isFlowing && options.faceDirection !== "up"
+					? "block/lava_flow"
+					: "block/lava_still";
 		}
 
 		let texture: THREE.Texture;
@@ -800,25 +850,21 @@ export class AssetLoader {
 		} | null = null;
 		let usingAtlas = false;
 
-		// Check if this should use animation
-		const shouldCheckAnimation =
+		// Any texture with an .mcmeta sidecar is animated (kelp, seagrass, sea
+		// lanterns, magma, prismarine, …) — not just liquids. Liquids are always
+		// treated as animated. Animated textures need per-frame UV offsets, so they
+		// can't share the static atlas and must render as individual scrolling
+		// textures. Non-animated textures still fall through to the atlas below so
+		// batching is preserved.
+		const isAnimated =
 			options.isLiquid ||
 			options.forceAnimation ||
-			finalTexturePath.includes("water") ||
-			finalTexturePath.includes("lava");
+			(await this.animatedTextureManager.isAnimated(`textures/${finalTexturePath}`));
 
-		if (shouldCheckAnimation) {
-			// Use individual animated texture
-			const isAnimated = await this.animatedTextureManager.isAnimated(
-				`textures/${finalTexturePath}`
-			);
-			if (isAnimated) {
-				const animatedTexture =
-					await this.animatedTextureManager.createAnimatedTexture(finalTexturePath);
-				texture = animatedTexture || (await this.getTexture(finalTexturePath));
-			} else {
-				texture = await this.getTexture(finalTexturePath);
-			}
+		if (isAnimated) {
+			const animatedTexture =
+				await this.animatedTextureManager.createAnimatedTexture(finalTexturePath);
+			texture = animatedTexture || (await this.getTexture(finalTexturePath));
 			usingAtlas = false;
 		} else if (useAtlas && this.textureAtlas) {
 			// Use shared atlas texture
@@ -936,6 +982,10 @@ export class AssetLoader {
 	}
 
 	public async buildTextureAtlas(): Promise<THREE.Texture> {
+		// Colormaps are independent of the atlas; load them before the early-return
+		// so biome tints are available even when the atlas is served from cache.
+		await this.loadColormaps();
+
 		if (this.textureAtlas) return this.textureAtlas;
 
 		// Try to load from cache first if caching is enabled
