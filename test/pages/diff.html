@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Schematic Diff - Schematic Renderer</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				background: #1a1a1a;
+				color: #e0e0e0;
+				height: 100vh;
+				display: flex;
+				flex-direction: column;
+				overflow: hidden;
+			}
+			header {
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 10px 16px;
+				background: #111;
+				border-bottom: 1px solid #333;
+				flex: 0 0 auto;
+			}
+			header h1 {
+				font-size: 16px;
+				font-weight: 600;
+			}
+			header a {
+				color: #6ea8fe;
+				text-decoration: none;
+				font-size: 13px;
+			}
+			/* Two before/after panels */
+			.top {
+				flex: 1 1 0;
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 2px;
+				min-height: 0;
+			}
+			.panel {
+				position: relative;
+				background: #0f0f0f;
+				overflow: hidden;
+			}
+			.panel.dragover {
+				outline: 2px dashed #6ea8fe;
+				outline-offset: -8px;
+			}
+			.panel canvas {
+				display: block;
+				width: 100%;
+				height: 100%;
+			}
+			.panel-label {
+				position: absolute;
+				top: 8px;
+				left: 8px;
+				font-size: 12px;
+				font-weight: 600;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+				color: #9aa;
+				background: rgba(0, 0, 0, 0.55);
+				padding: 3px 8px;
+				border-radius: 4px;
+				pointer-events: none;
+				z-index: 2;
+			}
+			.drop-hint {
+				position: absolute;
+				inset: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: #555;
+				font-size: 14px;
+				pointer-events: none;
+				z-index: 1;
+			}
+			.meta {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				right: 0;
+				font-size: 11px;
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				color: #bcd;
+				background: rgba(0, 0, 0, 0.6);
+				padding: 5px 8px;
+				display: flex;
+				gap: 14px;
+				flex-wrap: wrap;
+				pointer-events: none;
+				z-index: 2;
+			}
+			.meta .fp {
+				color: #7c8;
+			}
+			/* Controls / stats bar */
+			.controls {
+				flex: 0 0 auto;
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 8px 16px;
+				background: #141414;
+				border-top: 1px solid #333;
+				border-bottom: 1px solid #333;
+				font-size: 13px;
+				flex-wrap: wrap;
+			}
+			.controls label {
+				color: #9aa;
+			}
+			.controls select,
+			.controls button {
+				background: #222;
+				color: #e0e0e0;
+				border: 1px solid #444;
+				border-radius: 4px;
+				padding: 4px 8px;
+				font-size: 13px;
+			}
+			.controls button {
+				cursor: pointer;
+			}
+			.controls button:disabled {
+				opacity: 0.4;
+				cursor: not-allowed;
+			}
+			.stat {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			}
+			.stat b {
+				color: #fff;
+			}
+			.count-added {
+				color: #5fd98a;
+			}
+			.count-removed {
+				color: #f07a7a;
+			}
+			.count-changed {
+				color: #f0c45f;
+			}
+			.count-swapped {
+				color: #8ab4f8;
+			}
+			#error {
+				color: #f07a7a;
+				margin-left: auto;
+			}
+			/* Three diff viewports */
+			.bottom {
+				flex: 1 1 0;
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr 1fr;
+				gap: 2px;
+				min-height: 0;
+			}
+			.view {
+				position: relative;
+				background: #0f0f0f;
+				overflow: hidden;
+			}
+			.view canvas {
+				display: block;
+				width: 100%;
+				height: 100%;
+			}
+			.view-label {
+				position: absolute;
+				top: 8px;
+				left: 8px;
+				font-size: 12px;
+				font-weight: 600;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+				background: rgba(0, 0, 0, 0.55);
+				padding: 3px 8px;
+				border-radius: 4px;
+				pointer-events: none;
+				z-index: 2;
+			}
+			.view-empty {
+				position: absolute;
+				inset: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: #444;
+				font-size: 13px;
+				pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<a href="index.html">← Test Suite</a>
+			<h1>Schematic Diff Engine</h1>
+			<span style="font-size: 12px; color: #777">
+				Drop a schematic into <b>Before</b> and <b>After</b> to diff them.
+			</span>
+		</header>
+
+		<div class="top">
+			<div class="panel" id="before-panel">
+				<span class="panel-label">Before</span>
+				<canvas id="before-canvas"></canvas>
+				<div class="drop-hint" id="before-hint">Drop “before” schematic here</div>
+				<div class="meta" id="before-meta" style="display: none"></div>
+			</div>
+			<div class="panel" id="after-panel">
+				<span class="panel-label">After</span>
+				<canvas id="after-canvas"></canvas>
+				<div class="drop-hint" id="after-hint">Drop “after” schematic here</div>
+				<div class="meta" id="after-meta" style="display: none"></div>
+			</div>
+		</div>
+
+		<div class="controls">
+			<label for="preset-select">Preset</label>
+			<select id="preset-select">
+				<option value="exact">exact</option>
+				<option value="shape">shape</option>
+				<option value="structural">structural</option>
+				<option value="redstone">redstone</option>
+				<option value="redstone_survival">redstone_survival</option>
+			</select>
+			<button id="recompute-btn" disabled>Recompute diff</button>
+			<span class="stat">distance <b id="stat-distance">–</b></span>
+			<span class="stat">match <b id="stat-support">–</b></span>
+			<span class="stat">
+				<span class="count-added">+<b id="stat-added">0</b></span>
+				<span class="count-removed">−<b id="stat-removed">0</b></span>
+				<span class="count-changed">~<b id="stat-changed">0</b></span>
+				<span class="count-swapped">⇄<b id="stat-swapped">0</b></span>
+			</span>
+			<span id="error"></span>
+		</div>
+
+		<div class="bottom">
+			<div class="view" id="added-view">
+				<span class="view-label count-added">Added (<span id="added-count">0</span>)</span>
+				<canvas id="added-canvas"></canvas>
+				<div class="view-empty" id="added-empty">—</div>
+			</div>
+			<div class="view" id="removed-view">
+				<span class="view-label count-removed">Removed (<span id="removed-count">0</span>)</span>
+				<canvas id="removed-canvas"></canvas>
+				<div class="view-empty" id="removed-empty">—</div>
+			</div>
+			<div class="view" id="changed-view">
+				<span class="view-label count-changed">Changed (<span id="changed-count">0</span>)</span>
+				<canvas id="changed-canvas"></canvas>
+				<div class="view-empty" id="changed-empty">—</div>
+			</div>
+			<div class="view" id="swapped-view">
+				<span class="view-label count-swapped">Swapped · palette (<span id="swapped-count">0</span>)</span>
+				<canvas id="swapped-canvas"></canvas>
+				<div class="view-empty" id="swapped-empty">—</div>
+			</div>
+		</div>
+
+		<script type="module" src="./scripts/diff.ts"></script>
+	</body>
+</html>
