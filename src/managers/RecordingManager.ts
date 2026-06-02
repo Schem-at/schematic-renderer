@@ -232,6 +232,10 @@ interface RawFrame {
 }
 
 export class RecordingManager {
+	// Warn at most once per session that recording is unavailable — otherwise every
+	// renderer on a multi-instance page logs it.
+	private static warnedNoFfmpeg = false;
+
 	public isRecording: boolean = false;
 	private schematicRenderer: SchematicRenderer;
 	private recordingCanvas: HTMLCanvasElement;
@@ -273,10 +277,10 @@ export class RecordingManager {
 		});
 
 		if (!this.schematicRenderer.options.ffmpeg) {
-			console.groupCollapsed("FFmpeg not found");
-			console.warn("FFmpeg not found in options");
-			console.warn("Recording will not work");
-			console.groupEnd();
+			if (!RecordingManager.warnedNoFfmpeg) {
+				RecordingManager.warnedNoFfmpeg = true;
+				console.info("[RecordingManager] No FFmpeg provided — video recording disabled.");
+			}
 			return;
 		}
 
@@ -1224,11 +1228,11 @@ export class RecordingManager {
 	}
 
 	public dispose(): void {
-		this.stopRecording();
-		if (!this.ffmpeg) {
-			console.error("FFmpeg not found");
-			return;
+		// Only stop an actual recording (avoids a spurious "Recording complete" log),
+		// and only terminate ffmpeg if it was ever provided — no ffmpeg is normal.
+		if (this.isRecording) {
+			this.stopRecording();
 		}
-		this.ffmpeg.terminate();
+		this.ffmpeg?.terminate();
 	}
 }

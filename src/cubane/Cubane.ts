@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { AssetLoader } from "./AssetLoader";
 import { EntityRenderer } from "./EntityRenderer";
+import { SignRenderer } from "./SignRenderer";
 import {
 	Block,
 	BlockGeometryInfo,
@@ -39,6 +40,7 @@ export class Cubane {
 	public modelResolver: ModelResolver;
 	private blockMeshBuilder: BlockMeshBuilder;
 	private entityRenderer: EntityRenderer; // Will be used for the dynamic parts
+	private signRenderer: SignRenderer; // Vanilla-accurate sign geometry + baked text
 	// When false (default), unhandled blocks/entities render nothing instead of
 	// a purple/magenta debug placeholder. Set via debugOptions.showUnknownBlocks.
 	private showUnknownBlocks: boolean = false;
@@ -87,42 +89,6 @@ export class Cubane {
 		};
 	}
 
-	private getSignEntityMap(): Record<string, string> {
-		// Returns a map of all sign variants to their entity types
-		const woodTypes = [
-			"oak",
-			"spruce",
-			"birch",
-			"jungle",
-			"acacia",
-			"dark_oak",
-			"mangrove",
-			"cherry",
-			"bamboo",
-			"crimson",
-			"warped",
-			"pale_oak",
-		];
-
-		const signMap: Record<string, string> = {};
-
-		for (const wood of woodTypes) {
-			// Standing signs
-			signMap[`minecraft:${wood}_sign`] = `${wood}_sign`;
-			// Wall signs
-			signMap[`minecraft:${wood}_wall_sign`] = `${wood}_wall_sign`;
-			// Hanging signs
-			signMap[`minecraft:${wood}_hanging_sign`] = `${wood}_hanging_sign`;
-		}
-
-		// Generic variants (fallback for older versions or custom signs)
-		signMap["minecraft:sign"] = "sign";
-		signMap["minecraft:wall_sign"] = "wall_sign";
-		signMap["minecraft:hanging_sign"] = "hanging_sign";
-
-		return signMap;
-	}
-
 	// New map for hybrid blocks: blockId -> configuration for its dynamic part(s)
 	private hybridBlockConfig: Record<string, HybridBlockDynamicPart[]> = {
 		"minecraft:lectern": [
@@ -154,6 +120,7 @@ export class Cubane {
 			showUnknownBlocks: this.showUnknownBlocks,
 		});
 		this.entityRenderer = new EntityRenderer(); // Make sure EntityRenderer can load "lectern_book", "bell_body"
+		this.signRenderer = new SignRenderer(this.assetLoader);
 
 		// Initialize ResourcePackManager
 		this.packManager = new ResourcePackManager();
@@ -202,11 +169,8 @@ export class Cubane {
 			this.registerBlockEntity(blockId, entityType);
 		}
 
-		// Register sign entities
-		const signEntityMap = this.getSignEntityMap();
-		for (const [blockId, entityType] of Object.entries(signEntityMap)) {
-			this.registerBlockEntity(blockId, entityType);
-		}
+		// Signs are handled by SignRenderer (see getBlockMesh), not registered as
+		// GLTF block entities.
 	}
 
 	// --- Database and Resource Pack methods (assumed to be correct and complete) ---
@@ -748,341 +712,6 @@ export class Cubane {
 	public lastPackLoadedFromCache: boolean = false;
 
 	/**
-	 * Apply special positioning and rotation for sign blocks
-	 */
-	private applySignPositioning(
-		entityMesh: THREE.Object3D,
-		block: Block,
-		nbtData?: Record<string, any>
-	): void {
-		const blockName = block.name;
-
-		// Check if this is a sign
-		const isStandingSign =
-			blockName.includes("_sign") && !blockName.includes("wall") && !blockName.includes("hanging");
-		const isWallSign = blockName.includes("wall_sign");
-		const isHangingSign = blockName.includes("hanging_sign");
-
-		if (!isStandingSign && !isWallSign && !isHangingSign) {
-			return; // Not a sign, no special handling needed
-		}
-
-		// Minecraft transforms signs with translateBase(0.5, 0.5, 0.5) to center in block
-		// EntityRenderer already applies (0, -0.5, 0) to the model
-		// So we don't need Y centering, just apply the Minecraft offsets
-
-		if (isStandingSign) {
-			// Standing signs: lower by 0.25 to match Minecraft positioning
-			entityMesh.position.set(0, -0.25, 0);
-
-			// Minecraft scales regular signs to 2/3 size (0.6666667)
-			entityMesh.scale.set(0.6666667, 0.6666667, 0.6666667);
-
-			// Standing signs use 'rotation' property (0-15 for 16 directions)
-			// 0 = south, 4 = west, 8 = north, 12 = east
-			// Each increment is 22.5 degrees (360/16)
-			const rotation = block.properties?.rotation;
-			if (rotation !== undefined) {
-				const rotationValue = typeof rotation === "string" ? parseInt(rotation) : rotation;
-				// Minecraft rotation: 0 = south (180°), increments counterclockwise
-				// Convert to radians: rotation * 22.5° in radians
-				const angleRadians = (rotationValue * Math.PI) / 8; // 22.5° = π/8
-				entityMesh.rotation.y = angleRadians;
-				console.log("[Cubane] Standing sign rotation:", rotationValue, "(", angleRadians, "rad )");
-			}
-
-			console.log(
-				"[Cubane] Standing sign positioned at:",
-				entityMesh.position.toArray(),
-				"scale:",
-				entityMesh.scale.toArray()
-			);
-		} else if (isWallSign) {
-			// Wall signs: Minecraft's wall offset + adjustment
-			entityMesh.position.set(0, -0.5625, 0); // -0.3125 - 0.25
-
-			// Minecraft scales regular signs to 2/3 size (0.6666667)
-			entityMesh.scale.set(0.6666667, 0.6666667, 0.6666667);
-
-			// Apply rotation and Z offset based on facing direction
-			const facing = block.properties?.facing || block.properties?.rotation;
-			if (facing) {
-				this.applyWallSignRotation(entityMesh, facing);
-			}
-			console.log(
-				"[Cubane] Wall sign positioned at:",
-				entityMesh.position.toArray(),
-				"facing:",
-				facing
-			);
-		} else if (isHangingSign) {
-			// Hanging signs: Minecraft's hanging offset + adjustment
-			entityMesh.position.set(0, -0.125, 0); // 0.125 - 0.25
-
-			// Minecraft does NOT scale hanging signs (scale = 1.0)
-			entityMesh.scale.set(1.0, 1.0, 1.0);
-
-			console.log(
-				"[Cubane] Hanging sign positioned at:",
-				entityMesh.position.toArray(),
-				"scale:",
-				entityMesh.scale.toArray()
-			);
-		}
-
-		// Render text from NBT data using Minecraft-accurate positioning
-		if (nbtData) {
-			this.renderSignText(entityMesh, nbtData, isHangingSign);
-		}
-	}
-
-	/**
-	 * Apply rotation for wall signs based on facing direction
-	 * Minecraft applies rotation after base translation, then applies wall offset in LOCAL space
-	 */
-	private applyWallSignRotation(entityMesh: THREE.Object3D, facing: string): void {
-		// Minecraft rotations for wall signs (rotation applied around Y-axis)
-		const rotations: Record<string, number> = {
-			north: 0, // Facing north (Z-)
-			south: Math.PI, // Facing south (Z+)
-			east: -Math.PI / 2, // Facing east (X+)
-			west: Math.PI / 2, // Facing west (X-)
-		};
-
-		const rotation = rotations[facing.toLowerCase()];
-		if (rotation !== undefined) {
-			entityMesh.rotation.y = rotation;
-
-			// Wall offset: -0.4375 in local Z (7/16 blocks backwards from face)
-			// This is applied AFTER rotation, so we need to transform it to world space
-			const wallOffsetZ = -0.4375;
-
-			console.log(
-				"[Cubane] Wall sign rotation before offset:",
-				entityMesh.rotation.y,
-				"facing:",
-				facing
-			);
-
-			// Transform local Z offset to world coordinates based on facing
-			// ADD to existing position (which has Y already set)
-			// North (0°): local -Z = world -Z
-			// South (180°): local -Z = world +Z
-			// East (-90°): local -Z = world -X
-			// West (90°): local -Z = world +X
-			if (facing === "north") {
-				entityMesh.position.z += wallOffsetZ; // Local -Z to world -Z
-			} else if (facing === "south") {
-				entityMesh.position.z += -wallOffsetZ; // Local -Z to world +Z
-			} else if (facing === "east") {
-				entityMesh.position.x += -wallOffsetZ; // Local -Z to world -X
-			} else if (facing === "west") {
-				entityMesh.position.x += wallOffsetZ; // Local -Z to world +X
-			}
-
-			console.log("[Cubane] Wall sign after Z offset:", entityMesh.position.toArray());
-		}
-	}
-
-	/**
-	 * Extract text lines from sign NBT data (supports both modern and legacy formats)
-	 */
-	private extractSignText(nbtData: Record<string, any>): string[] {
-		const lines: string[] = [];
-
-		// Try modern format first (1.20+)
-		if (nbtData.front_text?.messages) {
-			const messages = nbtData.front_text.messages;
-			for (const msg of messages) {
-				try {
-					// Messages are JSON text components
-					if (typeof msg === "string") {
-						const parsed = JSON.parse(msg);
-						const text = this.parseTextComponent(parsed);
-						lines.push(text);
-					} else if (typeof msg === "object") {
-						const text = this.parseTextComponent(msg);
-						lines.push(text);
-					}
-				} catch (e) {
-					// If parsing fails, use raw string
-					lines.push(String(msg));
-				}
-			}
-		}
-
-		// Fall back to legacy format (1.7-1.19)
-		if (lines.length === 0) {
-			for (let i = 1; i <= 4; i++) {
-				const key = `Text${i}`;
-				if (nbtData[key]) {
-					try {
-						if (typeof nbtData[key] === "string") {
-							const parsed = JSON.parse(nbtData[key]);
-							const text = this.parseTextComponent(parsed);
-							lines.push(text);
-						} else if (typeof nbtData[key] === "object") {
-							const text = this.parseTextComponent(nbtData[key]);
-							lines.push(text);
-						}
-					} catch (e) {
-						// If parsing fails, use raw string
-						lines.push(String(nbtData[key]));
-					}
-				} else {
-					lines.push(""); // Empty line
-				}
-			}
-		}
-
-		// Ensure we always have 4 lines
-		while (lines.length < 4) {
-			lines.push("");
-		}
-
-		return lines.slice(0, 4);
-	}
-
-	/**
-	 * Parse a Minecraft text component into a plain string
-	 */
-	private parseTextComponent(component: any): string {
-		if (typeof component === "string") {
-			return component;
-		}
-
-		if (typeof component === "object" && component !== null) {
-			let text = component.text || "";
-
-			// Handle extra array (additional text components)
-			if (component.extra && Array.isArray(component.extra)) {
-				for (const extra of component.extra) {
-					text += this.parseTextComponent(extra);
-				}
-			}
-
-			return text;
-		}
-
-		return "";
-	}
-
-	/**
-	 * Render text on a sign as a separate quad overlay
-	 * Uses Minecraft's exact text positioning from SignRenderer
-	 */
-	private renderSignText(
-		entityMesh: THREE.Object3D,
-		nbtData: Record<string, any>,
-		isHangingSign: boolean = false
-	): void {
-		const lines = this.extractSignText(nbtData);
-
-		// Filter out empty lines for display
-		const nonEmptyLines = lines.filter((l) => l.trim() !== "");
-		if (nonEmptyLines.length === 0) {
-			return; // No text to render
-		}
-
-		// Create a canvas for text rendering
-		const canvas = document.createElement("canvas");
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return;
-
-		// High resolution for crisp text
-		canvas.width = 512;
-		canvas.height = 256;
-
-		// Transparent background
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-		// Configure text rendering
-		ctx.textAlign = "center";
-		ctx.textBaseline = "middle";
-		ctx.fillStyle = "#000000"; // Black text
-
-		// Font size scales with canvas resolution
-		const fontSize = Math.floor(canvas.height / 12);
-		ctx.font = `bold ${fontSize}px "Minecraft", monospace, sans-serif`;
-
-		// Calculate text area (signs have a border)
-		const textAreaTop = canvas.height * 0.25;
-		const textAreaHeight = canvas.height * 0.5;
-		const lineHeight = textAreaHeight / 4;
-
-		// Draw each line of text
-		lines.forEach((line, index) => {
-			if (line.trim() !== "") {
-				const y = textAreaTop + (index + 0.5) * lineHeight;
-
-				// Add a white outline for better readability
-				ctx.strokeStyle = "#FFFFFF";
-				ctx.lineWidth = 3;
-				ctx.strokeText(line, canvas.width / 2, y);
-
-				// Draw black text on top
-				ctx.fillStyle = "#000000";
-				ctx.fillText(line, canvas.width / 2, y);
-			}
-		});
-
-		// Create texture from canvas
-		const texture = new THREE.CanvasTexture(canvas);
-		texture.needsUpdate = true;
-		texture.colorSpace = THREE.SRGBColorSpace;
-		texture.minFilter = THREE.LinearFilter;
-		texture.magFilter = THREE.LinearFilter;
-
-		// Text scale for readability (adjusted for parent sign scale)
-		// 1.5 provides good visibility without being too large
-		const textScale = 1.5;
-
-		// Create a plane geometry for the text overlay
-		// Size adjusted for Minecraft sign proportions (doubled for visibility)
-		const planeGeometry = new THREE.PlaneGeometry(1.0 * textScale, 0.5 * textScale);
-
-		// Create material with transparency
-		const planeMaterial = new THREE.MeshBasicMaterial({
-			map: texture,
-			transparent: true,
-			opacity: 1.0,
-			side: THREE.DoubleSide,
-			depthWrite: false,
-			depthTest: true,
-		});
-
-		// Create the text plane mesh
-		const textPlane = new THREE.Mesh(planeGeometry, planeMaterial);
-		textPlane.name = "sign_text_overlay";
-
-		// Minecraft's TEXT_OFFSET: (0.0, 0.3333333432674408, 0.046666666865348816)
-		// Y: 1/3 block up from sign origin
-		// Z: Increased from 0.047 to 0.1 to avoid clipping into sign face
-		// Signs are lowered by 0.25, so we need to compensate text position
-		// For regular signs (scaled to 0.6666667):
-		// Y: (0.333 + 0.25) / 0.6666667 = 0.583 / 0.6666667 = 0.875
-		// Z: 0.1 / 0.6666667 = 0.15
-		// For hanging signs (scale 1.0):
-		// Y: (0.333 + 0.25) / 1.0 = 0.583
-		// Z: 0.1 / 1.0 = 0.1
-		const textY = isHangingSign ? 0.5833333432674408 : 0.875;
-		const textZ = isHangingSign ? 0.1 : 0.15;
-		textPlane.position.set(0, textY, textZ);
-		textPlane.renderOrder = 1000; // Render on top
-
-		// Add the text plane to the entity mesh
-		entityMesh.add(textPlane);
-
-		console.log("[Cubane] Created sign text overlay (Minecraft-accurate)", {
-			textLines: nonEmptyLines.length,
-			textScale,
-			isHangingSign,
-			position: textPlane.position.toArray(),
-			size: [planeGeometry.parameters.width, planeGeometry.parameters.height],
-		});
-	}
-
-	/**
 	 * Get a block mesh with optional caching
 	 * @param blockString The block string (e.g., "minecraft:stone[variant=smooth]")
 	 * @param biome The biome for tinting (default: "plains")
@@ -1110,11 +739,25 @@ export class Cubane {
 		const block = this.parseBlockString(blockString);
 		const blockId = `${block.namespace}:${block.name}`;
 
+		// Signs are rendered by the dedicated SignRenderer (vanilla cube model + baked
+		// text), not the GLTF entity path. They carry per-instance NBT (text) and are
+		// rendered by the block-entity pass (WorldMeshBuilder.buildSignMeshes), which
+		// always passes nbtData. The palette/greedy paths call getBlockMesh WITHOUT
+		// nbtData — emit nothing there so we don't draw a blank, text-less board that
+		// would double up with the block-entity pass.
+		if (this.signRenderer.isSign(blockId)) {
+			if (!nbtData) return new THREE.Group();
+			const signMesh = await this.signRenderer.buildSignMesh(
+				blockId,
+				block.properties ?? {},
+				nbtData
+			);
+			if (signMesh) return signMesh;
+			// Fall through to default handling if the sign couldn't be built.
+		}
+
 		if (this.pureBlockEntityMap[blockId]) {
 			const entityMesh = await this.getEntityMesh(this.pureBlockEntityMap[blockId], useCache);
-
-			// Apply special positioning for signs (chests etc. are fine with EntityRenderer's default -0.5)
-			this.applySignPositioning(entityMesh, block, nbtData);
 
 			// For pure entities, the entityMesh is the final block mesh.
 			// It might already have its own internal origin and structure.
@@ -1363,6 +1006,11 @@ export class Cubane {
 
 	public registerHybridBlock(blockId: string, dynamicParts: HybridBlockDynamicPart[]): void {
 		this.hybridBlockConfig[blockId] = dynamicParts;
+	}
+
+	/** True when any animated texture is registered (drives continuous rendering). */
+	public hasAnimatedTextures(): boolean {
+		return this.assetLoader.hasAnimatedTextures();
 	}
 
 	public updateAnimations(): void {

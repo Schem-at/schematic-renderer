@@ -425,6 +425,9 @@ export class SchematicManager {
 				schematicObject.group.parent.remove(schematicObject.group);
 			}
 
+			// On-demand rendering: the scene changed, redraw it.
+			this.schematicRenderer.invalidate();
+
 			// Remove from scene if still there
 			this.sceneManager.scene.remove(schematicObject.group);
 

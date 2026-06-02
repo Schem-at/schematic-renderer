@@ -75,8 +75,12 @@ const renderer = new SchematicRenderer(
 		},
 		// enableAutoOrbit: true,
 		gamma: 0.45,
-		enableAdaptiveFPS: true,
-		targetFPS: 20,
+		// On-demand rendering idles the GPU to 0fps when the scene is static, so there's
+		// no reason to cap interaction. 0 = uncapped: render on every vsync-locked rAF
+		// tick while the scene is dirty (smoothest), and 0fps when idle. A non-zero cap
+		// at/near the refresh rate causes judder (rAF jitter trips the elapsed>=interval
+		// gate). The old 20fps cap + adaptive-FPS path is what felt sluggish.
+		targetFPS: 0,
 
 		// Enable WebGPU if available (falls back to WebGL)
 		webgpuOptions: {

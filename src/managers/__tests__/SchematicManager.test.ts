@@ -83,6 +83,7 @@ describe("SchematicManager", () => {
 
 		mockRenderer = {
 			eventEmitter: mockEventEmitter,
+			invalidate: vi.fn(),
 			sceneManager: {
 				scene: new THREE.Scene(),
 				schematicRenderer: {},

@@ -57,7 +57,11 @@ export class WorldMeshBuilder {
 	private instancedRenderer: InstancedBlockRenderer | null = null;
 	private useInstancedRendering: boolean = false;
 
-	// Worker Pool
+	// Worker Pool. Each builder has a unique meshContextId so that when several
+	// builders share one context's worker pool, their palettes stay separate in
+	// the workers (one WASM MeshBuilder per id). Single-instance use is unaffected.
+	private static nextMeshContextId = 0;
+	private readonly meshContextId = `mctx-${WorldMeshBuilder.nextMeshContextId++}`;
 	private workers: Worker[] = [];
 	private freeWorkers: Worker[] = [];
 	private workerQueue: ((worker: Worker) => void)[] = []; // Queue for waiting tasks
@@ -178,6 +182,20 @@ export class WorldMeshBuilder {
 		this.sharedMemoryPool = getSharedMemoryPool();
 		this.useSharedMemory = this.sharedMemoryPool.usingSharedMemory();
 
+		const context = this.schematicRenderer.options.context;
+		// Sharing is supported only for the WASM worker (the default), whose palette
+		// is namespaced per meshContextId. The JS worker stays per-renderer.
+		if (context && this.useWasmMeshBuilder) {
+			// Share one worker pool across every renderer on this context (WASM is
+			// initialized once per worker; palettes are namespaced by meshContextId).
+			// onmessage is (re)bound per acquire in getFreeWorker, since workers are
+			// borrowed exclusively by one builder at a time.
+			this.workers = context.getSharedWorkers(this.maxWorkers, true);
+			this.freeWorkers = context.sharedFreeWorkers;
+			this.workerQueue = context.sharedWorkerQueue;
+			return;
+		}
+
 		for (let i = 0; i < this.maxWorkers; i++) {
 			// Use WASM worker if enabled, otherwise use JavaScript worker
 			const worker = this.useWasmMeshBuilder
@@ -280,13 +298,14 @@ export class WorldMeshBuilder {
 				this.returnWorker(worker);
 			}
 		} else if (type === "chunkAccumulated") {
-			// Batch mode: chunk was accumulated, not returned
+			// Batch mode: chunk accumulated. The batch holds its worker for the whole
+			// run (released in processChunksBatched's `finally`) — do NOT return it
+			// here, or with a shared pool another build grabs it mid-batch and rebinds
+			// onmessage, misrouting this build's remaining responses (deadlock at 0/N).
 			const request = this.batchPendingChunks.get(chunkId);
 			if (request) {
 				request.resolve();
 				this.batchPendingChunks.delete(chunkId);
-				// Return worker to pool for next chunk
-				this.returnWorker(worker);
 			}
 		} else if (type === "batchFinished") {
 			// Batch mode complete - return accumulated meshes
@@ -621,20 +640,26 @@ export class WorldMeshBuilder {
 				worker.postMessage({
 					type: "updatePalette",
 					paletteData: paletteGeometryData,
+					meshContextId: this.meshContextId,
 				});
 			});
 		}
 	}
 
-	// Helper to acquire a worker
+	// Helper to acquire a worker. Rebinds onmessage to THIS builder so that, with a
+	// shared pool, responses route back to the builder that borrowed the worker
+	// (workers are lent exclusively until returnWorker).
 	private async getFreeWorker(): Promise<Worker> {
+		const bind = (worker: Worker): Worker => {
+			worker.onmessage = (event: MessageEvent) => this.handleWorkerMessage(worker, event);
+			return worker;
+		};
 		if (this.freeWorkers.length > 0) {
-			return this.freeWorkers.pop()!;
+			return bind(this.freeWorkers.pop()!);
 		}
-
 		// Wait for a worker to become free
 		return new Promise<Worker>((resolve) => {
-			this.workerQueue.push(resolve);
+			this.workerQueue.push((worker) => resolve(bind(worker)));
 		});
 	}
 
@@ -679,112 +704,119 @@ export class WorldMeshBuilder {
 
 		const numSubBatches = Math.ceil(totalChunks / SUB_BATCH_SIZE);
 
-		// Use a single dedicated worker for accumulation
-		const batchWorker = this.workers[0];
+		// Acquire one worker exclusively for the whole batch so this works with a
+		// shared pool (other builders use other workers). Released in `finally`.
+		const batchWorker = await this.getFreeWorker();
+		try {
+			for (let subBatchIdx = 0; subBatchIdx < numSubBatches; subBatchIdx++) {
+				const subBatchStart = subBatchIdx * SUB_BATCH_SIZE;
+				const subBatchEnd = Math.min(subBatchStart + SUB_BATCH_SIZE, totalChunks);
+				const subBatchChunks = allChunks.slice(subBatchStart, subBatchEnd);
 
-		for (let subBatchIdx = 0; subBatchIdx < numSubBatches; subBatchIdx++) {
-			const subBatchStart = subBatchIdx * SUB_BATCH_SIZE;
-			const subBatchEnd = Math.min(subBatchStart + SUB_BATCH_SIZE, totalChunks);
-			const subBatchChunks = allChunks.slice(subBatchStart, subBatchEnd);
+				// Start batch mode on worker for this sub-batch
+				batchWorker.postMessage({ type: "startBatch", meshContextId: this.meshContextId });
 
-			// Start batch mode on worker for this sub-batch
-			batchWorker.postMessage({ type: "startBatch" });
+				// Process this sub-batch's chunks through the batch worker
+				for (const chunkData of subBatchChunks) {
+					const chunkId = `batch_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`;
 
-			// Process this sub-batch's chunks through the batch worker
-			for (const chunkData of subBatchChunks) {
-				const chunkId = `batch_${chunkData.chunk_x}_${chunkData.chunk_y}_${chunkData.chunk_z}`;
-
-				// Convert blocks to Int32Array if needed
-				let blocksArray: Int32Array;
-				if (chunkData.blocks instanceof Int32Array) {
-					blocksArray = chunkData.blocks;
-				} else {
-					blocksArray = new Int32Array(chunkData.blocks.length * 4);
-					for (let i = 0; i < chunkData.blocks.length; i++) {
-						const block = chunkData.blocks[i];
-						blocksArray[i * 4] = block[0];
-						blocksArray[i * 4 + 1] = block[1];
-						blocksArray[i * 4 + 2] = block[2];
-						blocksArray[i * 4 + 3] = block[3];
-					}
-				}
-
-				// Calculate origin
-				let minX = Infinity,
-					minY = Infinity,
-					minZ = Infinity;
-				for (let i = 0; i < blocksArray.length; i += 4) {
-					minX = Math.min(minX, blocksArray[i]);
-					minY = Math.min(minY, blocksArray[i + 1]);
-					minZ = Math.min(minZ, blocksArray[i + 2]);
-				}
-				const originX = isFinite(minX) ? minX : 0;
-				const originY = isFinite(minY) ? minY : 0;
-				const originZ = isFinite(minZ) ? minZ : 0;
-
-				// Wait for chunk to be accumulated
-				await new Promise<void>((resolve, reject) => {
-					this.batchPendingChunks.set(chunkId, { resolve, reject });
-
-					// Use SharedArrayBuffer if available
-					if (this.useSharedMemory && this.sharedMemoryPool) {
-						const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
-							chunkId,
-							blocksArray,
-							originX,
-							originY,
-							originZ
-						);
-						batchWorker.postMessage({
-							type: "buildChunkBatched",
-							chunkId,
-							sharedInputBuffer: sharedBuffer,
-							chunkOrigin: [originX, originY, originZ],
-							apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
-						});
+					// Convert blocks to Int32Array if needed
+					let blocksArray: Int32Array;
+					if (chunkData.blocks instanceof Int32Array) {
+						blocksArray = chunkData.blocks;
 					} else {
-						batchWorker.postMessage(
-							{
+						blocksArray = new Int32Array(chunkData.blocks.length * 4);
+						for (let i = 0; i < chunkData.blocks.length; i++) {
+							const block = chunkData.blocks[i];
+							blocksArray[i * 4] = block[0];
+							blocksArray[i * 4 + 1] = block[1];
+							blocksArray[i * 4 + 2] = block[2];
+							blocksArray[i * 4 + 3] = block[3];
+						}
+					}
+
+					// Calculate origin
+					let minX = Infinity,
+						minY = Infinity,
+						minZ = Infinity;
+					for (let i = 0; i < blocksArray.length; i += 4) {
+						minX = Math.min(minX, blocksArray[i]);
+						minY = Math.min(minY, blocksArray[i + 1]);
+						minZ = Math.min(minZ, blocksArray[i + 2]);
+					}
+					const originX = isFinite(minX) ? minX : 0;
+					const originY = isFinite(minY) ? minY : 0;
+					const originZ = isFinite(minZ) ? minZ : 0;
+
+					// Wait for chunk to be accumulated
+					await new Promise<void>((resolve, reject) => {
+						this.batchPendingChunks.set(chunkId, { resolve, reject });
+
+						// Use SharedArrayBuffer if available
+						if (this.useSharedMemory && this.sharedMemoryPool) {
+							const sharedBuffer = this.sharedMemoryPool.writeChunkInput(
+								chunkId,
+								blocksArray,
+								originX,
+								originY,
+								originZ
+							);
+							batchWorker.postMessage({
 								type: "buildChunkBatched",
 								chunkId,
-								blocks: blocksArray,
+								sharedInputBuffer: sharedBuffer,
 								chunkOrigin: [originX, originY, originZ],
 								apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
-							},
-							[blocksArray.buffer]
-						);
+								meshContextId: this.meshContextId,
+							});
+						} else {
+							batchWorker.postMessage(
+								{
+									type: "buildChunkBatched",
+									chunkId,
+									blocks: blocksArray,
+									chunkOrigin: [originX, originY, originZ],
+									apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
+									meshContextId: this.meshContextId,
+								},
+								[blocksArray.buffer]
+							);
+						}
+					});
+
+					globalProcessedCount++;
+					if (onProgress) {
+						onProgress(globalProcessedCount, totalChunks);
 					}
+				}
+
+				// Finish this sub-batch and get merged results
+				const batchResult = await new Promise<any>((resolve, reject) => {
+					this.batchFinishResolve = resolve;
+					this._batchFinishReject = reject;
+					batchWorker.postMessage({ type: "finishBatch", meshContextId: this.meshContextId });
 				});
 
-				globalProcessedCount++;
-				if (onProgress) {
-					onProgress(globalProcessedCount, totalChunks);
+				// Create Three.js meshes from this sub-batch's merged data
+				const subBatchMeshes = this.createMeshesFromBatchResult(batchResult);
+				allResultMeshes.push(...subBatchMeshes);
+
+				// Let browser breathe between sub-batches - use requestAnimationFrame for real breathing
+				// This allows the browser to render and process events
+				if (subBatchIdx < numSubBatches - 1) {
+					await new Promise<void>((r) => {
+						requestAnimationFrame(() => {
+							setTimeout(r, 0);
+						});
+					});
 				}
 			}
 
-			// Finish this sub-batch and get merged results
-			const batchResult = await new Promise<any>((resolve, reject) => {
-				this.batchFinishResolve = resolve;
-				this._batchFinishReject = reject;
-				batchWorker.postMessage({ type: "finishBatch" });
-			});
-
-			// Create Three.js meshes from this sub-batch's merged data
-			const subBatchMeshes = this.createMeshesFromBatchResult(batchResult);
-			allResultMeshes.push(...subBatchMeshes);
-
-			// Let browser breathe between sub-batches - use requestAnimationFrame for real breathing
-			// This allows the browser to render and process events
-			if (subBatchIdx < numSubBatches - 1) {
-				await new Promise<void>((r) => {
-					requestAnimationFrame(() => {
-						setTimeout(r, 0);
-					});
-				});
-			}
+			return allResultMeshes;
+		} finally {
+			// Release the batch worker back to the (possibly shared) pool.
+			this.returnWorker(batchWorker);
 		}
-
-		return allResultMeshes;
 	}
 
 	/**
@@ -1109,6 +1141,7 @@ export class WorldMeshBuilder {
 					chunkId,
 					sharedInputBuffer: sharedBuffer, // Worker reads from this directly
 					chunkOrigin: [originX, originY, originZ],
+					meshContextId: this.meshContextId,
 				});
 			} else {
 				// Fallback: transfer via postMessage (copies data)
@@ -1123,6 +1156,7 @@ export class WorldMeshBuilder {
 						chunkId,
 						blocks: workerBlocks,
 						chunkOrigin: [originX, originY, originZ],
+						meshContextId: this.meshContextId,
 					},
 					transferList
 				);
@@ -1139,6 +1173,69 @@ export class WorldMeshBuilder {
 			console.error("Error building chunk geometry:", error);
 			return { geometries: [], origin: [0, 0, 0] };
 		}
+	}
+
+	/**
+	 * Render sign block entities as standalone meshes, independent of the build mode.
+	 *
+	 * The `batched` and `instanced` build paths don't process block entities at all,
+	 * and even the chunk path's tile-entity handling lacks the blockstate properties
+	 * (facing/rotation) signs need. Signs require BOTH per-instance NBT (the text) and
+	 * the blockstate (orientation), so we render them here once per schematic build and
+	 * the caller adds the results to the schematic group. The greedy/palette paths emit
+	 * nothing for signs (cubane returns empty when called without NBT), so there's no
+	 * doubling.
+	 */
+	public async buildSignMeshes(schematicObject: SchematicObject): Promise<THREE.Object3D[]> {
+		const beMap = schematicObject.getBlockEntitiesMap();
+		if (beMap.size === 0) return [];
+
+		const wrapper = schematicObject.schematicWrapper;
+		const out: THREE.Object3D[] = [];
+
+		for (const entity of beMap.values()) {
+			const pos = entity.position;
+			if (!pos) continue;
+
+			// Resolve the blockstate (name + facing/rotation) at this position.
+			let name: string | undefined;
+			const props: Record<string, string> = {};
+			try {
+				const bs = wrapper.get_block_with_properties(pos[0], pos[1], pos[2]);
+				if (bs) {
+					name = bs.name();
+					const p = bs.properties();
+					if (p && typeof p === "object") {
+						for (const [k, v] of Object.entries(p)) props[k] = String(v);
+					}
+				}
+			} catch {
+				/* fall through */
+			}
+			if (!name || !name.includes("sign")) continue;
+
+			const propStr = Object.entries(props)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(",");
+			const blockString = propStr ? `${name}[${propStr}]` : name;
+			const nbt = entity.nbt || entity;
+
+			try {
+				const mesh = await this.cubane.getBlockMesh(blockString, "plains", false, nbt);
+				if (!mesh) continue;
+				// cubane builds block geometry centred on the integer coordinate (c/16 - 0.5),
+				// so the sign (already centred [-0.5,0.5]) goes straight at the block position
+				// to line up with the surrounding blocks.
+				const off = mesh.position.clone();
+				mesh.position.set(pos[0] + off.x, pos[1] + off.y, pos[2] + off.z);
+				mesh.name = `sign_${name}_${pos[0]}_${pos[1]}_${pos[2]}`;
+				out.push(mesh);
+			} catch (e) {
+				console.warn("[WorldMeshBuilder] sign build failed", blockString, e);
+			}
+		}
+
+		return out;
 	}
 
 	public async getChunkMesh(
@@ -1243,10 +1340,9 @@ export class WorldMeshBuilder {
 				const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
 
 				if (
+					// Signs are handled by the mode-independent buildSignMeshes pass.
 					blockName &&
-					(blockName.includes("sign") ||
-						blockName.includes("chest") ||
-						blockName.includes("banner"))
+					(blockName.includes("chest") || blockName.includes("banner"))
 				) {
 					tileEntityBlocks.push({
 						x: pos[0],
@@ -1293,10 +1389,9 @@ export class WorldMeshBuilder {
 						const blockName = schematicObject.schematicWrapper.get_block(pos[0], pos[1], pos[2]);
 
 						if (
+							// Signs are handled by the mode-independent buildSignMeshes pass.
 							blockName &&
-							(blockName.includes("sign") ||
-								blockName.includes("chest") ||
-								blockName.includes("banner"))
+							(blockName.includes("chest") || blockName.includes("banner"))
 						) {
 							tileEntityBlocks.push({
 								x: pos[0],
@@ -1430,6 +1525,7 @@ export class WorldMeshBuilder {
 						sharedInputBuffer: sharedBuffer,
 						chunkOrigin: [originX, originY, originZ],
 						apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
+						meshContextId: this.meshContextId,
 						_sendTime: sendTime, // Pass timestamp for round-trip measurement
 					});
 				} else {
@@ -1446,6 +1542,7 @@ export class WorldMeshBuilder {
 							blocks: workerBlocks,
 							chunkOrigin: [originX, originY, originZ],
 							apronBlocks: chunkData.apronBlocks, // occlusion-only neighbour shell
+							meshContextId: this.meshContextId,
 						},
 						transferList
 					);
@@ -1834,8 +1931,12 @@ export class WorldMeshBuilder {
 		this.useGPUCompute = false;
 		this.gpuInitPromise = null;
 
-		// Terminate all workers
-		this.workers.forEach((w) => w.terminate());
+		// Terminate workers only if we own them. A shared-context pool is owned by
+		// the context (and terminated when it disposes), so a context-backed builder
+		// must not terminate workers still used by sibling renderers.
+		if (!this.schematicRenderer.options.context) {
+			this.workers.forEach((w) => w.terminate());
+		}
 		this.workers = [];
 		this.freeWorkers = [];
 

@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { EventEmitter } from "events";
 import { SchematicRenderer } from "../SchematicRenderer";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
+import { getClampedPixelRatio } from "../utils/pixelRatio";
 
 // Dynamic imports for post-processing (loaded on-demand)
 let EffectComposer: any = null;
@@ -163,7 +164,19 @@ export class RenderManager {
 	private disposed: boolean = false;
 	private contextLost: boolean = false;
 	private initialSizeSet: boolean = false;
+
+	/**
+	 * Device pixel ratio used to size every framebuffer, clamped (default 2) to keep
+	 * GPU memory bounded on high-DPR mobile screens and avoid context-loss crashes.
+	 */
+	private get pixelRatio(): number {
+		return getClampedPixelRatio(this.schematicRenderer.options.maxPixelRatio);
+	}
 	private resizeTimeout: number | null = null;
+	// Render-and-blit mode: when the context supplies a shared WebGL renderer, this
+	// view renders into it and blits the result onto its own 2D canvas.
+	private usesSharedRenderer = false;
+	private blitCtx: CanvasRenderingContext2D | null = null;
 	private renderRequested: boolean = false;
 
 	// WebGPU state
@@ -393,8 +406,8 @@ export class RenderManager {
 
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${height}px`;
-		canvas.width = width * window.devicePixelRatio;
-		canvas.height = height * window.devicePixelRatio;
+		canvas.width = width * this.pixelRatio;
+		canvas.height = height * this.pixelRatio;
 
 		this.initialSizeSet = true;
 	}
@@ -434,7 +447,7 @@ export class RenderManager {
 			}
 		}
 
-		this.renderer.setPixelRatio(window.devicePixelRatio);
+		this.renderer.setPixelRatio(this.pixelRatio);
 
 		// Initialize Inspector if available
 		if (Inspector && this.schematicRenderer.options.debugOptions?.enableInspector) {
@@ -463,15 +476,25 @@ export class RenderManager {
 	 * Initialize WebGL Renderer (original code)
 	 */
 	private async initWebGLRenderer(): Promise<void> {
-		this.renderer = new THREE.WebGLRenderer({
-			canvas: this.schematicRenderer.canvas,
-			alpha: true,
-			antialias: true,
-			powerPreference: "high-performance",
-			preserveDrawingBuffer: true,
-		});
+		// Render-and-blit: if the context provides a shared WebGL renderer, use it
+		// instead of creating one per view, and make this view's visible canvas a 2D
+		// canvas we blit the GL output onto. Otherwise behave exactly as before.
+		const sharedGL = this.schematicRenderer.options.context?.getSharedGLRenderer?.() ?? null;
+		if (sharedGL) {
+			this.renderer = sharedGL;
+			this.usesSharedRenderer = true;
+			this.blitCtx = this.schematicRenderer.canvas.getContext("2d");
+		} else {
+			this.renderer = new THREE.WebGLRenderer({
+				canvas: this.schematicRenderer.canvas,
+				alpha: true,
+				antialias: true,
+				powerPreference: "high-performance",
+				preserveDrawingBuffer: true,
+			});
+		}
 
-		if (this.initialSizeSet) {
+		if (this.initialSizeSet && !this.usesSharedRenderer) {
 			const parent = this.schematicRenderer.canvas.parentElement;
 			if (parent) {
 				const width = parent.clientWidth;
@@ -481,7 +504,7 @@ export class RenderManager {
 		}
 
 		this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-		this.renderer.setPixelRatio(window.devicePixelRatio);
+		if (!this.usesSharedRenderer) this.renderer.setPixelRatio(this.pixelRatio);
 
 		// this.renderer.resetState();
 
@@ -836,7 +859,15 @@ export class RenderManager {
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${height}px`;
 
-		if (!this.contextLost) {
+		if (this.usesSharedRenderer) {
+			// 2D blit canvas: size its backing store to device pixels (the shared GL
+			// renderer is sized per-render in renderSharedAndBlit, not here).
+			const dpr = this.pixelRatio;
+			canvas.width = Math.max(1, Math.floor(width * dpr));
+			canvas.height = Math.max(1, Math.floor(height * dpr));
+			// Camera-type-aware (perspective or orthographic/isometric) + re-frames.
+			this.schematicRenderer.cameraManager.updateAspectRatio(width / height);
+		} else if (!this.contextLost) {
 			this.renderer.setSize(width, height, false);
 
 			if (this.composer) {
@@ -854,6 +885,8 @@ export class RenderManager {
 				ssaoPass.setSize(width * dpr, height * dpr);
 			}
 		}
+		// On-demand rendering: redraw at the new size.
+		this.schematicRenderer.invalidate();
 	}
 
 	public enableEffect(effectName: string): void {
@@ -1238,6 +1271,49 @@ export class RenderManager {
 		return { renderTimeMs, rendererInfo: renderer.info };
 	}
 
+	/**
+	 * Render-and-blit: size the shared WebGL renderer to this view, render this
+	 * view's scene (through its own composer, so post-processing/gamma is preserved),
+	 * then copy the GL canvas onto this view's visible 2D canvas.
+	 */
+	private renderSharedAndBlit(): void {
+		const viewCanvas = this.schematicRenderer.canvas;
+		// CSS-pixel size (the shared renderer applies its own pixelRatio to get the
+		// device-pixel drawing buffer — same convention as the non-shared path).
+		const cssW = viewCanvas.clientWidth;
+		const cssH = viewCanvas.clientHeight;
+		if (cssW === 0 || cssH === 0 || !this.blitCtx) return;
+
+		// Self-size the 2D backing store + camera aspect to match the laid-out canvas
+		// (this view's canvas isn't sized by the shared renderer, so do it here).
+		const dpr = this.pixelRatio;
+		const dw = Math.max(1, Math.floor(cssW * dpr));
+		const dh = Math.max(1, Math.floor(cssH * dpr));
+		if (viewCanvas.width !== dw || viewCanvas.height !== dh) {
+			viewCanvas.width = dw;
+			viewCanvas.height = dh;
+			// Camera-type-aware (perspective or orthographic/isometric) + re-frames.
+			this.schematicRenderer.cameraManager.updateAspectRatio(cssW / cssH);
+		}
+
+		// Match the shared renderer to this view before rendering it.
+		this.renderer.setSize(cssW, cssH, false);
+		if (this.composer) {
+			this.composer.setSize(cssW, cssH);
+			this.composer.render();
+		} else {
+			this.renderer.render(
+				this.schematicRenderer.sceneManager.scene,
+				this.schematicRenderer.cameraManager.activeCamera.camera
+			);
+		}
+
+		// Copy the GL frame onto this view's 2D canvas, scaling the shared GL canvas
+		// (device-pixel buffer) to fill this canvas's device-pixel backing store 1:1.
+		this.blitCtx.clearRect(0, 0, dw, dh);
+		this.blitCtx.drawImage(this.renderer.domElement, 0, 0, dw, dh);
+	}
+
 	public render(): void {
 		if (this.isRendering || this.contextLost || this.disposed) return;
 
@@ -1266,6 +1342,8 @@ export class RenderManager {
 						// Silently ignore - timestamps are optional for profiling
 					});
 				}
+			} else if (this.usesSharedRenderer) {
+				this.renderSharedAndBlit();
 			} else if (this.composer) {
 				this.composer.render();
 			} else {
@@ -1380,7 +1458,11 @@ export class RenderManager {
 			this.inspector = null;
 		}
 
-		this.renderer.dispose();
+		// Don't dispose a shared renderer — it's owned by the context and used by
+		// sibling views. The context disposes it.
+		if (!this.usesSharedRenderer) {
+			this.renderer.dispose();
+		}
 	}
 
 	// ===== ALPHA MODE API =====

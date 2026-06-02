@@ -23,6 +23,11 @@ export class AnimatedTextureManager {
 
 	constructor(private assetLoader: AssetLoader) {}
 
+	/** True when at least one animated texture is registered (drives continuous rendering). */
+	public hasActiveTextures(): boolean {
+		return this.animatedTextures.size > 0;
+	}
+
 	/**
 	 * Check if a texture has animation metadata
 	 */

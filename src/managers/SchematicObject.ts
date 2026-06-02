@@ -639,8 +639,19 @@ export class SchematicObject extends EventEmitter {
 		if (!this.visible) {
 			return;
 		}
+
 		const { meshes, chunkMap } = await this.buildSchematicMeshes(this, this.chunkDimensions);
 		this.chunkMeshes = chunkMap;
+
+		// Sign block entities are rendered in a mode-independent pass (the batched/
+		// instanced build paths don't process block entities, and signs need both their
+		// per-instance NBT text and blockstate facing/rotation).
+		try {
+			const signMeshes = await this.worldMeshBuilder.buildSignMeshes(this);
+			meshes.push(...(signMeshes as THREE.Mesh[]));
+		} catch (e) {
+			console.warn("[SchematicObject] sign build failed", e);
+		}
 
 		// Apply properties to all objects
 		this.applyPropertiesToObjects(meshes);
@@ -933,6 +944,8 @@ export class SchematicObject extends EventEmitter {
 				chunkMeshes.forEach((mesh) => {
 					this.group.add(mesh);
 				});
+				// On-demand rendering: newly-added chunk geometry must trigger a draw.
+				this.schematicRenderer.invalidate();
 
 				totalMeshCount += chunkMeshes.length;
 			}
@@ -1263,6 +1276,8 @@ export class SchematicObject extends EventEmitter {
 							this.applyPropertiesToObjects(meshes);
 							meshes.forEach((mesh) => this.group.add(mesh));
 							totalMeshCount += meshes.length;
+							// On-demand rendering: trigger a draw for the new chunks.
+							this.schematicRenderer.invalidate();
 						}
 					}
 

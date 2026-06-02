@@ -1,4 +1,5 @@
 import { SchematicRenderer } from "../../../src/SchematicRenderer";
+import { SchematicRendererContext } from "../../../src/SchematicRendererContext";
 import { SchematicWrapper } from "nucleation";
 
 // --- DOM helpers ---------------------------------------------------------
@@ -31,14 +32,19 @@ interface Viewport {
 	ready: Promise<void>;
 }
 
+// One shared asset context for all six viewports: the resource pack is parsed and
+// the texture atlas is built ONCE, then shared (instead of once per renderer).
+let sharedContext: SchematicRendererContext;
+
 function makeViewport(canvasId: string): Viewport {
 	let resolveReady!: () => void;
 	const ready = new Promise<void>((res) => (resolveReady = res));
 	const renderer = new SchematicRenderer(
 		byId<HTMLCanvasElement>(canvasId),
 		{},
-		{ vanillaPack: () => getPack() },
+		{}, // packs are loaded once by the shared context, not per-renderer
 		{
+			context: sharedContext,
 			cameraOptions: { enableZoomInOnLoad: true },
 			gamma: 0.45,
 			singleSchematicMode: true,
@@ -53,12 +59,13 @@ function makeViewport(canvasId: string): Viewport {
 	return { renderer, ready };
 }
 
-const beforeVp = makeViewport("before-canvas");
-const afterVp = makeViewport("after-canvas");
-const addedVp = makeViewport("added-canvas");
-const removedVp = makeViewport("removed-canvas");
-const changedVp = makeViewport("changed-canvas");
-const swappedVp = makeViewport("swapped-canvas");
+// Assigned in init() once the shared context is ready.
+let beforeVp: Viewport;
+let afterVp: Viewport;
+let addedVp: Viewport;
+let removedVp: Viewport;
+let changedVp: Viewport;
+let swappedVp: Viewport;
 
 // Replace whatever a viewport is showing with `wrapper` (or clear it).
 async function showSchematic(vp: Viewport, wrapper: SchematicWrapper | null, name: string) {
@@ -143,8 +150,23 @@ function setupDropZone(panelId: string, side: "before" | "after") {
 	});
 }
 
-setupDropZone("before-panel", "before");
-setupDropZone("after-panel", "after");
+// Build the shared context (pack + atlas once), then create the six viewports and
+// wire up the drop zones.
+async function init() {
+	sharedContext = await SchematicRendererContext.create({ vanillaPack: () => getPack() }, {});
+
+	beforeVp = makeViewport("before-canvas");
+	afterVp = makeViewport("after-canvas");
+	addedVp = makeViewport("added-canvas");
+	removedVp = makeViewport("removed-canvas");
+	changedVp = makeViewport("changed-canvas");
+	swappedVp = makeViewport("swapped-canvas");
+
+	setupDropZone("before-panel", "before");
+	setupDropZone("after-panel", "after");
+}
+
+void init();
 
 // --- Diff ----------------------------------------------------------------
 async function renderDiffView(

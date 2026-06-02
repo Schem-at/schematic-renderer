@@ -9,6 +9,7 @@ import { SchematicRenderer } from "./SchematicRenderer";
 import { ResourcePackOptions } from "./types/resourcePack";
 import { SidebarOptions, DEFAULT_SIDEBAR_OPTIONS } from "./ui/sidebar/types";
 import type { SlicerOverlayOptions } from "./ui/SlicerOverlay";
+import type { SchematicRendererContext } from "./SchematicRendererContext";
 
 // Re-export sidebar types for consumers
 export type {
@@ -282,6 +283,13 @@ export interface SchematicRendererOptions {
 	enableAdaptiveFPS?: boolean; // Enable adaptive FPS based on camera movement (default: true)
 	logFPS?: boolean; // Log FPS to console for debugging (default: false)
 	idleThreshold?: number; // Milliseconds of inactivity before entering idle mode (default: 100)
+	// Upper bound on the device pixel ratio used to size framebuffers (default: 2).
+	// Caps GPU memory on high-DPR mobile screens (DPR 3–4) to prevent WebGL context
+	// loss / page crashes. Raise for crisper hi-DPI rendering at higher memory cost.
+	maxPixelRatio?: number;
+	// Shared resource pipeline for running multiple renderers on one page. When set,
+	// this renderer uses the context's Cubane/atlas and skips its own pack loading.
+	context?: SchematicRendererContext;
 	// Options for individual managers
 	interactionOptions?: InteractionManagerOptions;
 	dragAndDropOptions?: DragAndDropManagerOptions;
@@ -352,6 +360,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	enableAdaptiveFPS: true, // Enable adaptive FPS by default
 	idleThreshold: 100, // 100ms of inactivity before idle mode
 	logFPS: false,
+	maxPixelRatio: 2, // Cap framebuffer DPR (prevents mobile GPU OOM / context loss)
 	callbacks: {},
 	interactionOptions: {
 		enableSelection: false,

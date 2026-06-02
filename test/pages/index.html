@@ -1,234 +1,295 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Schematic Renderer - Test Suite</title>
-
-		<!-- DaisyUI -->
-		<link
-			href="https://cdn.jsdelivr.net/npm/daisyui@3.1.6/dist/full.css"
-			rel="stylesheet"
-			type="text/css"
-		/>
-
-		<!-- Tailwind CSS with DaisyUI -->
-		<script src="https://cdn.tailwindcss.com"></script>
-		<script>
-			tailwind.config = {
-				theme: {
-					extend: {
-						colors: {
-							primary: "#2563eb", // Tailwind's blue-600
-							secondary: "#1d4ed8", // Tailwind's blue-700
-						},
-					},
-				},
-				daisyui: {
-					themes: ["dark", "light"],
-				},
-			};
-		</script>
-
-		<!-- Include Material Icons -->
-		<link
-			href="https://fonts.googleapis.com/icon?family=Material+Icons"
-			rel="stylesheet"
-		/>
+		<title>Schematic Renderer — Test Suite</title>
+		<style>
+			:root {
+				--bg: #0c0c0f;
+				--bg-soft: #141419;
+				--card: #16161c;
+				--card-hover: #1c1c24;
+				--border: #26262f;
+				--border-hover: #3a3a48;
+				--text: #ececf1;
+				--text-dim: #9a9aa8;
+				--text-faint: #6a6a78;
+			}
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+					Inter, sans-serif;
+				background:
+					radial-gradient(
+						1200px 600px at 50% -10%,
+						#1b1b28 0%,
+						transparent 70%
+					),
+					var(--bg);
+				color: var(--text);
+				min-height: 100vh;
+				-webkit-font-smoothing: antialiased;
+				line-height: 1.5;
+			}
+			.wrap {
+				max-width: 1120px;
+				margin: 0 auto;
+				padding: 64px 24px 80px;
+			}
+			header {
+				text-align: center;
+				margin-bottom: 56px;
+			}
+			header .eyebrow {
+				font-size: 12px;
+				font-weight: 600;
+				letter-spacing: 0.14em;
+				text-transform: uppercase;
+				color: var(--text-faint);
+				margin-bottom: 14px;
+			}
+			header h1 {
+				font-size: clamp(28px, 5vw, 44px);
+				font-weight: 700;
+				letter-spacing: -0.02em;
+				background: linear-gradient(180deg, #fff 0%, #b9b9cc 100%);
+				-webkit-background-clip: text;
+				background-clip: text;
+				color: transparent;
+			}
+			header p {
+				margin-top: 12px;
+				color: var(--text-dim);
+				font-size: 16px;
+			}
+			.section-label {
+				font-size: 12px;
+				font-weight: 600;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				color: var(--text-faint);
+				margin: 40px 4px 16px;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+			.section-label::after {
+				content: "";
+				flex: 1;
+				height: 1px;
+				background: var(--border);
+			}
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+				gap: 16px;
+			}
+			.card {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				gap: 12px;
+				padding: 22px;
+				background: var(--card);
+				border: 1px solid var(--border);
+				border-radius: 14px;
+				text-decoration: none;
+				color: inherit;
+				transition: transform 0.16s ease, border-color 0.16s ease,
+					background 0.16s ease, box-shadow 0.16s ease;
+			}
+			.card:hover {
+				transform: translateY(-3px);
+				background: var(--card-hover);
+				border-color: var(--border-hover);
+				box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+			}
+			.icon {
+				width: 42px;
+				height: 42px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border-radius: 10px;
+				color: var(--accent, #6ea8fe);
+				background: color-mix(in srgb, var(--accent, #6ea8fe) 14%, transparent);
+				border: 1px solid
+					color-mix(in srgb, var(--accent, #6ea8fe) 30%, transparent);
+			}
+			.icon svg {
+				width: 22px;
+				height: 22px;
+			}
+			.card h2 {
+				font-size: 16px;
+				font-weight: 600;
+				letter-spacing: -0.01em;
+			}
+			.card p {
+				font-size: 13.5px;
+				color: var(--text-dim);
+				flex: 1;
+			}
+			.card .go {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				font-size: 13px;
+				font-weight: 600;
+				color: var(--accent, #6ea8fe);
+				opacity: 0;
+				transform: translateX(-4px);
+				transition: opacity 0.16s ease, transform 0.16s ease;
+			}
+			.card:hover .go {
+				opacity: 1;
+				transform: translateX(0);
+			}
+			.card .go svg {
+				width: 15px;
+				height: 15px;
+			}
+			footer {
+				text-align: center;
+				margin-top: 64px;
+				color: var(--text-faint);
+				font-size: 13px;
+			}
+		</style>
 	</head>
-	<body class="bg-gray-900 text-white min-h-screen">
-		<div class="container mx-auto px-4 py-8">
-			<!-- Header -->
-			<div class="text-center mb-12">
-				<h1 class="text-4xl font-bold mb-4">Schematic Renderer Test Suite</h1>
-				<p class="text-gray-300 text-lg">
-					Choose a test page to explore different features
-				</p>
+	<body>
+		<div class="wrap">
+			<header>
+				<div class="eyebrow">Development Environment</div>
+				<h1>Schematic Renderer Test Suite</h1>
+				<p>Pick a page to explore the renderer's features.</p>
+			</header>
+
+			<div class="section-label">Core</div>
+			<div class="grid">
+				<a class="card" href="playground.html" style="--accent: #6ea8fe">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+					</div>
+					<h2>Playground</h2>
+					<p>Interactive playground with all renderer features and controls.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
+
+				<a class="card" href="simulation.html" style="--accent: #34d399">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+					</div>
+					<h2>Redstone Simulation</h2>
+					<p>Interactive redstone simulation with real-time updates and debugging controls.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
+
+				<a class="card" href="media-capture.html" style="--accent: #22d3ee">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+					</div>
+					<h2>Media Capture</h2>
+					<p>Screenshots, video recording, backgrounds, timeline, and 3D export with full callback logging.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
 			</div>
 
-			<!-- Test Pages Grid -->
-			<div
-				class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto"
-			>
-				<!-- Playground -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-blue-400">
-							<span class="material-icons">build</span>
-							Playground
-						</h2>
-						<p class="text-gray-300">
-							Interactive playground with all renderer features and controls
-						</p>
-						<div class="card-actions justify-end">
-							<a href="playground.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
+			<div class="section-label">Performance</div>
+			<div class="grid">
+				<a class="card" href="performance.html" style="--accent: #fbbf24">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14 19 7"/><path d="M4.5 18.5a9 9 0 1 1 15 0"/><circle cx="12" cy="14" r="1.6"/></svg>
 					</div>
-				</div>
+					<h2>Performance Test</h2>
+					<p>Test renderer performance with large schematics and configurable parameters.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
 
-				<!-- Performance Test -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-yellow-400">
-							<span class="material-icons">speed</span>
-							Performance Test
-						</h2>
-						<p class="text-gray-300">
-							Test renderer performance with large schematics and configurable
-							parameters
-						</p>
-						<div class="card-actions justify-end">
-							<a href="performance.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
+				<a class="card" href="schematic-perf.html" style="--accent: #10b981">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
 					</div>
-				</div>
+					<h2>Schematic Perf</h2>
+					<p>Focused performance testing for large schematics with detailed metrics.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
 
-				<!-- Schematic Performance -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-emerald-400">
-							<span class="material-icons">rocket_launch</span>
-							Schematic Perf
-						</h2>
-						<p class="text-gray-300">
-							Focused performance testing for large schematics with detailed
-							metrics
-						</p>
-						<div class="card-actions justify-end">
-							<a href="schematic-perf.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
+				<a class="card" href="runtime-perf.html" style="--accent: #f87171">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
 					</div>
-				</div>
-
-				<!-- Runtime Performance -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-red-400">
-							<span class="material-icons">monitor_heart</span>
-							Runtime Perf
-						</h2>
-						<p class="text-gray-300">
-							Real-time monitoring of draw calls, FPS, and scene complexity during interaction
-						</p>
-						<div class="card-actions justify-end">
-							<a href="runtime-perf.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
-
-				<!-- Simulation Demo -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-green-400">
-							<span class="material-icons">settings_input_component</span>
-							Redstone Simulation
-						</h2>
-						<p class="text-gray-300">
-							Interactive redstone simulation with real-time updates and
-							debugging controls
-						</p>
-						<div class="card-actions justify-end">
-							<a href="simulation.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
-
-				<!-- Media Capture -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-cyan-400">
-							<span class="material-icons">photo_camera</span>
-							Media Capture
-						</h2>
-						<p class="text-gray-300">
-							Screenshots, video recording, backgrounds, timeline, and 3D
-							export with full callback logging
-						</p>
-						<div class="card-actions justify-end">
-							<a href="media-capture.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
-
-				<!-- Schematic Diff -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-orange-400">
-							<span class="material-icons">difference</span>
-							Schematic Diff
-						</h2>
-						<p class="text-gray-300">
-							Drag-and-drop a before/after schematic and inspect the
-							nucleation diff engine output (added/removed/changed)
-						</p>
-						<div class="card-actions justify-end">
-							<a href="diff.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
-
-				<!-- Insign Regions -->
-				<div
-					class="card bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow"
-				>
-					<div class="card-body">
-						<h2 class="card-title text-purple-400">
-							<span class="material-icons">map</span>
-							Insign Regions
-						</h2>
-						<p class="text-gray-300">
-							Visualize Insign region annotations and metadata from schematic
-							signs
-						</p>
-						<div class="card-actions justify-end">
-							<a href="insign.html" class="btn btn-primary">
-								<span class="material-icons">launch</span>
-								Open
-							</a>
-						</div>
-					</div>
-				</div>
+					<h2>Runtime Perf</h2>
+					<p>Real-time monitoring of draw calls, FPS, and scene complexity during interaction.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
 			</div>
 
-			<!-- Footer -->
-			<div class="text-center mt-12 text-gray-400">
-				<p>Schematic Renderer Test Suite - Development Environment</p>
+			<div class="section-label">Tools &amp; Experiments</div>
+			<div class="grid">
+				<a class="card" href="diff.html" style="--accent: #fb923c">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v9a3 3 0 0 0 3 3h6"/><path d="M18 15V6a3 3 0 0 0-3-3H9"/></svg>
+					</div>
+					<h2>Schematic Diff</h2>
+					<p>Drag-and-drop a before/after schematic and inspect the nucleation diff engine output (added/removed/changed).</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
+
+				<a class="card" href="shared-renderer.html" style="--accent: #f472b6">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+					</div>
+					<h2>Shared Renderer</h2>
+					<p>Many viewports rendered through ONE shared WebGL context (render-and-blit) via SchematicRendererContext.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
+
+				<a class="card" href="insign.html" style="--accent: #a78bfa">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+					</div>
+					<h2>Insign Regions</h2>
+					<p>Visualize Insign region annotations and metadata from schematic signs.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
+
+				<a class="card" href="insign-io.html" style="--accent: #818cf8">
+					<div class="icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+					</div>
+					<h2>Insign IO</h2>
+					<p>Visualize Insign input/output port flow and connections across the build.</p>
+					<span class="go">Open
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+					</span>
+				</a>
 			</div>
+
+			<footer>Schematic Renderer Test Suite · Development Environment</footer>
 		</div>
 	</body>
 </html>

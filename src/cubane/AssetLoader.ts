@@ -606,6 +606,11 @@ export class AssetLoader {
 		return this.tintManager.getTint(blockId, properties, biome, position);
 	}
 
+	/** True when any animated texture is registered (drives continuous rendering). */
+	public hasAnimatedTextures(): boolean {
+		return this.animatedTextureManager.hasActiveTextures();
+	}
+
 	private colormapsLoaded = false;
 
 	/**
@@ -626,6 +631,17 @@ export class AssetLoader {
 	}
 
 	private async loadColormapImageData(texturePath: string): Promise<ImageData | null> {
+		return this.getTexturePixels(texturePath);
+	}
+
+	/**
+	 * Decode a resource-pack texture to raw RGBA pixels (top-left origin).
+	 * Used by the sign renderer to read the sign-board and font textures so it can
+	 * composite glyphs into an upscaled copy. `texturePath` is relative to
+	 * `textures/` and without the `.png` extension (e.g. "entity/signs/oak",
+	 * "font/ascii").
+	 */
+	public async getTexturePixels(texturePath: string): Promise<ImageData | null> {
 		const blob = await this.getResourceBlob(`textures/${texturePath}.png`);
 		if (!blob) return null;
 		try {
@@ -636,7 +652,7 @@ export class AssetLoader {
 			ctx.drawImage(bitmap, 0, 0);
 			return ctx.getImageData(0, 0, bitmap.width, bitmap.height);
 		} catch (error) {
-			console.warn(`Failed to decode colormap ${texturePath}:`, error);
+			console.warn(`Failed to decode texture ${texturePath}:`, error);
 			return null;
 		}
 	}

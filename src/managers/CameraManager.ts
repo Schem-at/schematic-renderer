@@ -543,6 +543,10 @@ export class CameraManager extends EventEmitter {
 
 	private setupControlEvents(controls: any) {
 		controls.addEventListener("change", () => {
+			// On-demand rendering: any camera-control change makes the scene dirty
+			// (covers drag/zoom/pan and keeps the loop alive through damping).
+			this.schematicRenderer.invalidate();
+
 			this.emit("propertyChanged", {
 				property: "position",
 				value: (this.activeCamera.position as THREE.Vector3).clone(),

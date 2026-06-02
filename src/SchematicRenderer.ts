@@ -7,6 +7,7 @@ import { RenderManager } from "./managers/RenderManager";
 import { DragAndDropManager, DragAndDropManagerOptions } from "./managers/DragAndDropManager";
 import { InteractionManager, InteractionManagerOptions } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
+import { shouldRenderFrame } from "./utils/renderGate";
 import { SchematicManager, SchematicManagerOptions } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { MaterialRegistry } from "./MaterialRegistry";
@@ -48,7 +49,7 @@ import { RegionInteractionHandler } from "./managers/highlight/RegionInteraction
 
 export class SchematicRenderer {
 	public canvas: HTMLCanvasElement;
-	public clock: THREE.Clock;
+	public timer: THREE.Timer;
 	public options: SchematicRendererOptions;
 	public eventEmitter: EventEmitter;
 	public cameraManager: CameraManager;
@@ -95,14 +96,13 @@ export class SchematicRenderer {
 
 		this.options = merge({}, DEFAULT_OPTIONS, options);
 
-		// Initialize FPS settings from options
+		// targetFPS is an upper cap on rendered frames; on-demand rendering decides
+		// *whether* to render. enableAdaptiveFPS/idleFPS/idleThreshold are legacy
+		// no-ops (kept in the options type for backward compatibility).
 		this.targetFPS = this.options.targetFPS ?? 60;
-		this.idleFPS = this.options.idleFPS ?? 1;
-		this.enableAdaptiveFPS = this.options.enableAdaptiveFPS ?? true;
-		this.idleThreshold = this.options.idleThreshold ?? 100;
 		this.frameInterval = this.targetFPS > 0 ? 1000 / this.targetFPS : 0;
 
-		this.clock = new THREE.Clock();
+		this.timer = new THREE.Timer();
 		this.materialMap = new Map();
 		this.eventEmitter = new EventEmitter();
 
@@ -157,9 +157,16 @@ export class SchematicRenderer {
 			this.uiManager.updateProgress(0.1);
 		}
 
-		this.cubane = new Cubane({
-			showUnknownBlocks: this.options.debugOptions?.showUnknownBlocks,
-		});
+		// Use a shared context's asset pipeline when provided; otherwise create a
+		// private one (default single-instance behavior — unchanged).
+		if (this.options.context) {
+			this.cubane = this.options.context.cubane;
+			this.options.context.attachRenderer(this);
+		} else {
+			this.cubane = new Cubane({
+				showUnknownBlocks: this.options.debugOptions?.showUnknownBlocks,
+			});
+		}
 
 		// In-viewport notice shown when no resource pack is loaded. The renderer
 		// toggles it via updateMissingPackNotice() once pack loading settles.
@@ -272,9 +279,12 @@ export class SchematicRenderer {
 				SchematicRenderer.isNucleationInitialized = true;
 			}
 
-			// Step 2: Initialize resource packs
+			// Step 2: Initialize resource packs. With a shared context the packs are
+			// already loaded into the shared Cubane, so skip per-renderer loading.
 			showProgress("Initializing resource packs...", 0.3);
-			await this.initializeResourcePacks(defaultResourcePacks);
+			if (!this.options.context) {
+				await this.initializeResourcePacks(defaultResourcePacks);
+			}
 			this.updateMissingPackNotice();
 
 			// Step 4: Initialize builders and managers
@@ -684,9 +694,6 @@ export class SchematicRenderer {
 
 	private lastFrameTime = 0;
 	private targetFPS: number;
-	private idleFPS: number;
-	private enableAdaptiveFPS: boolean;
-	private idleThreshold: number;
 	private frameInterval: number;
 	private animationFrameId: number | null = null;
 	private isDisposed = false;
@@ -697,11 +704,14 @@ export class SchematicRenderer {
 	// Adaptive FPS tracking
 	private lastCameraPosition = new THREE.Vector3();
 	private lastCameraQuaternion = new THREE.Quaternion();
-	private lastInteractionTime = 0;
-	private isIdle = false;
 	private idleTimeoutId: number | null = null;
 	private pointerEventBound = false;
 	private wakeUpHandler: (() => void) | null = null;
+
+	// On-demand rendering: only render when the scene is dirty or something is
+	// continuously animating. `needsRender` starts true so the first frame draws.
+	private needsRender = true;
+	private continuousReasons = new Set<string>();
 
 	/**
 	 * Bind pointer events to canvas for immediate wake-up from idle mode
@@ -709,31 +719,12 @@ export class SchematicRenderer {
 	private bindPointerEvents(): void {
 		if (this.pointerEventBound) return;
 
-		this.wakeUpHandler = () => {
-			// Always update interaction time to prevent/exit idle mode
-			this.lastInteractionTime = performance.now();
+		// Wake the (possibly stopped) render loop on real interaction. We do NOT bind
+		// plain pointermove: hovering the canvas shouldn't force renders — OrbitControls
+		// emits its own "change" event (wired in CameraManager) for actual camera moves.
+		this.wakeUpHandler = () => this.invalidate();
 
-			if (this.isIdle) {
-				this.isIdle = false;
-
-				// Cancel the pending setTimeout if we're in idle mode
-				if (this.idleTimeoutId !== null) {
-					clearTimeout(this.idleTimeoutId);
-					this.idleTimeoutId = null;
-				}
-
-				// Immediately schedule next frame with requestAnimationFrame
-				if (this.animationFrameId !== null) {
-					clearTimeout(this.animationFrameId);
-					this.animationFrameId = null;
-				}
-				this.animationFrameId = requestAnimationFrame(() => this.animate());
-			}
-		};
-
-		// Listen to pointer events that indicate user interaction
 		this.canvas.addEventListener("pointerdown", this.wakeUpHandler);
-		this.canvas.addEventListener("pointermove", this.wakeUpHandler);
 		this.canvas.addEventListener("wheel", this.wakeUpHandler);
 		this.canvas.addEventListener("touchstart", this.wakeUpHandler);
 		this.canvas.addEventListener("touchmove", this.wakeUpHandler);
@@ -748,13 +739,43 @@ export class SchematicRenderer {
 		if (!this.pointerEventBound || !this.wakeUpHandler) return;
 
 		this.canvas.removeEventListener("pointerdown", this.wakeUpHandler);
-		this.canvas.removeEventListener("pointermove", this.wakeUpHandler);
 		this.canvas.removeEventListener("wheel", this.wakeUpHandler);
 		this.canvas.removeEventListener("touchstart", this.wakeUpHandler);
 		this.canvas.removeEventListener("touchmove", this.wakeUpHandler);
 
 		this.wakeUpHandler = null;
 		this.pointerEventBound = false;
+	}
+
+	/**
+	 * Mark the scene dirty so the next scheduled frame renders. If the render loop
+	 * has stopped (fully idle), this restarts it. Call after any change that should
+	 * be visible: camera/controls moves, schematic load/rebuild, resize, hover, etc.
+	 */
+	public invalidate(): void {
+		this.needsRender = true;
+		if (this.isDisposed) return;
+		if (this.animationFrameId === null && this.idleTimeoutId === null) {
+			this.animationFrameId = requestAnimationFrame(() => this.animate());
+		}
+	}
+
+	/**
+	 * Keep rendering continuously while `reason` is active. Used for things that
+	 * animate every frame (animated textures, auto-orbit, camera-path tweens, video
+	 * recording, redstone simulation). Call with `active=false` to release.
+	 */
+	public setContinuous(reason: string, active: boolean): void {
+		if (active) {
+			this.continuousReasons.add(reason);
+			this.invalidate();
+		} else {
+			this.continuousReasons.delete(reason);
+		}
+	}
+
+	private get continuous(): boolean {
+		return this.continuousReasons.size > 0;
 	}
 
 	private animate(): void {
@@ -769,36 +790,28 @@ export class SchematicRenderer {
 		// Initialize lastDebugTime on first frame
 		if (this.lastDebugTime === 0) {
 			this.lastDebugTime = now;
-			this.lastInteractionTime = now;
 		}
 
-		// Adaptive FPS logic (only if enabled)
-		let currentTargetFPS = this.targetFPS;
-		if (this.enableAdaptiveFPS) {
-			// Detect camera movement for adaptive FPS
-			const camera = this.cameraManager.activeCamera.camera;
-			const cameraMoved =
-				!camera.position.equals(this.lastCameraPosition) ||
-				!camera.quaternion.equals(this.lastCameraQuaternion);
-
-			if (cameraMoved) {
-				this.lastInteractionTime = now;
-				this.lastCameraPosition.copy(camera.position);
-				this.lastCameraQuaternion.copy(camera.quaternion);
-			}
-
-			// Determine if scene is idle
-			const timeSinceInteraction = now - this.lastInteractionTime;
-			this.isIdle = timeSinceInteraction > this.idleThreshold;
-
-			// Adapt frame interval based on idle state
-			currentTargetFPS = this.isIdle ? this.idleFPS : this.targetFPS;
+		// Detect camera movement → mark dirty. Runs every tick (independent of the
+		// legacy adaptive-FPS flag); also catches OrbitControls inertial damping,
+		// since the camera keeps moving for a few frames after release.
+		const camera = this.cameraManager.activeCamera.camera;
+		const cameraMoved =
+			!camera.position.equals(this.lastCameraPosition) ||
+			!camera.quaternion.equals(this.lastCameraQuaternion);
+		if (cameraMoved) {
+			this.lastCameraPosition.copy(camera.position);
+			this.lastCameraQuaternion.copy(camera.quaternion);
+			this.needsRender = true;
 		}
 
-		// Update frame interval (0 = uncapped)
-		this.frameInterval = currentTargetFPS > 0 ? 1000 / currentTargetFPS : 0;
+		// targetFPS stays an upper cap (0 = uncapped). The idle-FPS path is retired
+		// by on-demand rendering; enableAdaptiveFPS/idleThreshold are now no-ops.
+		this.frameInterval = this.targetFPS > 0 ? 1000 / this.targetFPS : 0;
 
-		const deltaTime = this.clock.getDelta();
+		// THREE.Timer requires an explicit update() per frame before reading the delta.
+		this.timer.update();
+		const deltaTime = this.timer.getDelta();
 
 		// ALWAYS update controls for smooth interaction (critical for responsiveness)
 		// This runs at full refresh rate for immediate feedback
@@ -811,21 +824,29 @@ export class SchematicRenderer {
 			this.keyboardControls.update(deltaTime);
 		}
 
-		// Check if we should render this frame based on target FPS
-		const elapsed = now - this.lastFrameTime;
-		const shouldRender = this.frameInterval === 0 || elapsed >= this.frameInterval;
+		// Animated textures (water/kelp/lava/…) need continuous rendering to advance
+		// their frames; everything else can idle. Cheap to poll each tick.
+		if (this.cubane?.hasAnimatedTextures()) this.continuousReasons.add("animatedTextures");
+		else this.continuousReasons.delete("animatedTextures");
 
-		// Schedule next frame based on mode
-		if (this.isIdle && this.frameInterval > 0) {
-			// In idle mode, use setTimeout for power saving
-			this.idleTimeoutId = setTimeout(() => this.animate(), this.frameInterval) as any;
-		} else {
-			// In active mode, use rAF for smooth controls
-			this.animationFrameId = requestAnimationFrame(() => this.animate());
-		}
+		// Decide whether to render: the FPS cap must allow it AND the scene must be
+		// dirty or continuously animating.
+		const elapsed = now - this.lastFrameTime;
+		const fpsAllows = this.frameInterval === 0 || elapsed >= this.frameInterval;
+		const wantsRender = shouldRenderFrame({
+			needsRender: this.needsRender,
+			continuous: this.continuous,
+		});
+		const shouldRender = fpsAllows && wantsRender;
+
+		// Always keep the (cheap) loop alive so camera moves are detected and the
+		// dirty flag is polled every frame — only the expensive render() below is
+		// gated. The GPU goes idle when the scene is static (the heat fix) without
+		// the frozen-scene risk of fully stopping the loop.
+		this.animationFrameId = requestAnimationFrame(() => this.animate());
 
 		if (!shouldRender) {
-			// Skip rendering this frame
+			// FPS-capped this tick; nothing to render.
 			this.throttledFrames++;
 			return;
 		}
@@ -840,15 +861,11 @@ export class SchematicRenderer {
 		if (now - this.lastDebugTime > 2000) {
 			const renderedFPS = this.frameCount / ((now - this.lastDebugTime) / 1000);
 			this.fps = renderedFPS;
-			const mode = this.enableAdaptiveFPS ? (this.isIdle ? "idle" : "active") : "fixed";
-			const fpsTarget = currentTargetFPS === 0 ? "uncapped" : `${currentTargetFPS}`;
-			const controlsMode = this.cameraManager.isFlyControlsEnabled()
-				? "fly"
-				: this.cameraManager.activeControlKey || "none";
 
 			if (this.options.logFPS) {
+				const reasons = [...this.continuousReasons].join(",") || "none";
 				console.log(
-					`[Renderer] FPS: ${renderedFPS.toFixed(1)} rendered (${this.throttledFrames} throttled) | Mode: ${mode} (target: ${fpsTarget}) | Controls: ${controlsMode}`
+					`[Renderer] FPS: ${renderedFPS.toFixed(1)} rendered (${this.throttledFrames} throttled) | continuous: ${reasons}`
 				);
 			}
 
@@ -864,6 +881,8 @@ export class SchematicRenderer {
 		this.highlightManager.update(deltaTime);
 		this.gizmoManager?.update();
 		this.renderManager.render();
+		// Rendered the current scene state — clear the dirty flag.
+		this.needsRender = false;
 
 		this.interactionManager?.update();
 		this.cubane.updateAnimations();
@@ -1670,8 +1689,13 @@ export class SchematicRenderer {
 		// Clean up resource pack manager
 		this.resourcePackManager.dispose();
 
-		// Clean up Cubane resources
-		this.cubane.dispose();
+		// Clean up Cubane resources. When using a shared context, the Cubane is owned
+		// by the context (and shared with other renderers) — just detach, don't dispose.
+		if (this.options.context) {
+			this.options.context.detachRenderer(this);
+		} else {
+			this.cubane.dispose();
+		}
 
 		// Cleanup event listeners
 		this.eventEmitter.removeAllListeners();

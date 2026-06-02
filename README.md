@@ -74,44 +74,51 @@ new SchematicRenderer(
 ```html
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schematic Renderer</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #canvas { width: 100vw; height: 100vh; display: block; }
-    </style>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.181.2/build/three.module.js"
-        }
-    }
-    </script>
-</head>
-<body>
-    <canvas id="canvas"></canvas>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Schematic Renderer</title>
+		<style>
+			body {
+				margin: 0;
+				overflow: hidden;
+			}
+			#canvas {
+				width: 100vw;
+				height: 100vh;
+				display: block;
+			}
+		</style>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://unpkg.com/three@0.181.2/build/three.module.js"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<canvas id="canvas"></canvas>
 
-    <script type="module">
-        import { SchematicRenderer } from "https://unpkg.com/schematic-renderer@1.1.23/dist/schematic-renderer.es.js";
+		<script type="module">
+			import { SchematicRenderer } from "https://unpkg.com/schematic-renderer@1.1.23/dist/schematic-renderer.es.js";
 
-        const canvas = document.getElementById("canvas");
+			const canvas = document.getElementById("canvas");
 
-        const renderer = new SchematicRenderer(
-            canvas,
-            {},
-            {},
-            {
-                enableDragAndDrop: true,
-                showGrid: true,
-                cameraOptions: {
-                    position: [20, 20, 20],
-                },
-            }
-        );
-    </script>
-</body>
+			const renderer = new SchematicRenderer(
+				canvas,
+				{},
+				{},
+				{
+					enableDragAndDrop: true,
+					showGrid: true,
+					cameraOptions: {
+						position: [20, 20, 20],
+					},
+				}
+			);
+		</script>
+	</body>
 </html>
 ```
 
@@ -587,6 +594,62 @@ const renderer = new SchematicRenderer.SchematicRenderer(
 	}
 );
 ```
+
+## Shared Renderer (Multiple Instances)
+
+When you need **many renderers on one page** (grids, galleries, comparison views,
+side-by-side diffs), give them a shared `SchematicRendererContext`. The context loads
+the resource pack / texture atlas **once**, shares a single Web Worker pool for mesh
+building, and — optionally — drives every viewport from **one WebGL context** via
+render-and-blit. This removes the per-instance asset duplication and the browser's
+hard limit on live WebGL contexts (typically ~8–16).
+
+### Creating a context
+
+```javascript
+import { SchematicRenderer, SchematicRendererContext } from "schematic-renderer";
+
+// Load the resource pack ONCE, shared by every renderer.
+const context = await SchematicRendererContext.create(
+	{
+		// Same default-pack callback shape as the SchematicRenderer constructor.
+		vanillaPack: () => fetch("/pack.zip").then((r) => r.blob()),
+	},
+	{
+		sharedRenderer: true, // one WebGL context for all views (render-and-blit)
+		// showUnknownBlocks: false,
+		// resourcePackOptions: { ... },
+	}
+);
+```
+
+### Using it across renderers
+
+Pass the `context` in each renderer's options. Renderers that share a context reuse its
+Cubane/atlas and worker pool, and skip their own pack loading entirely:
+
+```javascript
+for (const canvas of canvases) {
+	const renderer = new SchematicRenderer(
+		canvas,
+		{},
+		{}, // no per-instance packs — the context provides them
+		{ context }
+	);
+	await renderer.schematicManager.loadSchematic("build", arrayBuffer);
+}
+```
+
+- `sharedRenderer: true` renders each view through the context's single offscreen
+  WebGL renderer and blits the result onto the view's 2D canvas. Leave it `false` (the
+  default) to share only assets + workers while each view keeps its own WebGL context.
+- `context.invalidateAll()` requests a redraw on every attached renderer.
+- `context.dispose()` terminates the shared worker pool and WebGL renderer; call it when
+  tearing down the page. Disposing an individual renderer detaches it from the context
+  without disposing the shared resources.
+
+A complete working example (a grid of viewports through one WebGL context) lives in
+`test/pages/shared-renderer.html`.
 
 ## Development
 
