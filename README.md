@@ -600,7 +600,7 @@ const renderer = new SchematicRenderer.SchematicRenderer(
 When you need **many renderers on one page** (grids, galleries, comparison views,
 side-by-side diffs), give them a shared `SchematicRendererContext`. The context loads
 the resource pack / texture atlas **once**, shares a single Web Worker pool for mesh
-building, and — optionally — drives every viewport from **one WebGL context** via
+building, and optionally drives every viewport from **one WebGL context** via
 render-and-blit. This removes the per-instance asset duplication and the browser's
 hard limit on live WebGL contexts (typically ~8–16).
 
@@ -633,7 +633,7 @@ for (const canvas of canvases) {
 	const renderer = new SchematicRenderer(
 		canvas,
 		{},
-		{}, // no per-instance packs — the context provides them
+		{}, // no per-instance packs, the context provides them
 		{ context }
 	);
 	await renderer.schematicManager.loadSchematic("build", arrayBuffer);
@@ -650,6 +650,140 @@ for (const canvas of canvases) {
 
 A complete working example (a grid of viewports through one WebGL context) lives in
 `test/pages/shared-renderer.html`.
+
+### Persisting across page navigation (SPA / PWA)
+
+On a full page reload the browser tears down everything (WASM, workers, GL context), so
+the renderer re-bootstraps from scratch. SPA navigation libraries
+[Livewire `wire:navigate`](https://livewire.laravel.com/docs/4.x/navigate), Turbo,
+htmx-boost, instead swap the page **without** discarding the JS VM, so the heavy
+pipeline can survive the navigation. Two framework-agnostic primitives make this work:
+
+**1. A persistent context registry.** `SchematicRendererContext.acquire(key, factory)`
+builds the context once and caches it on a global registry that outlives navigation;
+later views reuse it instantly, no atlas rebuild, no WASM re-instantiation, no worker
+respawn:
+
+```javascript
+// Runs on every page that shows a schematic. First call builds it; the rest are instant.
+const context = await SchematicRendererContext.acquire("viewer", () =>
+	SchematicRendererContext.create(
+		{ vanillaPack: () => fetch("/pack.zip").then((r) => r.blob()) },
+		{ sharedRenderer: true }
+	)
+);
+
+const renderer = new SchematicRenderer(canvas, {}, {}, { context });
+await renderer.schematicManager.loadSchematic("build", arrayBuffer);
+```
+
+`SchematicRendererContext.release("viewer")` drops a reference but **keeps the context
+warm** by default (that's the point, it survives navigation). Pass
+`release("viewer", { dispose: true })` to tear it down when the user truly leaves.
+
+**2. Suspend / resume.** `renderer.suspend()` pauses the render loop without freeing
+anything; `renderer.resume()` restarts it. Use these when a viewport scrolls off-screen,
+or when a canvas is kept alive across navigation via Livewire `@persist` / Turbo
+`data-turbo-permanent`.
+
+#### Livewire example
+
+Keep the canvas in a `@persist` block so it survives `wire:navigate`, and pause/resume
+around navigation:
+
+```blade
+@persist('schematic-viewer')
+  <canvas id="viewer" wire:ignore></canvas>
+@endpersist
+```
+
+```javascript
+let renderer;
+
+document.addEventListener("livewire:navigated", async () => {
+	const canvas = document.getElementById("viewer");
+	if (!canvas) return;
+
+	if (renderer) {
+		renderer.resume(); // same persisted canvas just un-pause
+	} else {
+		const context = await SchematicRendererContext.acquire("viewer", () =>
+			SchematicRendererContext.create(packs, { sharedRenderer: true })
+		);
+		renderer = new SchematicRenderer(canvas, {}, {}, { context });
+	}
+	await renderer.schematicManager.loadSchematic("build", await fetchSchematic());
+});
+
+// Pause while navigating away; the context + GPU stay in memory.
+document.addEventListener("livewire:navigating", () => renderer?.suspend());
+```
+
+The same shape works for Turbo (`turbo:load` / `turbo:before-render`) or any SPA router
+only the event names change.
+
+## Schematic Diff
+
+The diff engine (powered by Nucleation) compares two schematics and classifies every
+change into four buckets **added**, **removed**, **changed** (same position, different
+block), and **swapped** (block pairs that exchanged places). Each bucket comes back as a
+`SchematicWrapper`, so you can count it, inspect it, or load it straight into a renderer
+to visualize the change.
+
+```javascript
+import { SchematicWrapper } from "nucleation";
+
+const before = new SchematicWrapper();
+before.from_data(new Uint8Array(beforeArrayBuffer));
+
+const after = new SchematicWrapper();
+after.from_data(new Uint8Array(afterArrayBuffer));
+
+// diff(other, preset, options) → DiffWrapper
+const diff = before.diff(after, "structural", {});
+
+// Metrics
+console.log(diff.distance); // total weighted edit distance (0 = identical)
+console.log(diff.support); // 0..1, fraction of cells explained by the alignment
+
+// Each bucket is a SchematicWrapper of just those blocks
+const added = diff.added();
+const removed = diff.removed();
+const changed = diff.changed();
+const swapped = diff.swapped();
+console.log(added.get_block_count(), removed.get_block_count());
+```
+
+### Presets
+
+The `preset` controls how strictly blocks are compared (e.g. whether orientation /
+state / redstone wiring counts as a change):
+
+- `exact` - every block-state property must match.
+- `shape` - compares occupancy/geometry, ignoring most state.
+- `structural` - structural equivalence (a good general-purpose default).
+- `redstone` - redstone-aware comparison.
+- `redstone_survival` - redstone comparison tuned for survival-obtainable builds.
+
+### Fingerprints
+
+`wrapper.fingerprint(preset)` returns a stable string hash of a schematic under a given
+preset, handy for deduplication or quick equality checks without a full diff:
+
+```javascript
+if (a.fingerprint("structural") === b.fingerprint("structural")) {
+	// structurally identical
+}
+```
+
+### Visualizing a diff
+
+Because each bucket is a `SchematicWrapper`, you can render it like any schematic load
+`added`/`removed`/`changed`/`swapped` into separate renderers (ideally sharing one
+[`SchematicRendererContext`](#shared-renderer-multiple-instances)) to show the change
+side by side. A complete interactive example (drag-and-drop a before/after pair, with the
+four buckets rendered and the distance/support stats shown) lives in
+`test/pages/diff.html`.
 
 ## Development
 

@@ -32,8 +32,10 @@ interface Viewport {
 	ready: Promise<void>;
 }
 
-// One shared asset context for all six viewports: the resource pack is parsed and
-// the texture atlas is built ONCE, then shared (instead of once per renderer).
+// One shared context for all six viewports. With `sharedRenderer: true` they also
+// render through a SINGLE WebGL context (render-and-blit): the pack/atlas is parsed
+// and uploaded to the GPU once, and the worker pool is shared — instead of six WebGL
+// contexts each re-uploading the 2048² atlas.
 let sharedContext: SchematicRendererContext;
 
 function makeViewport(canvasId: string): Viewport {
@@ -153,7 +155,10 @@ function setupDropZone(panelId: string, side: "before" | "after") {
 // Build the shared context (pack + atlas once), then create the six viewports and
 // wire up the drop zones.
 async function init() {
-	sharedContext = await SchematicRendererContext.create({ vanillaPack: () => getPack() }, {});
+	sharedContext = await SchematicRendererContext.create(
+		{ vanillaPack: () => getPack() },
+		{ sharedRenderer: true }
+	);
 
 	beforeVp = makeViewport("before-canvas");
 	afterVp = makeViewport("after-canvas");

@@ -170,6 +170,83 @@ export class SchematicRendererContext {
 		this.renderers.forEach((r) => r.invalidate());
 	}
 
+	// ── Persistent registry (survives SPA navigation) ───────────────────────────
+
+	/**
+	 * Global registry of live contexts keyed by id. Stored on `globalThis` so it
+	 * survives SPA navigations (Livewire `wire:navigate`, Turbo, htmx boost) that keep
+	 * the JS VM alive — the heavy pipeline (atlas, WASM, worker pool, GL context) is
+	 * reused across page views instead of rebuilt on every navigation.
+	 */
+	private static get registry(): Map<
+		string,
+		{ promise: Promise<SchematicRendererContext>; ctx?: SchematicRendererContext; refs: number }
+	> {
+		const g = globalThis as unknown as { __schematicRendererContexts?: Map<string, any> };
+		if (!g.__schematicRendererContexts) g.__schematicRendererContexts = new Map();
+		return g.__schematicRendererContexts as Map<string, any>;
+	}
+
+	/**
+	 * Get a shared context by `key`, creating it once via `factory` and caching it on
+	 * the global registry. Subsequent calls with the same key — including after an SPA
+	 * navigation — return the existing context without rebuilding anything. Increments
+	 * a reference count; pair each `acquire` with a {@link release}.
+	 *
+	 * ```ts
+	 * const ctx = await SchematicRendererContext.acquire("viewer", () =>
+	 *   SchematicRendererContext.create(packs, { sharedRenderer: true })
+	 * );
+	 * ```
+	 */
+	public static async acquire(
+		key: string,
+		factory: () => Promise<SchematicRendererContext>
+	): Promise<SchematicRendererContext> {
+		const reg = this.registry;
+		let entry = reg.get(key);
+		if (!entry) {
+			const created = { promise: factory(), refs: 0 } as {
+				promise: Promise<SchematicRendererContext>;
+				ctx?: SchematicRendererContext;
+				refs: number;
+			};
+			reg.set(key, created);
+			created.promise
+				.then((ctx) => {
+					created.ctx = ctx;
+				})
+				.catch(() => {
+					reg.delete(key); // failed build — let the next acquire retry
+				});
+			entry = created;
+		}
+		entry.refs++;
+		return entry.promise;
+	}
+
+	/** The live context for `key`, if one has finished building. */
+	public static peek(key: string): SchematicRendererContext | undefined {
+		return this.registry.get(key)?.ctx;
+	}
+
+	/**
+	 * Drop one reference taken via {@link acquire}. By default the context is kept warm
+	 * even at zero references — the whole point is to survive navigation — so the next
+	 * view reuses it instantly. Pass `{ dispose: true }` to tear it down and free its
+	 * resources once the last reference is released (e.g. when the user leaves the app).
+	 */
+	public static release(key: string, options: { dispose?: boolean } = {}): void {
+		const reg = this.registry;
+		const entry = reg.get(key);
+		if (!entry) return;
+		entry.refs = Math.max(0, entry.refs - 1);
+		if (entry.refs === 0 && options.dispose) {
+			entry.ctx?.dispose();
+			reg.delete(key);
+		}
+	}
+
 	/** Dispose the shared pipeline. Call once all renderers have detached. */
 	public dispose(): void {
 		this.renderers.clear();

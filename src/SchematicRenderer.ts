@@ -271,20 +271,20 @@ export class SchematicRenderer {
 				}
 			};
 
-			// Step 1: Initialize WebAssembly module
-			showProgress("Loading WebAssembly module...", 0.15);
-			// Wasm is already initialized at module level
-			if (!SchematicRenderer.isNucleationInitialized) {
-				await initializeNucleationWasm();
-				SchematicRenderer.isNucleationInitialized = true;
-			}
-
-			// Step 2: Initialize resource packs. With a shared context the packs are
-			// already loaded into the shared Cubane, so skip per-renderer loading.
-			showProgress("Initializing resource packs...", 0.3);
-			if (!this.options.context) {
-				await this.initializeResourcePacks(defaultResourcePacks);
-			}
+			// Steps 1 & 2: WASM init and resource-pack/atlas loading are independent, so
+			// run them concurrently — the (often slow) pack decode/atlas build overlaps
+			// WASM instantiation instead of being serialized behind it. With a shared
+			// context the packs are already in the shared Cubane, so that half is a no-op.
+			showProgress("Loading assets...", 0.15);
+			const wasmReady = SchematicRenderer.isNucleationInitialized
+				? Promise.resolve()
+				: initializeNucleationWasm().then(() => {
+						SchematicRenderer.isNucleationInitialized = true;
+					});
+			const packsReady = this.options.context
+				? Promise.resolve()
+				: this.initializeResourcePacks(defaultResourcePacks);
+			await Promise.all([wasmReady, packsReady]);
 			this.updateMissingPackNotice();
 
 			// Step 4: Initialize builders and managers
@@ -350,12 +350,13 @@ export class SchematicRenderer {
 			this.options.callbacks?.onRendererInitialized?.(this);
 			this.canvas.dispatchEvent(new CustomEvent("rendererInitialized"));
 
-			// Hide progress bar after a short delay to show completion state
-			setTimeout(() => {
-				if (this.options.enableProgressBar && this.uiManager) {
-					this.uiManager.hideProgressBar();
-				}
-			}, 500);
+			// Hide the progress bar as soon as the renderer is ready — no artificial
+			// delay. The old 500ms "show completion state" pause kept the dimming overlay
+			// over an already-rendered scene, which read as slower than it was (and
+			// dominated the perceived time on the fast warm-context / SPA path).
+			if (this.options.enableProgressBar && this.uiManager) {
+				this.uiManager.hideProgressBar();
+			}
 		} catch (error) {
 			console.error("Failed to initialize SchematicRenderer:", error);
 
@@ -697,6 +698,7 @@ export class SchematicRenderer {
 	private frameInterval: number;
 	private animationFrameId: number | null = null;
 	private isDisposed = false;
+	private isSuspended = false;
 	private frameCount = 0;
 	private lastDebugTime = 0;
 	private throttledFrames = 0;
@@ -754,10 +756,40 @@ export class SchematicRenderer {
 	 */
 	public invalidate(): void {
 		this.needsRender = true;
-		if (this.isDisposed) return;
+		// A suspended renderer keeps the dirty flag (so it redraws on resume) but does
+		// not restart the loop.
+		if (this.isDisposed || this.isSuspended) return;
 		if (this.animationFrameId === null && this.idleTimeoutId === null) {
 			this.animationFrameId = requestAnimationFrame(() => this.animate());
 		}
+	}
+
+	/**
+	 * Pause the render loop without tearing anything down — the scene, GPU resources,
+	 * workers, and assets all stay in memory. Use this when the viewport scrolls
+	 * off-screen or during SPA navigation (e.g. `wire:navigate`) when the canvas is
+	 * kept alive (Livewire `@persist`, Turbo permanent). Cheap and instantly
+	 * reversible with `resume()`. To free resources entirely, use `dispose()`.
+	 */
+	public suspend(): void {
+		if (this.isSuspended) return;
+		this.isSuspended = true;
+		if (this.animationFrameId !== null) {
+			cancelAnimationFrame(this.animationFrameId);
+			this.animationFrameId = null;
+		}
+	}
+
+	/** Resume a suspended render loop and request a redraw. */
+	public resume(): void {
+		if (!this.isSuspended) return;
+		this.isSuspended = false;
+		this.invalidate();
+	}
+
+	/** Whether the render loop is currently paused (see `suspend`). */
+	public get suspended(): boolean {
+		return this.isSuspended;
 	}
 
 	/**
@@ -782,6 +814,13 @@ export class SchematicRenderer {
 		// Stop animation loop if disposed
 		if (this.isDisposed) {
 			console.log("[Renderer] Animation loop stopped - disposed");
+			return;
+		}
+
+		// Paused (off-screen / SPA navigation): stop the loop without rescheduling.
+		// resume() restarts it.
+		if (this.isSuspended) {
+			this.animationFrameId = null;
 			return;
 		}
 
