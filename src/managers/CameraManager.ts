@@ -2101,6 +2101,35 @@ export class CameraManager extends EventEmitter {
 		}
 	}
 
+	/**
+	 * Snap the (perspective) camera to view the scene from an arbitrary world-space
+	 * direction — the vector points FROM the scene centre TO the camera. Lets callers
+	 * define their own face / top-down-diagonal angle sets without registering presets.
+	 */
+	public snapToDirection(direction: [number, number, number], refocus: boolean = true): void {
+		const target = this.getControlsTarget();
+		const cam = this.activeCamera.camera;
+		const dist = cam.position.distanceTo(target);
+
+		const dir = new THREE.Vector3(direction[0], direction[1], direction[2]);
+		if (dir.lengthSq() < 1e-6) return;
+		dir.normalize();
+
+		const pos = target.clone().add(dir.multiplyScalar(dist));
+		cam.position.copy(pos);
+		cam.lookAt(target);
+
+		const controls = this.controls.get(this.activeControlKey);
+		if (controls && "target" in controls) {
+			controls.target.copy(target);
+			controls.update?.();
+		}
+
+		if (refocus) {
+			this.focusOnSchematics({ padding: 0.05, animationDuration: 0 });
+		}
+	}
+
 	/** Get the current orbit controls target */
 	private getControlsTarget(): THREE.Vector3 {
 		const controls = this.controls.get(this.activeControlKey);
