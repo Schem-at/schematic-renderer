@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeBufferGeometries } from "./mergeBufferGeometries";
 import { AssetLoader } from "./AssetLoader";
 import { Block, BlockModel, BlockModelElement, OptimizedFace } from "./types";
 
@@ -1181,100 +1182,10 @@ export class BlockMeshBuilder {
 	}
 
 	private mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
-		const validGeometries = geometries.filter(
-			(geo) =>
-				geo.attributes.position &&
-				geo.attributes.position.count > 0 &&
-				geo.index &&
-				geo.index.count > 0
-		);
-
-		if (validGeometries.length === 0) {
-			return new THREE.BufferGeometry();
-		}
-		if (validGeometries.length === 1) {
-			return validGeometries[0].clone();
-		}
-
-		return this.manualMergeGeometries(validGeometries);
-	}
-
-	private manualMergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
-		const merged = new THREE.BufferGeometry();
-		const attributesToMerge = ["position", "normal", "uv"];
-		const mergedAttributes: {
-			[name: string]: { array: number[]; itemSize: number };
-		} = {};
-
-		let totalVertices = 0;
-		let totalIndices = 0;
-		let hasNormals = true;
-		let hasUVs = true;
-
-		for (const geometry of geometries) {
-			totalVertices += geometry.attributes.position.count;
-			if (geometry.index) {
-				totalIndices += geometry.index.count;
-			} else {
-				totalIndices += geometry.attributes.position.count; // Non-indexed
-			}
-			if (!geometry.attributes.normal) hasNormals = false;
-			if (!geometry.attributes.uv) hasUVs = false;
-		}
-
-		for (const attrName of attributesToMerge) {
-			if (attrName === "normal" && !hasNormals) continue;
-			if (attrName === "uv" && !hasUVs) continue;
-
-			const firstGeoWithAttr = geometries.find((g) => g.attributes[attrName]);
-			if (!firstGeoWithAttr) continue; // Should not happen for position
-
-			mergedAttributes[attrName] = {
-				array: [],
-				itemSize: firstGeoWithAttr.attributes[attrName].itemSize,
-			};
-		}
-		const indices: number[] = [];
-		let vertexOffset = 0;
-
-		for (const geometry of geometries) {
-			for (const attrName in mergedAttributes) {
-				const sourceAttr = geometry.attributes[attrName];
-				if (sourceAttr) {
-					mergedAttributes[attrName].array.push(...Array.from(sourceAttr.array as Float32Array));
-				} else if (attrName === "normal" || attrName === "uv") {
-					// Fill with zeros if an attribute is missing for this geometry
-					const numVertices = geometry.attributes.position.count;
-					const itemSize = mergedAttributes[attrName].itemSize;
-					mergedAttributes[attrName].array.push(...new Array(numVertices * itemSize).fill(0));
-				}
-			}
-
-			if (geometry.index) {
-				const geometryIndices = Array.from(geometry.index.array);
-				for (const index of geometryIndices) {
-					indices.push(index + vertexOffset);
-				}
-			} else {
-				// Non-indexed geometry
-				const numVertices = geometry.attributes.position.count;
-				for (let i = 0; i < numVertices; i++) {
-					indices.push(vertexOffset + i);
-				}
-			}
-			vertexOffset += geometry.attributes.position.count;
-		}
-
-		for (const attrName in mergedAttributes) {
-			const { array, itemSize } = mergedAttributes[attrName];
-			merged.setAttribute(attrName, new THREE.Float32BufferAttribute(array, itemSize));
-		}
-		merged.setIndex(indices);
-
-		if (!hasNormals && merged.attributes.position) {
-			merged.computeVertexNormals();
-		}
-		return merged;
+		// Delegates to a typed-array merge: bulk `.set()` copies instead of spreading
+		// each float as a call argument, which kept large schematics from blowing the
+		// call stack ("Maximum call stack size exceeded"). See mergeBufferGeometries.
+		return mergeBufferGeometries(geometries);
 	}
 
 	private isLiquidBlock(blockData?: Block): boolean {
