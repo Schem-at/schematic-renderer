@@ -1013,8 +1013,9 @@ export class Cubane {
 		return this.assetLoader.hasAnimatedTextures();
 	}
 
-	public updateAnimations(): void {
-		this.assetLoader.updateAnimations();
+	/** Advance animations; returns true if anything changed and a redraw is needed. */
+	public updateAnimations(): boolean {
+		return this.assetLoader.updateAnimations();
 		// TODO: Add logic to update animations for dynamic block parts (e.g., bell swing, book page turn)
 		// This would involve iterating through scene objects tagged with `isDynamicBlockPart`
 		// and calling an update method on them or their controllers.

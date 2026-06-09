@@ -492,8 +492,9 @@ export class AssetLoader {
 		return ref.replace("minecraft:", "");
 	}
 
-	public updateAnimations(): void {
-		this.animatedTextureManager.update();
+	/** Advance animated textures; returns true if any frame flipped (needs redraw). */
+	public updateAnimations(): boolean {
+		return this.animatedTextureManager.update();
 	}
 
 	public async getTexture(texturePath: string): Promise<THREE.Texture> {

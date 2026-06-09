@@ -7,7 +7,7 @@ import { RenderManager } from "./managers/RenderManager";
 import { DragAndDropManager, DragAndDropManagerOptions } from "./managers/DragAndDropManager";
 import { InteractionManager, InteractionManagerOptions } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
-import { shouldRenderFrame } from "./utils/renderGate";
+import { shouldRenderFrame, pickFrameSchedule, scheduleDelayMs } from "./utils/renderGate";
 import { SchematicManager, SchematicManagerOptions } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { MaterialRegistry } from "./MaterialRegistry";
@@ -97,10 +97,19 @@ export class SchematicRenderer {
 		this.options = merge({}, DEFAULT_OPTIONS, options);
 
 		// targetFPS is an upper cap on rendered frames; on-demand rendering decides
-		// *whether* to render. enableAdaptiveFPS/idleFPS/idleThreshold are legacy
-		// no-ops (kept in the options type for backward compatibility).
+		// *whether* to render. enableAdaptiveFPS/idleThreshold are legacy no-ops
+		// (kept in the options type for backward compatibility); idleFPS is live
+		// again below as the idle slow-poll rate.
 		this.targetFPS = this.options.targetFPS ?? 60;
 		this.frameInterval = this.targetFPS > 0 ? 1000 / this.targetFPS : 0;
+		// When fully idle the loop slow-polls (via setTimeout) at idleFPS instead of
+		// pinning requestAnimationFrame to the display refresh — this lets the whole
+		// browser frame pipeline (style/layout/composite) go quiet. invalidate() wakes
+		// it instantly, so idleFPS is only a backstop for direct camera mutations.
+		this.idleFPS = this.options.idleFPS ?? 1;
+		// Animated textures (off by default). When on, rendering is event-driven: we
+		// poll the texture timers at animatedPollFps and only redraw on a frame flip.
+		this.enableAnimatedTextures = this.options.enableAnimatedTextures ?? false;
 
 		this.timer = new THREE.Timer();
 		this.materialMap = new Map();
@@ -695,6 +704,12 @@ export class SchematicRenderer {
 
 	private lastFrameTime = 0;
 	private targetFPS: number;
+	private idleFPS: number;
+	// Poll rate (Hz) for advancing animated textures while otherwise idle. 20Hz
+	// comfortably covers Minecraft's fastest animations (1-tick frametime = 20fps)
+	// without redrawing every vsync. The actual redraw only happens on a frame flip.
+	private readonly animatedPollFps = 20;
+	private enableAnimatedTextures: boolean;
 	private frameInterval: number;
 	private animationFrameId: number | null = null;
 	private isDisposed = false;
@@ -759,7 +774,14 @@ export class SchematicRenderer {
 		// A suspended renderer keeps the dirty flag (so it redraws on resume) but does
 		// not restart the loop.
 		if (this.isDisposed || this.isSuspended) return;
-		if (this.animationFrameId === null && this.idleTimeoutId === null) {
+		// If the loop is slow-polling while idle, cancel the pending timeout and wake
+		// immediately on a vsync-aligned frame — interaction must feel instant, not
+		// wait out the idle poll interval.
+		if (this.idleTimeoutId !== null) {
+			clearTimeout(this.idleTimeoutId);
+			this.idleTimeoutId = null;
+		}
+		if (this.animationFrameId === null) {
 			this.animationFrameId = requestAnimationFrame(() => this.animate());
 		}
 	}
@@ -777,6 +799,11 @@ export class SchematicRenderer {
 		if (this.animationFrameId !== null) {
 			cancelAnimationFrame(this.animationFrameId);
 			this.animationFrameId = null;
+		}
+		// Also cancel a pending idle slow-poll, or the loop would silently resume.
+		if (this.idleTimeoutId !== null) {
+			clearTimeout(this.idleTimeoutId);
+			this.idleTimeoutId = null;
 		}
 	}
 
@@ -863,10 +890,14 @@ export class SchematicRenderer {
 			this.keyboardControls.update(deltaTime);
 		}
 
-		// Animated textures (water/kelp/lava/…) need continuous rendering to advance
-		// their frames; everything else can idle. Cheap to poll each tick.
-		if (this.cubane?.hasAnimatedTextures()) this.continuousReasons.add("animatedTextures");
-		else this.continuousReasons.delete("animatedTextures");
+		// Animated textures (water/lava/fire/…) are event-driven and off by default.
+		// When enabled we poll the texture timers each tick (cheap time math) and mark
+		// the scene dirty only on the tick a frame actually flips (~10fps for water) —
+		// no per-vsync redraws, so a static view with water still idles to 0fps.
+		const texturesAnimating = this.enableAnimatedTextures && !!this.cubane?.hasAnimatedTextures();
+		if (texturesAnimating && this.cubane.updateAnimations()) {
+			this.needsRender = true;
+		}
 
 		// Decide whether to render: the FPS cap must allow it AND the scene must be
 		// dirty or continuously animating.
@@ -878,11 +909,25 @@ export class SchematicRenderer {
 		});
 		const shouldRender = fpsAllows && wantsRender;
 
-		// Always keep the (cheap) loop alive so camera moves are detected and the
-		// dirty flag is polled every frame — only the expensive render() below is
-		// gated. The GPU goes idle when the scene is static (the heat fix) without
-		// the frozen-scene risk of fully stopping the loop.
-		this.animationFrameId = requestAnimationFrame(() => this.animate());
+		// Schedule the next tick. When something needs drawing we use vsync-aligned
+		// requestAnimationFrame; otherwise we slow-poll via setTimeout so the browser
+		// frame pipeline (style/layout/composite) can go quiet — this is the heat fix.
+		// invalidate() cancels the poll and wakes us instantly on any real change, so
+		// the idle poll is just a backstop. `wantsRender` (not `shouldRender`) drives
+		// the choice so an fps-capped-but-dirty frame still reschedules promptly.
+		const schedule = pickFrameSchedule({ wantsRender, texturesAnimating });
+		if (schedule === "raf") {
+			this.animationFrameId = requestAnimationFrame(() => this.animate());
+		} else {
+			const delay = scheduleDelayMs(schedule, {
+				idleFps: this.idleFPS,
+				animatedPollFps: this.animatedPollFps,
+			});
+			this.idleTimeoutId = window.setTimeout(() => {
+				this.idleTimeoutId = null;
+				this.animationFrameId = requestAnimationFrame(() => this.animate());
+			}, delay);
+		}
 
 		if (!shouldRender) {
 			// FPS-capped this tick; nothing to render.
@@ -924,7 +969,6 @@ export class SchematicRenderer {
 		this.needsRender = false;
 
 		this.interactionManager?.update();
-		this.cubane.updateAnimations();
 	}
 
 	// Schematic rendering bounds management

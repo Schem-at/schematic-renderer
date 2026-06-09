@@ -144,11 +144,14 @@ export class AnimatedTextureManager {
 	}
 
 	/**
-	 * Update all animated textures
-	 * Call this in your render loop
+	 * Update all animated textures. Returns `true` if any texture advanced a frame
+	 * this call (i.e. the scene now needs a redraw). Returning a dirty flag lets the
+	 * render loop stay event-driven — it redraws only when a frame actually flips
+	 * (~10fps for water) instead of every vsync.
 	 */
-	public update(): void {
+	public update(): boolean {
 		const now = Date.now();
+		let advanced = false;
 
 		this.animatedTextures.forEach((data, _texturePath) => {
 			const { texture, metadata, frameCount, frameTime } = data;
@@ -170,7 +173,10 @@ export class AnimatedTextureManager {
 				// Minecraft textures stack frames vertically from top to bottom
 				texture.offset.set(0, 1 - (frameIndex + 1) / frameCount);
 				texture.needsUpdate = true;
+				advanced = true;
 			}
 		});
+
+		return advanced;
 	}
 }

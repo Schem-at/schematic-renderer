@@ -280,6 +280,18 @@ export interface SchematicRendererOptions {
 	// FPS and performance options
 	targetFPS?: number; // Target FPS when active (default: 60, set to 0 for uncapped)
 	idleFPS?: number; // FPS when idle/static scene (default: 1)
+	/**
+	 * Animate block textures (water, lava, fire, kelp, sea lanterns, portals…).
+	 *
+	 * Off by default: animated textures force the render loop to keep redrawing,
+	 * which keeps the GPU busy on otherwise-static scenes (a notable source of heat
+	 * / battery drain on laptops). When `true`, animation is **event-driven** — the
+	 * scene only redraws on the tick a texture frame actually advances (~10fps for
+	 * water), and idles to 0fps on a static view — so it stays cheap.
+	 *
+	 * @default false
+	 */
+	enableAnimatedTextures?: boolean;
 	enableAdaptiveFPS?: boolean; // Enable adaptive FPS based on camera movement (default: true)
 	logFPS?: boolean; // Log FPS to console for debugging (default: false)
 	idleThreshold?: number; // Milliseconds of inactivity before entering idle mode (default: 100)
@@ -357,6 +369,7 @@ export const DEFAULT_OPTIONS: SchematicRendererOptions = {
 	showRenderingBoundsHelper: false,
 	targetFPS: 60, // 60 FPS when active
 	idleFPS: 1, // 1 FPS when idle
+	enableAnimatedTextures: false, // Off by default (event-driven when enabled) — avoids GPU heat on static scenes
 	enableAdaptiveFPS: true, // Enable adaptive FPS by default
 	idleThreshold: 100, // 100ms of inactivity before idle mode
 	logFPS: false,
