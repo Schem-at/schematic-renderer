@@ -8,6 +8,7 @@ import { DragAndDropManager, DragAndDropManagerOptions } from "./managers/DragAn
 import { InteractionManager, InteractionManagerOptions } from "./managers/InteractionManager";
 import { HighlightManager } from "./managers/HighlightManager";
 import { shouldRenderFrame, pickFrameSchedule, scheduleDelayMs } from "./utils/renderGate";
+import { RenderLoopScheduler } from "./utils/renderLoopScheduler";
 import { SchematicManager, SchematicManagerOptions } from "./managers/SchematicManager";
 import { WorldMeshBuilder } from "./WorldMeshBuilder";
 import { MaterialRegistry } from "./MaterialRegistry";
@@ -711,7 +712,18 @@ export class SchematicRenderer {
 	private readonly animatedPollFps = 20;
 	private enableAnimatedTextures: boolean;
 	private frameInterval: number;
-	private animationFrameId: number | null = null;
+	// Owns the rAF/idle-poll handles and the re-arm logic. Clearing the spent frame
+	// handle each tick (beginTick) is what lets invalidate() wake the loop after it
+	// has idled — see RenderLoopScheduler.
+	private loop = new RenderLoopScheduler(
+		{
+			requestFrame: (cb) => requestAnimationFrame(cb),
+			cancelFrame: (id) => cancelAnimationFrame(id),
+			setTimer: (cb, ms) => window.setTimeout(cb, ms),
+			clearTimer: (id) => clearTimeout(id),
+		},
+		() => this.animate()
+	);
 	private isDisposed = false;
 	private isSuspended = false;
 	private frameCount = 0;
@@ -721,9 +733,10 @@ export class SchematicRenderer {
 	// Adaptive FPS tracking
 	private lastCameraPosition = new THREE.Vector3();
 	private lastCameraQuaternion = new THREE.Quaternion();
-	private idleTimeoutId: number | null = null;
 	private pointerEventBound = false;
 	private wakeUpHandler: (() => void) | null = null;
+	private pointerDownHandler: (() => void) | null = null;
+	private pointerReleaseHandler: (() => void) | null = null;
 
 	// On-demand rendering: only render when the scene is dirty or something is
 	// continuously animating. `needsRender` starts true so the first frame draws.
@@ -741,7 +754,27 @@ export class SchematicRenderer {
 		// emits its own "change" event (wired in CameraManager) for actual camera moves.
 		this.wakeUpHandler = () => this.invalidate();
 
-		this.canvas.addEventListener("pointerdown", this.wakeUpHandler);
+		// While a pointer is HELD (a drag), keep the loop running every frame. With
+		// OrbitControls damping a pointermove only accumulates rotate/pan deltas — the
+		// camera actually moves (and emits "change") on the next controls.update(), which
+		// runs only inside the render loop. Since pointermove is intentionally not a wake
+		// event, a drag begun after the loop has idled would accumulate deltas that never
+		// apply — the drag looks frozen until some other action invalidates. Pinning the
+		// loop continuous makes update() run, which applies the drag and re-arms the
+		// "change" → invalidate chain. On release we drop the reason and invalidate once
+		// so the damping inertia starts; it then self-sustains via "change" until settled.
+		this.pointerDownHandler = () => this.setContinuous("interaction", true);
+		this.pointerReleaseHandler = () => {
+			this.setContinuous("interaction", false);
+			this.invalidate();
+		};
+
+		this.canvas.addEventListener("pointerdown", this.pointerDownHandler);
+		// Release can land off-canvas (pointer capture) or be pre-empted — listen wide.
+		window.addEventListener("pointerup", this.pointerReleaseHandler);
+		window.addEventListener("pointercancel", this.pointerReleaseHandler);
+		window.addEventListener("blur", this.pointerReleaseHandler);
+
 		this.canvas.addEventListener("wheel", this.wakeUpHandler);
 		this.canvas.addEventListener("touchstart", this.wakeUpHandler);
 		this.canvas.addEventListener("touchmove", this.wakeUpHandler);
@@ -753,14 +786,28 @@ export class SchematicRenderer {
 	 * Unbind pointer events
 	 */
 	private unbindPointerEvents(): void {
-		if (!this.pointerEventBound || !this.wakeUpHandler) return;
+		if (!this.pointerEventBound) return;
 
-		this.canvas.removeEventListener("pointerdown", this.wakeUpHandler);
-		this.canvas.removeEventListener("wheel", this.wakeUpHandler);
-		this.canvas.removeEventListener("touchstart", this.wakeUpHandler);
-		this.canvas.removeEventListener("touchmove", this.wakeUpHandler);
+		if (this.pointerDownHandler) {
+			this.canvas.removeEventListener("pointerdown", this.pointerDownHandler);
+		}
+		if (this.pointerReleaseHandler) {
+			window.removeEventListener("pointerup", this.pointerReleaseHandler);
+			window.removeEventListener("pointercancel", this.pointerReleaseHandler);
+			window.removeEventListener("blur", this.pointerReleaseHandler);
+		}
+		if (this.wakeUpHandler) {
+			this.canvas.removeEventListener("wheel", this.wakeUpHandler);
+			this.canvas.removeEventListener("touchstart", this.wakeUpHandler);
+			this.canvas.removeEventListener("touchmove", this.wakeUpHandler);
+		}
+
+		// Never leave the loop pinned continuous if we tear down mid-drag.
+		this.setContinuous("interaction", false);
 
 		this.wakeUpHandler = null;
+		this.pointerDownHandler = null;
+		this.pointerReleaseHandler = null;
 		this.pointerEventBound = false;
 	}
 
@@ -774,16 +821,10 @@ export class SchematicRenderer {
 		// A suspended renderer keeps the dirty flag (so it redraws on resume) but does
 		// not restart the loop.
 		if (this.isDisposed || this.isSuspended) return;
-		// If the loop is slow-polling while idle, cancel the pending timeout and wake
-		// immediately on a vsync-aligned frame — interaction must feel instant, not
-		// wait out the idle poll interval.
-		if (this.idleTimeoutId !== null) {
-			clearTimeout(this.idleTimeoutId);
-			this.idleTimeoutId = null;
-		}
-		if (this.animationFrameId === null) {
-			this.animationFrameId = requestAnimationFrame(() => this.animate());
-		}
+		// If the loop is slow-polling while idle, cancel the poll and wake immediately
+		// on a vsync-aligned frame — interaction must feel instant, not wait out the
+		// idle poll interval. wake() is a no-op if a frame is already queued.
+		this.loop.wake();
 	}
 
 	/**
@@ -796,15 +837,8 @@ export class SchematicRenderer {
 	public suspend(): void {
 		if (this.isSuspended) return;
 		this.isSuspended = true;
-		if (this.animationFrameId !== null) {
-			cancelAnimationFrame(this.animationFrameId);
-			this.animationFrameId = null;
-		}
-		// Also cancel a pending idle slow-poll, or the loop would silently resume.
-		if (this.idleTimeoutId !== null) {
-			clearTimeout(this.idleTimeoutId);
-			this.idleTimeoutId = null;
-		}
+		// Cancel any pending frame AND idle poll, or the loop would silently resume.
+		this.loop.stop();
 	}
 
 	/** Resume a suspended render loop and request a redraw. */
@@ -838,6 +872,12 @@ export class SchematicRenderer {
 	}
 
 	private animate(): void {
+		// The frame/poll that invoked this tick has fired — clear its spent handle so
+		// the scheduler's pending-state is accurate and invalidate() can re-arm after
+		// an idle poll. (This is the fix for the "drag freezes after the scene settles"
+		// bug.) Must run before any early return that leaves the loop stopped.
+		this.loop.beginTick();
+
 		// Stop animation loop if disposed
 		if (this.isDisposed) {
 			console.log("[Renderer] Animation loop stopped - disposed");
@@ -847,7 +887,6 @@ export class SchematicRenderer {
 		// Paused (off-screen / SPA navigation): stop the loop without rescheduling.
 		// resume() restarts it.
 		if (this.isSuspended) {
-			this.animationFrameId = null;
 			return;
 		}
 
@@ -917,16 +956,14 @@ export class SchematicRenderer {
 		// the choice so an fps-capped-but-dirty frame still reschedules promptly.
 		const schedule = pickFrameSchedule({ wantsRender, texturesAnimating });
 		if (schedule === "raf") {
-			this.animationFrameId = requestAnimationFrame(() => this.animate());
+			this.loop.requestFrame();
 		} else {
-			const delay = scheduleDelayMs(schedule, {
-				idleFps: this.idleFPS,
-				animatedPollFps: this.animatedPollFps,
-			});
-			this.idleTimeoutId = window.setTimeout(() => {
-				this.idleTimeoutId = null;
-				this.animationFrameId = requestAnimationFrame(() => this.animate());
-			}, delay);
+			this.loop.requestPoll(
+				scheduleDelayMs(schedule, {
+					idleFps: this.idleFPS,
+					animatedPollFps: this.animatedPollFps,
+				})
+			);
 		}
 
 		if (!shouldRender) {
@@ -1712,17 +1749,8 @@ export class SchematicRenderer {
 		// Mark as disposed to stop animation loop
 		this.isDisposed = true;
 
-		// Cancel the animation frame/timeout to stop the loop immediately
-		if (this.animationFrameId !== null) {
-			cancelAnimationFrame(this.animationFrameId);
-			this.animationFrameId = null;
-		}
-
-		// Cancel idle timeout if active
-		if (this.idleTimeoutId !== null) {
-			clearTimeout(this.idleTimeoutId);
-			this.idleTimeoutId = null;
-		}
+		// Cancel any pending frame/idle-poll to stop the loop immediately
+		this.loop.stop();
 
 		// Unbind pointer events
 		this.unbindPointerEvents();
