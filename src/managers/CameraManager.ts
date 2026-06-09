@@ -1689,9 +1689,17 @@ export class CameraManager extends EventEmitter {
 			CameraManager.CAMERA_PRESETS[presetName as keyof typeof CameraManager.CAMERA_PRESETS] ||
 			CameraManager.CAMERA_PRESETS.isometric;
 
-		// Use preset rotation if available, otherwise a default isometric-like rotation
+		// Use preset rotation if available, otherwise a default isometric-like rotation.
+		// Order MUST be YXZ: the angles are [pitch (X), yaw (Y), roll (Z)] and the camera
+		// must yaw around world-up first, THEN pitch — the default XYZ order pitches around
+		// world-X after the yaw, which skews the offset direction (the "weird angle" bug).
 		const rotationArray = preset.rotation || CameraManager.CAMERA_PRESETS.isometric.rotation;
-		const rotation = new THREE.Euler(...rotationArray);
+		const rotation = new THREE.Euler(
+			rotationArray[0],
+			rotationArray[1],
+			rotationArray[2] ?? 0,
+			"YXZ"
+		);
 
 		// Position the camera far enough along its viewing vector.
 		// Distance is based on the object's largest dimension to ensure it's outside the object.
@@ -1956,7 +1964,11 @@ export class CameraManager extends EventEmitter {
 
 		// If currently in isometric mode, apply the change
 		if (this.activeCameraKey === "isometric") {
-			const rotation = new THREE.Euler(pitchRad, yawRad, 0);
+			// YXZ order (yaw, then pitch) — see calculateIsometricFraming. Also pin the
+			// underlying camera to YXZ so the directly-applied rotation isn't re-skewed
+			// back to the default XYZ on the no-refocus path.
+			const rotation = new THREE.Euler(pitchRad, yawRad, 0, "YXZ");
+			(this.activeCamera.camera as THREE.Camera).rotation.order = "YXZ";
 			this.activeCamera.rotation = [rotation.x, rotation.y, rotation.z];
 
 			// Refocus if requested

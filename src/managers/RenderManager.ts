@@ -218,7 +218,7 @@ export class RenderManager {
 		this.eventEmitter = this.schematicRenderer.eventEmitter;
 
 		// Create a pleasant background color for isometric view
-		this.isometricBackground = new THREE.Color(0x87ceeb); // Sky blue
+		this.isometricBackground = new THREE.Color(0x7ea8ff); // Sky blue — matches the minecraft_day.hdr sky
 
 		// Apply custom SSAO presets from options if provided
 		const customSSAOPresets = schematicRenderer.options?.postProcessingOptions?.ssaoPresets;
