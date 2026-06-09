@@ -2107,16 +2107,26 @@ export class CameraManager extends EventEmitter {
 	 * define their own face / top-down-diagonal angle sets without registering presets.
 	 */
 	public snapToDirection(direction: [number, number, number], refocus: boolean = true): void {
-		const target = this.getControlsTarget();
 		const cam = this.activeCamera.camera;
-		const dist = cam.position.distanceTo(target);
-
 		const dir = new THREE.Vector3(direction[0], direction[1], direction[2]);
 		if (dir.lengthSq() < 1e-6) return;
 		dir.normalize();
 
-		const pos = target.clone().add(dir.multiplyScalar(dist));
-		cam.position.copy(pos);
+		// Frame the schematic FROM this direction. We deliberately do NOT route through
+		// focusOnSchematics: for a perspective camera it recomputes the view from
+		// calculateOptimalViewingAngles (object-shape based), which would overwrite the
+		// direction we were asked to snap to (every preset would collapse to the same
+		// auto view). Instead keep the requested direction and only solve for the
+		// distance that fits the bounds along it.
+		const bounds = this.calculateSchematicBounds();
+		const target = bounds ? bounds.center.clone() : this.getControlsTarget();
+
+		let dist = cam.position.distanceTo(target);
+		if (refocus && bounds && cam instanceof THREE.PerspectiveCamera) {
+			dist = this.calculateFramingDistance(dir, bounds.boundingBox, 0.05);
+		}
+
+		cam.position.copy(target.clone().add(dir.clone().multiplyScalar(dist)));
 		cam.lookAt(target);
 
 		const controls = this.controls.get(this.activeControlKey);
@@ -2125,9 +2135,7 @@ export class CameraManager extends EventEmitter {
 			controls.update?.();
 		}
 
-		if (refocus) {
-			this.focusOnSchematics({ padding: 0.05, animationDuration: 0 });
-		}
+		this.schematicRenderer.invalidate?.();
 	}
 
 	/** Get the current orbit controls target */
