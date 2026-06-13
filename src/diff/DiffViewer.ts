@@ -250,6 +250,11 @@ export class DiffViewer {
 		this.buildMeshes(byState);
 		this.frameCamera();
 
+		// Read scalar stats off the diff BEFORE freeing it - the getters call into
+		// WASM, so touching them post-free throws "null pointer passed to rust".
+		const distance = Number((diff as any).distance ?? 0);
+		const support = Number((diff as any).support ?? 0);
+
 		// Free WASM wrappers we no longer need.
 		[before, after, diff].forEach((w) => {
 			try {
@@ -260,8 +265,8 @@ export class DiffViewer {
 		});
 
 		this.stats = {
-			distance: Number((diff as any).distance ?? 0),
-			support: Number((diff as any).support ?? 0),
+			distance,
+			support,
 			added: byState.added.length,
 			removed: byState.removed.length,
 			changed: byState.changed.length,
