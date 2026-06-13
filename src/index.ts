@@ -1,5 +1,13 @@
 export { SchematicRenderer } from "./SchematicRenderer";
 export { SchematicRendererContext } from "./SchematicRendererContext";
+export { DiffViewer } from "./diff/DiffViewer";
+export type {
+	DiffMode,
+	DiffState,
+	DiffStats,
+	DiffViewerColors,
+	DiffViewerOptions,
+} from "./diff/DiffViewer";
 export { KeyframeTrack } from "./camera/KeyframeTrack";
 export type { InterpolationMode, CameraKeyframe, KeyframeResult } from "./camera/KeyframeTrack";
 export { SimulationManager } from "./managers/SimulationManager";
