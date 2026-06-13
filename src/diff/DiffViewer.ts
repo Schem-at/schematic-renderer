@@ -50,8 +50,6 @@ export interface DiffViewerOptions {
 	resourcePacks?: Record<string, () => Promise<Blob>>;
 	/** Optional HDRI environment URL passed to the internal renderer. */
 	hdri?: string;
-	/** Opacity of the change tint laid over textured blocks (0..1). Default 0.55. */
-	tintOpacity?: number;
 	/** Auto-orbit until the user interacts. Default true. */
 	autoRotate?: boolean;
 	/** Hard cap on tint-overlay cubes. Default 200_000. */
@@ -95,7 +93,6 @@ interface Voxel {
 
 export class DiffViewer {
 	private colors: DiffViewerColors;
-	private tintOpacity: number;
 	private maxOverlay: number;
 	private onStats?: (stats: DiffStats) => void;
 
@@ -103,9 +100,11 @@ export class DiffViewer {
 	private ready: Promise<void>;
 	private disposed = false;
 
-	private geometry = new THREE.BoxGeometry(1.001, 1.001, 1.001);
+	// Slightly inflated so an opaque highlight fully covers the textured block
+	// beneath it (and avoids z-fighting on shared faces).
+	private geometry = new THREE.BoxGeometry(1.04, 1.04, 1.04);
 	private overlayMeshes = new Map<DiffState, THREE.InstancedMesh>();
-	private overlayMaterials = new Map<DiffState, THREE.MeshBasicMaterial>();
+	private overlayMaterials = new Map<DiffState, THREE.MeshStandardMaterial>();
 
 	// Clipping (world space)
 	private planeLo = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -135,7 +134,6 @@ export class DiffViewer {
 
 	constructor(canvas: HTMLCanvasElement, options: DiffViewerOptions = {}) {
 		this.colors = { ...DEFAULT_COLORS, ...(options.colors ?? {}) };
-		this.tintOpacity = options.tintOpacity ?? 0.55;
 		this.maxOverlay = options.maxOverlay ?? 200_000;
 		this.onStats = options.onStats;
 
@@ -314,7 +312,7 @@ export class DiffViewer {
 		return entry.name ?? null;
 	}
 
-	/** Build translucent tint cubes per change-state, parented to the build group. */
+	/** Build opaque shaded highlight cubes per change-state, parented to the build group. */
 	private buildOverlay(byState: Record<DiffState, Voxel[]>): void {
 		this.disposeOverlay();
 		if (!this.baseGroup) return;
@@ -340,11 +338,15 @@ export class DiffViewer {
 			const list = byState[state];
 			if (list.length === 0) continue;
 
-			const material = new THREE.MeshBasicMaterial({
-				color: new THREE.Color(this.colors[state]),
-				transparent: true,
-				opacity: this.tintOpacity,
-				depthWrite: false,
+			const color = new THREE.Color(this.colors[state]);
+			const material = new THREE.MeshStandardMaterial({
+				color,
+				roughness: 0.85,
+				metalness: 0.0,
+				// A touch of emissive keeps the change colour vivid even in shadow,
+				// closer to the flat-shaded look of the standalone diff viewer.
+				emissive: color,
+				emissiveIntensity: 0.12,
 				clippingPlanes: this.activePlanes(),
 				clipIntersection: false,
 			});
@@ -354,7 +356,8 @@ export class DiffViewer {
 			mesh.renderOrder = 2;
 			for (let i = 0; i < list.length; i++) {
 				const v = list[i];
-				dummy.position.set(v.x + 0.5, v.y + 0.5, v.z + 0.5);
+				// Blocks are centred on integer coords in the build group's local space.
+				dummy.position.set(v.x, v.y, v.z);
 				dummy.updateMatrix();
 				mesh.setMatrixAt(i, dummy.matrix);
 			}
@@ -448,18 +451,26 @@ export class DiffViewer {
 			const mesh = this.overlayMeshes.get(state);
 			const mat = this.overlayMaterials.get(state);
 			if (!mesh || !mat) continue;
+
 			if (this.viewMode === "beforeafter") {
+				// Crossfade removed (before) -> added (after); keep depthWrite so the
+				// instanced cube faces don't drop out while fading.
+				mat.transparent = true;
 				if (state === "removed") {
-					mat.opacity = this.tintOpacity * (1 - t);
+					mat.opacity = 1 - t;
 					mesh.visible = t < 0.999;
 				} else if (state === "added") {
-					mat.opacity = this.tintOpacity * t;
+					mat.opacity = t;
 					mesh.visible = t > 0.001;
 				} else {
-					mat.opacity = this.tintOpacity;
+					mat.opacity = 1;
+					mesh.visible = true;
 				}
 			} else {
-				mat.opacity = this.tintOpacity;
+				// Cutaway: opaque shaded highlights (crisp, no transparency artefacts).
+				mat.transparent = false;
+				mat.opacity = 1;
+				mesh.visible = true;
 			}
 			mat.needsUpdate = true;
 		}
