@@ -23,6 +23,8 @@ import { SchematicWrapper, initializeNucleationWasm } from "../nucleationExports
 
 export type DiffState = "added" | "removed" | "changed" | "swapped" | "unchanged";
 export type DiffMode = "single" | "slab";
+/** Top-level viewing mode: peel the merged diff open, or crossfade before -> after. */
+export type DiffViewMode = "cutaway" | "beforeafter";
 
 export interface DiffStats {
 	distance: number;
@@ -118,6 +120,10 @@ export class DiffViewer {
 	private posFrac = 0.5;
 	private thickFrac = 0.38;
 	private dimUnchanged = true;
+
+	// Before/after morph
+	private viewMode: DiffViewMode = "cutaway";
+	private progress = 1; // 0 = before, 1 = after
 
 	// Model framing
 	private center = new THREE.Vector3();
@@ -379,6 +385,7 @@ export class DiffViewer {
 		}
 
 		this.updateClipping();
+		this.refreshOpacities();
 	}
 
 	private applyStateOpacity(state: DiffState, material: THREE.MeshStandardMaterial): void {
@@ -401,6 +408,15 @@ export class DiffViewer {
 
 	/** Recompute clip-plane normals/offsets from the current mode + slider state. */
 	private updateClipping(): void {
+		// Before/after mode shows the whole model (no peel); clear any clip planes.
+		if (this.viewMode === "beforeafter") {
+			for (const material of this.materials.values()) {
+				material.clippingPlanes = [];
+				material.needsUpdate = true;
+			}
+			return;
+		}
+
 		// Slicing normal: horizontal plane tilted toward +X by tiltRad.
 		const n = new THREE.Vector3(Math.sin(this.tiltRad), Math.cos(this.tiltRad), 0).normalize();
 
@@ -465,6 +481,56 @@ export class DiffViewer {
 		this.updateClipping();
 	}
 
+	/** Switch between the cutaway/peel view and the before -> after crossfade. */
+	setViewMode(mode: DiffViewMode): void {
+		this.viewMode = mode;
+		this.updateClipping();
+		this.refreshOpacities();
+	}
+
+	/**
+	 * Before/after position: 0 shows the "before" state (unchanged + changed +
+	 * swapped + removed), 1 shows "after" (unchanged + changed + swapped + added).
+	 * Removed blocks fade out and added blocks fade in across the slide; only
+	 * meaningful in beforeafter view mode.
+	 */
+	setProgress(t: number): void {
+		this.progress = Math.max(0, Math.min(1, t));
+		this.refreshOpacities();
+	}
+
+	/** Re-apply per-state opacity/visibility for the current view mode + progress. */
+	private refreshOpacities(): void {
+		for (const [state, material] of this.materials.entries()) {
+			this.applyStateOpacity(state, material);
+		}
+		if (this.viewMode === "beforeafter") {
+			const t = this.progress;
+			const removed = this.meshes.get("removed");
+			const removedMat = this.materials.get("removed");
+			if (removed && removedMat) {
+				removed.visible = t < 0.999;
+				removedMat.transparent = true;
+				removedMat.opacity = 0.9 * (1 - t);
+				removedMat.needsUpdate = true;
+			}
+			const added = this.meshes.get("added");
+			const addedMat = this.materials.get("added");
+			if (added && addedMat) {
+				added.visible = t > 0.001;
+				addedMat.transparent = t < 0.999;
+				addedMat.opacity = t;
+				addedMat.needsUpdate = true;
+			}
+		} else {
+			// Cutaway: respect the legend toggles; opacity already reset above.
+			const removed = this.meshes.get("removed");
+			if (removed) removed.visible = true;
+			const added = this.meshes.get("added");
+			if (added) added.visible = true;
+		}
+	}
+
 	setTilt(degrees: number): void {
 		this.tiltRad = (degrees * Math.PI) / 180;
 		this.updateClipping();
@@ -494,6 +560,8 @@ export class DiffViewer {
 
 	resetView(): void {
 		this.mode = "slab";
+		this.viewMode = "cutaway";
+		this.progress = 1;
 		this.tiltRad = 0;
 		this.cutFrac = 0.62;
 		this.posFrac = 0.5;
@@ -501,6 +569,7 @@ export class DiffViewer {
 		this.controls.autoRotate = this.opts.autoRotate;
 		this.frameCamera();
 		this.updateClipping();
+		this.refreshOpacities();
 	}
 
 	getStats(): DiffStats {

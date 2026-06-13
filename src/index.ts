@@ -3,6 +3,7 @@ export { SchematicRendererContext } from "./SchematicRendererContext";
 export { DiffViewer } from "./diff/DiffViewer";
 export type {
 	DiffMode,
+	DiffViewMode,
 	DiffState,
 	DiffStats,
 	DiffViewerColors,
