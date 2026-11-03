@@ -1,8 +1,7 @@
 // managers/CameraWrapper.ts
 import * as THREE from "three";
 import { EventEmitter } from "events";
-// @ts-ignore
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { DollyThroughOrbitControls } from "../camera/DollyThroughOrbitControls";
 // @ts-ignore
 import { CreativeControls } from "three-creative-controls";
 
@@ -144,7 +143,8 @@ export class CameraWrapper extends EventEmitter {
 	createControls(type: "orbit" | "creative" | any) {
 		let controls: any;
 		if (type === "orbit") {
-			controls = new OrbitControls(this._camera, this.rendererDomElement);
+			// Dolly-through zoom: never stalls near the orbit target on big builds (see DollyThroughOrbitControls).
+			controls = new DollyThroughOrbitControls(this._camera, this.rendererDomElement);
 		} else if (type === "creative") {
 			// Add null checks and default values
 			const uiManager = this.schematicRenderer.uiManager;
